@@ -17,6 +17,156 @@ UI.Button("Macro Editor", function(newText)
     end
   end
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+local panelName = "alarms"
+local ui = setupUI([[
+Panel
+  height: 19
+
+  BotSwitch
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    text-align: center
+    width: 130
+    !text: tr('Alarms')
+
+  Button
+    id: alerts
+    anchors.top: prev.top
+    anchors.left: prev.right
+    anchors.right: parent.right
+    margin-left: 3
+    height: 17
+    text: Edit
+
+]])
+ui:setId(panelName)
+if not storage[panelName] then
+  storage[panelName] = {}
+end
+local config = storage[panelName]
+ui.title:setOn(config.enabled)
+ui.title.onClick = function(widget)
+  config.enabled = not config.enabled
+  widget:setOn(config.enabled)
+end
+local window = UI.createWindow("AlarmsWindow")
+window:hide()
+ui.alerts.onClick = function()
+  window:show()
+  window:raise()
+  window:focus()
+end
+local widgets = 
+{
+  "AlarmCheckBox", 
+  "AlarmCheckBoxAndSpinBox", 
+  "AlarmCheckBoxAndTextEdit"
+}
+local parents = 
+{
+  window.list, 
+  window.list
+}
+addAlarm = function(id, title, defaultValue, alarmType, parent, tooltip)
+  local widget = UI.createWidget(widgets[alarmType], parents[parent])
+  widget:setId(id)
+  if type(config[id]) ~= 'table' then
+    config[id] = {}
+  end
+  widget.tick:setText(title)
+  widget.tick:setChecked(config[id].enabled)
+  widget.tick:setTooltip(tooltip)
+  widget.tick.onClick = function()
+    config[id].enabled = not config[id].enabled
+    widget.tick:setChecked(config[id].enabled)
+  end
+
+  if alarmType > 1 and type(config[id].value) == 'nil' then
+    config[id].value = defaultValue
+  end
+
+  if alarmType == 2 then
+    widget.value:setValue(config[id].value)
+    widget.value.onValueChange = function(widget, value)
+      config[id].value = value
+    end
+  elseif alarmType == 3 then
+    widget.text:setText(config[id].value)
+    widget.text.onTextChange = function(widget, newText)
+      config[id].value = newText
+    end
+  end
+end
+addAlarm("lowHealth", "Low Health", 20, 2, 1)
+addAlarm("lowPotion", "Low HP Potion", 50, 2, 1)
+addAlarm("lowManaPotion", "Low MP Potion", 50, 2, 1)
+addAlarm("playerAttack", "Player Attack", false, 1, 1)
+addAlarm("playerDetected", "Player Detected", false, 1, 1)
+local lastCall = now
+local function alarm(file, windowText)
+  if now - lastCall < 2000 then return end
+  lastCall = now
+  g_window.setTitle(player:getName() .. " - " .. windowText)
+  if not g_resources.fileExists(file) then
+    file = "/sounds/alarm.ogg"
+  end
+  playSound(file)
+end
+local function contarItensNoInventario(itemId)
+  local count = 0
+  for _, container in ipairs(getContainers()) do
+    for _, item in ipairs(container:getItems()) do
+      if item:getId() == itemId then
+        count = count + item:getCount()
+      end
+    end
+  end
+  return count
+end
+macro(100, function() 
+  if not config.enabled then return end
+  if config.lowHealth.enabled then
+    if hppercent() < config.lowHealth.value then
+      return alarm("/sounds/Low_Health.ogg", "Low Health!")
+    end
+  end
+  if config.lowPotion.enabled then
+    local fastPotStorage = storage["selffastpot"]
+    local targetPotionId = fastPotStorage and fastPotStorage.id
+
+    if targetPotionId and targetPotionId > 0 then
+      local totalPotions = contarItensNoInventario(targetPotionId)
+      if totalPotions < config.lowPotion.value then
+        return alarm("/sounds/lowpot.ogg", "Low HP Potions!")
+      end
+    end
+  end
+  if config.lowManaPotion.enabled then
+    local manaPotStorage = storage["selfmppot"]
+    local targetManaId = manaPotStorage and manaPotStorage.id
+
+    if targetManaId and targetManaId > 0 then
+      local totalManaPots = contarItensNoInventario(targetManaId)
+      if totalManaPots < config.lowManaPotion.value then
+        return alarm("/sounds/lowpot.ogg", "Low MP Potions!")
+      end
+    end
+  end
+  for i, spec in ipairs(getSpectators()) do
+    if not spec:isLocalPlayer() then
+      if spec:isPlayer() then 
+        if spec:isTimedSquareVisible() and config.playerAttack.enabled then
+          return alarm("/sounds/Player_Attack.ogg", "Player Attack!")
+        end
+        if config.playerDetected.enabled then
+          return alarm("/sounds/Player_Detected.ogg", "Player Detected!")
+        end
+      end
+    end
+  end
+end)
+UI.Label("-----------------------------------"):setColor('#C39BD3')
 ModulesG = modules._G
 local reconectEvent = nil
 local ButtonT = nil
