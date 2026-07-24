@@ -354,13 +354,14 @@ macro(100, "Smart Eat", function()
     end
   end
 end)
-
 local moneyContainer = UI.Container(function(widget, items)
-  if #items == 0 and #storage.moneyItems > 0 then return end
   storage.moneyItems = items
 end, true)
+
 moneyContainer:setHeight(35)
-moneyContainer:setItems(storage.moneyItems)
+if #storage.moneyItems > 0 then
+  moneyContainer:setItems(storage.moneyItems)
+end
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 local Objects = {
     435, 1948, 432, 433, 412, 413, 421, 422, 423, 424, 425, 426, 476, 475, 479, 480, 
@@ -849,16 +850,15 @@ end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Spell at Target HP ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+
 local panelName = "hpbelowconfig"
 storage.dynamicCooldownHP = storage.dynamicCooldownHP or 2000 
-
-if storage.painelSalvo == nil then storage.painelSalvo = {} end
-if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
 
 if not storage[panelName] then
   storage[panelName] = {
       setting = true,
-      hp = 20
+      hp = 20,
+      enabled = false
   }
 end
 
@@ -901,11 +901,11 @@ lowhp = macro(storage.dynamicCooldownHP, function()
     end
 end)
 
-macro(200, function()
-    if lowhp and uiMacrosAviso then
-        storage.painelSalvo.special = lowhp.isOn()
-    end
-end)
+if storage[panelName].enabled then
+    lowhp.setOn()
+else
+    lowhp.setOff()
+end
 
 local ui = setupUI([[
 Panel
@@ -931,21 +931,17 @@ Panel
 ]], parent)
 ui:setId(panelName)
 
-macro(100, function()
-    if ui and ui.title then
-        ui.title:setOn(storage.painelSalvo.special)
-    end
-end)
+ui.title:setOn(storage[panelName].enabled)
 
 ui.title.onClick = function(widget)
-  storage.painelSalvo.special = not storage.painelSalvo.special
-  widget:setOn(storage.painelSalvo.special)
-  if storage.painelSalvo.special then lowhp.setOn() else lowhp.setOff() end
+  storage[panelName].enabled = not storage[panelName].enabled
+  widget:setOn(storage[panelName].enabled)
+  if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
 end
 
 local updateHpText = function()
     if storage[panelName].setting then
-    ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
+        ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
     end
 end
 
@@ -963,15 +959,14 @@ end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+
 local distance = 2
 local amountOfMonsters = 2
-storage.dynamicCooldown = 2000 
+storage.dynamicCooldown = storage.dynamicCooldown or 2000 
 
 if storage.comboEnabled == nil then
     storage.comboEnabled = false
 end
-
-macro(50, function() end)
 
 onTextMessage(function(mode, text)
     local msg = text:lower()
@@ -995,8 +990,7 @@ if modules.game_textmessage and modules.game_textmessage.onReceive then
         return oldOnReceive(mode, text)
     end
 end
-
-combo = macro(storage.dynamicCooldown, "Activate", function()
+combo = macro(storage.dynamicCooldown, "Smart Cast - Activate", function()
     if not g_game.isAttacking() then
         return
     end  
@@ -1059,13 +1053,11 @@ combo = macro(storage.dynamicCooldown, "Activate", function()
         end
     end
 end)
-
 if storage.comboEnabled then
     combo.setOn()
 else
     combo.setOff()
 end
-
 macro(200, function()
     if combo then
         storage.comboEnabled = combo.isOn()
@@ -1082,6 +1074,7 @@ UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Turn Wave ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+
 storage.dynamicCooldown = storage.dynamicCooldown or 2000 
 if storage.turnComboEnabled == nil then
     storage.turnComboEnabled = false
@@ -1108,7 +1101,7 @@ if modules.game_textmessage and modules.game_textmessage.onReceive then
     end
 end
 
-turnCombo = macro(storage.dynamicCooldown, "Activate", function()
+turnCombo = macro(storage.dynamicCooldown, "Turn Wave - Activate", function()
     local target = g_game.getAttackingCreature()
     if not target then return end
     
@@ -1153,16 +1146,19 @@ turnCombo = macro(storage.dynamicCooldown, "Activate", function()
         turnCombo.delay = storage.dynamicCooldown
     end
 end)
+
 if storage.turnComboEnabled then
     turnCombo.setOn()
 else
     turnCombo.setOff()
 end
+
 macro(200, function()
     if turnCombo then
         storage.turnComboEnabled = turnCombo.isOn()
     end
 end)
+
 addTextEdit("spellTurnConfig", storage.turnSpell or "", function(widget, text)
     storage.turnSpell = text:trim()
 end)
