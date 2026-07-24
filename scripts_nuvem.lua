@@ -998,90 +998,113 @@ end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-
 local distance = 2
 local amountOfMonsters = 2
-storage.dynamicCooldown = storage.dynamicCooldown or 2000 
+local COOLDOWN_MINIMO_ABSOLUTO = 1000
+local COOLDOWN_MAXIMO = 2000
+local AJUSTE_INCREMENTO = 20
+local AJUSTE_DECREMENTO = 5
+if not storage.smartCastData then
+    storage.smartCastData = {
+        menorCooldownSeguro = 2000
+    }
+end
+local atualCooldown = storage.smartCastData.menorCooldownSeguro
+local ultimoDisparoTime = 0
+local tomouExhaustNesseCiclo = false
 if storage.comboEnabled == nil then
     storage.comboEnabled = false
+end
+local function aplicarPenalidadeExhaust()
+    tomouExhaustNesseCiclo = true 
+    atualCooldown = math.min(COOLDOWN_MAXIMO, atualCooldown + AJUSTE_INCREMENTO)
+    
+    storage.smartCastData.menorCooldownSeguro = atualCooldown
+    print("[Smart Cast] Exhausted! Cooldown aumentado para: " .. math.floor(atualCooldown) .. "ms")
 end
 onTextMessage(function(mode, text)
     local msg = text:lower()
     if string.find(msg, "exha") or string.find(msg, "exhaust") then
-        storage.dynamicCooldown = storage.dynamicCooldown + 10
-        if storage.dynamicCooldown > 2000 then storage.dynamicCooldown = 2000 end 
-        if combo then combo.delay = storage.dynamicCooldown end
+        aplicarPenalidadeExhaust()
         return true 
     end
 end)
-
 if modules.game_textmessage and modules.game_textmessage.onReceive then
     local oldOnReceive = modules.game_textmessage.onReceive
     modules.game_textmessage.onReceive = function(mode, text)
         if string.find(text:lower(), "exha") or string.find(text:lower(), "exhaust") then
-            storage.dynamicCooldown = storage.dynamicCooldown + 10
-            if storage.dynamicCooldown > 2000 then storage.dynamicCooldown = 2000 end
-            if combo then combo.delay = storage.dynamicCooldown end
+            aplicarPenalidadeExhaust()
             return 
         end
         return oldOnReceive(mode, text)
     end
 end
-combo = macro(storage.dynamicCooldown, "Smart Cast - Activate", function()
+local indexArea = 1
+local indexSingle = 1
+combo = macro(50, "Smart Cast - Activate", function()
     if not g_game.isAttacking() then
         return
     end  
+    local agora = os.clock() * 1000 
+    if (agora - ultimoDisparoTime) < atualCooldown then
+        return
+    end
     local specAmount = 0
     for i, mob in ipairs(getSpectators()) do
         if (getDistanceBetween(pos(), mob:getPosition()) <= distance and mob:isMonster()) then
             specAmount = specAmount + 1
         end
     end
+    local enviouMagia = false
     if (specAmount >= amountOfMonsters) then
-        local castedArea = false
-        if storage.areaspell01 and storage.areaspell01 ~= "" then
-            say(storage.areaspell01)
-            castedArea = true
-        end
-        delay(50)
-        if storage.areaspell02 and storage.areaspell02 ~= "" then
-            say(storage.areaspell02)
-            castedArea = true
-        end
-        if castedArea then
-            storage.dynamicCooldown = math.max(200, storage.dynamicCooldown - 10)
-            combo.delay = storage.dynamicCooldown
+        local areaSpells = {}
+        if storage.areaspell01 and storage.areaspell01 ~= "" then table.insert(areaSpells, storage.areaspell01) end
+        if storage.areaspell02 and storage.areaspell02 ~= "" then table.insert(areaSpells, storage.areaspell02) end 
+        if #areaSpells > 0 then
+            if indexArea > #areaSpells then indexArea = 1 end
+            say(areaSpells[indexArea])
+            indexArea = indexArea + 1
+            enviouMagia = true
         end
     else
-        local castedSingle = false     
-        if storage.spell01 and storage.spell01 ~= "" then
-            say(storage.spell01)
-            castedSingle = true
+        local singleSpells = {}
+        if storage.spell01 and storage.spell01 ~= "" then table.insert(singleSpells, storage.spell01) end
+        if storage.spell02 and storage.spell02 ~= "" then table.insert(singleSpells, storage.spell02) end
+        if storage.spell03 and storage.spell03 ~= "" then table.insert(singleSpells, storage.spell03) end
+        if #singleSpells > 0 then
+            if indexSingle > #singleSpells then indexSingle = 1 end
+            say(singleSpells[indexSingle])
+            indexSingle = indexSingle + 1
+            enviouMagia = true
         end
-        delay(50)
-        if storage.spell02 and storage.spell02 ~= "" then
-            say(storage.spell02)
-            castedSingle = true
-        end    
-        delay(50)
-        if storage.spell03 and storage.spell03 ~= "" then
-            say(storage.spell03)
-            castedSingle = true
-        end
-        if castedSingle then
-            storage.dynamicCooldown = math.max(200, storage.dynamicCooldown - 10)
-            combo.delay = storage.dynamicCooldown
+    end
+    if enviouMagia then
+        ultimoDisparoTime = agora
+        if not tomouExhaustNesseCiclo then
+            if atualCooldown > COOLDOWN_MINIMO_ABSOLUTO then
+                atualCooldown = math.max(COOLDOWN_MINIMO_ABSOLUTO, atualCooldown - AJUSTE_DECREMENTO)
+
+                storage.smartCastData.menorCooldownSeguro = atualCooldown
+            end
+        else
+            tomouExhaustNesseCiclo = false
         end
     end
 end)
-if storage.comboEnabled then
-    combo.setOn()
-else
-    combo.setOff()
+if storage.comboEnabled then 
+    atualCooldown = storage.smartCastData.menorCooldownSeguro
+    combo.setOn() 
+else 
+    combo.setOff() 
 end
 macro(200, function()
-    if combo then
-        storage.comboEnabled = combo.isOn()
+    if combo then 
+
+        if combo.isOn() and not storage.comboEnabled then
+            atualCooldown = storage.smartCastData.menorCooldownSeguro
+            print("[Smart Cast] Macro ligada! Continuando com o menor delay salvo: " .. math.floor(atualCooldown) .. "ms")
+        end
+        storage.comboEnabled = combo.isOn() 
     end
 end)
 UI.Label("Area Spells (If 2+ Mobs)"):setColor('#FFEA99')
@@ -1162,12 +1185,14 @@ if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
-
+if not storage.smartCastData then
+    storage.smartCastData = { menorCooldownSeguro = 2000 }
+end
 local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Fight')
-  size: 80 230
+  size: 100 220
   focusable: false
   draggable: true
 
@@ -1179,7 +1204,7 @@ MainWindow
     Button
       id: botaoSpecial
       !text: tr('Special')
-      size: 60 45
+      size: 65 35
       anchors.top: parent.top
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 5
@@ -1187,18 +1212,28 @@ MainWindow
     Button
       id: botaoSpells
       !text: tr('Spells')
-      size: 60 45
-      anchors.top: prev.bottom
+      size: 65 35
+      anchors.top: botaoSpecial.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 15
 
     Button
       id: botaoWave
       !text: tr('Wave')
-      size: 60 45
-      anchors.top: prev.bottom
+      size: 65 35
+      anchors.top: botaoSpells.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 15
+
+    Label
+      id: labelCdAtual
+      text: CD: 2.00s
+      size: 65 35
+      font: verdana-11px-rounded
+      color: #FFEA99
+      anchors.top: botaoWave.bottom
+      anchors.horizontalCenter: parent.horizontalCenter
+      margin-top: 12
 ]], modules.game_interface.getMapPanel())
 
 local function isMacroActive(macroRef, storageKey)
@@ -1207,7 +1242,6 @@ local function isMacroActive(macroRef, storageKey)
     end
     return storage.painelSalvo[storageKey]
 end
-
 local function alternarEstadoMacro(macroRef, storageKey)
     local novoEstado = not storage.painelSalvo[storageKey]
     storage.painelSalvo[storageKey] = novoEstado
@@ -1218,21 +1252,18 @@ local function alternarEstadoMacro(macroRef, storageKey)
         macroRef()
     end
 end
-
 if painelIconesUI then
     local container = painelIconesUI:getChildById("containerIcones")
-    
     if container then
         local btnSpecial = container:getChildById("botaoSpecial")
         local btnSpells = container:getChildById("botaoSpells")
         local btnWave = container:getChildById("botaoWave")
+        local lblCdAtual = container:getChildById("labelCdAtual")
 
         if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
         if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
         if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
-
         local jaSincronizou = false
-
         macro(100, function()
             if not jaSincronizou then
                 if lowhp and lowhp.setOn then lowhp.setOn(storage.painelSalvo.special) end
@@ -1240,11 +1271,14 @@ if painelIconesUI then
                 if turnCombo and turnCombo.setOn then turnCombo.setOn(storage.painelSalvo.wave) end
                 jaSincronizou = true
             end
-
-            -- Atualização visual das cores dos botões
             if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp, "special") and "green" or "red") end
             if btnSpells then btnSpells:setColor(isMacroActive(combo, "spells") and "green" or "red") end
             if btnWave then btnWave:setColor(isMacroActive(turnCombo, "wave") and "green" or "red") end
+            if lblCdAtual then
+                local cdSalvoMilissegundos = storage.smartCastData and storage.smartCastData.menorCooldownSeguro or 2000
+                local cdEmSegundos = cdSalvoMilissegundos / 1000
+                lblCdAtual:setText("Cast: " .. string.format("%.2f", cdEmSegundos) .. "s")
+            end
         end)
     end
 end
@@ -1376,12 +1410,20 @@ UI.TextEdit(storage.autobarrier or "reiatsu barrier", function(widget, text)
   storage.autobarrier = text
 end)
 
+local ultimoUsoBarreira = 0
+local DELAY_SEGUNDOS = 46
+
 macro(100, function()
   if not storage[panelName].enabled then return end
-
   if storage[panelName].setting then
     if hppercent() <= storage[panelName].hp then
-        say(storage.autobarrier)
+        local tempoAgora = os.time()
+        if (tempoAgora - ultimoUsoBarreira) >= DELAY_SEGUNDOS then
+            say(storage.autobarrier)
+            ultimoUsoBarreira = tempoAgora
+            
+            print("[Auto Barrier] Magia conjurada! Aguardando " .. DELAY_SEGUNDOS .. " segundos de recarga.")
+        end
     end
   end
 end)
