@@ -1001,27 +1001,25 @@ UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 local distance = 2
 local amountOfMonsters = 2
-local COOLDOWN_MINIMO_ABSOLUTO = 1000
-local COOLDOWN_MAXIMO = 2000
-local AJUSTE_INCREMENTO = 20
-local AJUSTE_DECREMENTO = 5
+local COOLDOWN_MINIMO_ABSOLUTO = 1000 
+local COOLDOWN_MAXIMO = 2000          
+local AJUSTE_INCREMENTO = 20          
+local AJUSTE_DECREMENTO = 5           
 if not storage.smartCastData then
     storage.smartCastData = {
         menorCooldownSeguro = 2000
     }
 end
-local atualCooldown = storage.smartCastData.menorCooldownSeguro
 local ultimoDisparoTime = 0
 local tomouExhaustNesseCiclo = false
+
 if storage.comboEnabled == nil then
     storage.comboEnabled = false
 end
 local function aplicarPenalidadeExhaust()
     tomouExhaustNesseCiclo = true 
-    atualCooldown = math.min(COOLDOWN_MAXIMO, atualCooldown + AJUSTE_INCREMENTO)
-    
-    storage.smartCastData.menorCooldownSeguro = atualCooldown
-    print("[Smart Cast] Exhausted! Cooldown aumentado para: " .. math.floor(atualCooldown) .. "ms")
+    storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + AJUSTE_INCREMENTO)
+    print("[Smart Cast] Exhausted! Cooldown global aumentado para: " .. math.floor(storage.smartCastData.menorCooldownSeguro) .. "ms")
 end
 onTextMessage(function(mode, text)
     local msg = text:lower()
@@ -1045,9 +1043,9 @@ local indexSingle = 1
 combo = macro(50, "Smart Cast - Activate", function()
     if not g_game.isAttacking() then
         return
-    end  
+    end    
     local agora = os.clock() * 1000 
-    if (agora - ultimoDisparoTime) < atualCooldown then
+    if (agora - ultimoDisparoTime) < storage.smartCastData.menorCooldownSeguro then
         return
     end
     local specAmount = 0
@@ -1060,7 +1058,8 @@ combo = macro(50, "Smart Cast - Activate", function()
     if (specAmount >= amountOfMonsters) then
         local areaSpells = {}
         if storage.areaspell01 and storage.areaspell01 ~= "" then table.insert(areaSpells, storage.areaspell01) end
-        if storage.areaspell02 and storage.areaspell02 ~= "" then table.insert(areaSpells, storage.areaspell02) end 
+        if storage.areaspell02 and storage.areaspell02 ~= "" then table.insert(areaSpells, storage.areaspell02) end
+        
         if #areaSpells > 0 then
             if indexArea > #areaSpells then indexArea = 1 end
             say(areaSpells[indexArea])
@@ -1072,6 +1071,7 @@ combo = macro(50, "Smart Cast - Activate", function()
         if storage.spell01 and storage.spell01 ~= "" then table.insert(singleSpells, storage.spell01) end
         if storage.spell02 and storage.spell02 ~= "" then table.insert(singleSpells, storage.spell02) end
         if storage.spell03 and storage.spell03 ~= "" then table.insert(singleSpells, storage.spell03) end
+        
         if #singleSpells > 0 then
             if indexSingle > #singleSpells then indexSingle = 1 end
             say(singleSpells[indexSingle])
@@ -1082,31 +1082,17 @@ combo = macro(50, "Smart Cast - Activate", function()
     if enviouMagia then
         ultimoDisparoTime = agora
         if not tomouExhaustNesseCiclo then
-            if atualCooldown > COOLDOWN_MINIMO_ABSOLUTO then
-                atualCooldown = math.max(COOLDOWN_MINIMO_ABSOLUTO, atualCooldown - AJUSTE_DECREMENTO)
-
-                storage.smartCastData.menorCooldownSeguro = atualCooldown
+            if storage.smartCastData.menorCooldownSeguro > COOLDOWN_MINIMO_ABSOLUTO then
+                storage.smartCastData.menorCooldownSeguro = math.max(COOLDOWN_MINIMO_ABSOLUTO, storage.smartCastData.menorCooldownSeguro - AJUSTE_DECREMENTO)
             end
         else
             tomouExhaustNesseCiclo = false
         end
     end
 end)
-if storage.comboEnabled then 
-    atualCooldown = storage.smartCastData.menorCooldownSeguro
-    combo.setOn() 
-else 
-    combo.setOff() 
-end
+if storage.comboEnabled then combo.setOn() else combo.setOff() end
 macro(200, function()
-    if combo then 
-
-        if combo.isOn() and not storage.comboEnabled then
-            atualCooldown = storage.smartCastData.menorCooldownSeguro
-            print("[Smart Cast] Macro ligada! Continuando com o menor delay salvo: " .. math.floor(atualCooldown) .. "ms")
-        end
-        storage.comboEnabled = combo.isOn() 
-    end
+    if combo then storage.comboEnabled = combo.isOn() end
 end)
 UI.Label("Area Spells (If 2+ Mobs)"):setColor('#FFEA99')
 UI.TextEdit(storage.areaspell01 or "", function(widget, text) storage.areaspell01 = text end)
@@ -1121,13 +1107,12 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 local COOLDOWN_MINIMO_ABSOLUTO = 1000 
 local COOLDOWN_MAXIMO = 2000          
 local AJUSTE_INCREMENTO = 20          
-local AJUSTE_DECREMENTO = 5           
+local AJUSTE_DECREMENTO = 5
 if not storage.smartCastData then
     storage.smartCastData = {
         menorCooldownSeguro = 2000
     }
 end
-local atualCooldown = storage.smartCastData.menorCooldownSeguro
 local ultimoDisparoTime = 0
 local tomouExhaustNesseCiclo = false
 
@@ -1136,10 +1121,10 @@ if storage.turnComboEnabled == nil then
 end
 local function aplicarPenalidadeExhaust()
     tomouExhaustNesseCiclo = true 
-    atualCooldown = math.min(COOLDOWN_MAXIMO, atualCooldown + AJUSTE_INCREMENTO)
-    storage.smartCastData.menorCooldownSeguro = atualCooldown
-    print("[Turn Wave] Exhausted! Cooldown aumentado para: " .. math.floor(atualCooldown) .. "ms")
+    storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + AJUSTE_INCREMENTO)
+    print("[Turn Wave] Exhausted! Cooldown global aumentado para: " .. math.floor(storage.smartCastData.menorCooldownSeguro) .. "ms")
 end
+
 onTextMessage(function(mode, text)
     local msg = text:lower()
     if string.find(msg, "exha") or string.find(msg, "exhaust") then
@@ -1161,16 +1146,14 @@ turnCombo = macro(50, "Turn Wave - Activate", function()
     local target = g_game.getAttackingCreature()
     if not target then return end
     local agora = os.clock() * 1000 
-    if storage.smartCastData.menorCooldownSeguro then
-        atualCooldown = storage.smartCastData.menorCooldownSeguro
-    end
-    if (agora - ultimoDisparoTime) < atualCooldown then
+    if (agora - ultimoDisparoTime) < storage.smartCastData.menorCooldownSeguro then
         return
     end
     local targetPos = target:getPosition()
     local myPos = pos()
     local diffX = targetPos.x - myPos.x
     local diffY = targetPos.y - myPos.y
+    
     if math.abs(diffX) >= math.abs(diffY) then
         if diffX > 0 then
             g_game.turn(1)
@@ -1183,7 +1166,7 @@ turnCombo = macro(50, "Turn Wave - Activate", function()
         else
             g_game.turn(0)
         end
-    end   
+    end
     delay(30)
     local enviouMagia = false
     if storage.turnSpell and storage.turnSpell ~= "" then
@@ -1192,31 +1175,18 @@ turnCombo = macro(50, "Turn Wave - Activate", function()
     end
     if enviouMagia then
         ultimoDisparoTime = agora
-        
         if not tomouExhaustNesseCiclo then
-            if atualCooldown > COOLDOWN_MINIMO_ABSOLUTO then
-                atualCooldown = math.max(COOLDOWN_MINIMO_ABSOLUTO, atualCooldown - AJUSTE_DECREMENTO)
-                storage.smartCastData.menorCooldownSeguro = atualCooldown
+            if storage.smartCastData.menorCooldownSeguro > COOLDOWN_MINIMO_ABSOLUTO then
+                storage.smartCastData.menorCooldownSeguro = math.max(COOLDOWN_MINIMO_ABSOLUTO, storage.smartCastData.menorCooldownSeguro - AJUSTE_DECREMENTO)
             end
         else
             tomouExhaustNesseCiclo = false
         end
     end
 end)
-if storage.turnComboEnabled then 
-    atualCooldown = storage.smartCastData.menorCooldownSeguro
-    turnCombo.setOn() 
-else 
-    turnCombo.setOff() 
-end
+if storage.turnComboEnabled then turnCombo.setOn() else turnCombo.setOff() end
 macro(200, function()
-    if turnCombo then 
-        if turnCombo.isOn() and not storage.turnComboEnabled then
-            atualCooldown = storage.smartCastData.menorCooldownSeguro
-            print("[Turn Wave] Macro ligada! Continuando com o menor delay salvo: " .. math.floor(atualCooldown) .. "ms")
-        end
-        storage.turnComboEnabled = turnCombo.isOn() 
-    end
+    if turnCombo then storage.turnComboEnabled = turnCombo.isOn() end
 end)
 addTextEdit("spellTurnConfig", storage.turnSpell or "", function(widget, text)
     storage.turnSpell = text:trim()
