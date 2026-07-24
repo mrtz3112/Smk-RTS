@@ -1118,15 +1118,32 @@ UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Turn Wave ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-storage.dynamicCooldown = storage.dynamicCooldown or 2000 
+local COOLDOWN_MINIMO_ABSOLUTO = 1000 
+local COOLDOWN_MAXIMO = 2000          
+local AJUSTE_INCREMENTO = 20          
+local AJUSTE_DECREMENTO = 5           
+if not storage.smartCastData then
+    storage.smartCastData = {
+        menorCooldownSeguro = 2000
+    }
+end
+local atualCooldown = storage.smartCastData.menorCooldownSeguro
+local ultimoDisparoTime = 0
+local tomouExhaustNesseCiclo = false
+
 if storage.turnComboEnabled == nil then
     storage.turnComboEnabled = false
+end
+local function aplicarPenalidadeExhaust()
+    tomouExhaustNesseCiclo = true 
+    atualCooldown = math.min(COOLDOWN_MAXIMO, atualCooldown + AJUSTE_INCREMENTO)
+    storage.smartCastData.menorCooldownSeguro = atualCooldown
+    print("[Turn Wave] Exhausted! Cooldown aumentado para: " .. math.floor(atualCooldown) .. "ms")
 end
 onTextMessage(function(mode, text)
     local msg = text:lower()
     if string.find(msg, "exha") or string.find(msg, "exhaust") then
-        storage.dynamicCooldown = math.min(2000, storage.dynamicCooldown + 10)
-        if turnCombo then turnCombo.delay = storage.dynamicCooldown end
+        aplicarPenalidadeExhaust()
         return true 
     end
 end)
@@ -1134,16 +1151,22 @@ if modules.game_textmessage and modules.game_textmessage.onReceive then
     local oldOnReceive = modules.game_textmessage.onReceive
     modules.game_textmessage.onReceive = function(mode, text)
         if string.find(text:lower(), "exha") or string.find(text:lower(), "exhaust") then
-            storage.dynamicCooldown = math.min(2000, storage.dynamicCooldown + 10)
-            if turnCombo then turnCombo.delay = storage.dynamicCooldown end
+            aplicarPenalidadeExhaust()
             return 
         end
         return oldOnReceive(mode, text)
     end
 end
-turnCombo = macro(storage.dynamicCooldown, "Turn Wave - Activate", function()
+turnCombo = macro(50, "Turn Wave - Activate", function()
     local target = g_game.getAttackingCreature()
     if not target then return end
+    local agora = os.clock() * 1000 
+    if storage.smartCastData.menorCooldownSeguro then
+        atualCooldown = storage.smartCastData.menorCooldownSeguro
+    end
+    if (agora - ultimoDisparoTime) < atualCooldown then
+        return
+    end
     local targetPos = target:getPosition()
     local myPos = pos()
     local diffX = targetPos.x - myPos.x
@@ -1162,20 +1185,37 @@ turnCombo = macro(storage.dynamicCooldown, "Turn Wave - Activate", function()
         end
     end   
     delay(30)
+    local enviouMagia = false
     if storage.turnSpell and storage.turnSpell ~= "" then
         say(storage.turnSpell)
-        storage.dynamicCooldown = math.max(200, storage.dynamicCooldown - 10)
-        turnCombo.delay = storage.dynamicCooldown
+        enviouMagia = true
+    end
+    if enviouMagia then
+        ultimoDisparoTime = agora
+        
+        if not tomouExhaustNesseCiclo then
+            if atualCooldown > COOLDOWN_MINIMO_ABSOLUTO then
+                atualCooldown = math.max(COOLDOWN_MINIMO_ABSOLUTO, atualCooldown - AJUSTE_DECREMENTO)
+                storage.smartCastData.menorCooldownSeguro = atualCooldown
+            end
+        else
+            tomouExhaustNesseCiclo = false
+        end
     end
 end)
-if storage.turnComboEnabled then
-    turnCombo.setOn()
-else
-    turnCombo.setOff()
+if storage.turnComboEnabled then 
+    atualCooldown = storage.smartCastData.menorCooldownSeguro
+    turnCombo.setOn() 
+else 
+    turnCombo.setOff() 
 end
 macro(200, function()
-    if turnCombo then
-        storage.turnComboEnabled = turnCombo.isOn()
+    if turnCombo then 
+        if turnCombo.isOn() and not storage.turnComboEnabled then
+            atualCooldown = storage.smartCastData.menorCooldownSeguro
+            print("[Turn Wave] Macro ligada! Continuando com o menor delay salvo: " .. math.floor(atualCooldown) .. "ms")
+        end
+        storage.turnComboEnabled = turnCombo.isOn() 
     end
 end)
 addTextEdit("spellTurnConfig", storage.turnSpell or "", function(widget, text)
