@@ -1048,14 +1048,18 @@ combo = macro(50, "Smart Cast - Activate", function()
     if (agora - ultimoDisparoTime) < storage.smartCastData.menorCooldownSeguro then
         return
     end
+    local target = g_game.getAttackingCreature()
+    local atacandoPlayer = target and target:isPlayer()
     local specAmount = 0
-    for i, mob in ipairs(getSpectators()) do
-        if (getDistanceBetween(pos(), mob:getPosition()) <= distance and mob:isMonster()) then
-            specAmount = specAmount + 1
+    if not atacandoPlayer then
+        for i, mob in ipairs(getSpectators()) do
+            if (getDistanceBetween(pos(), mob:getPosition()) <= distance and mob:isMonster()) then
+                specAmount = specAmount + 1
+            end
         end
     end
     local enviouMagia = false
-    if (specAmount >= amountOfMonsters) then
+    if (specAmount >= amountOfMonsters and not atacandoPlayer) then
         local areaSpells = {}
         if storage.areaspell01 and storage.areaspell01 ~= "" then table.insert(areaSpells, storage.areaspell01) end
         if storage.areaspell02 and storage.areaspell02 ~= "" then table.insert(areaSpells, storage.areaspell02) end
