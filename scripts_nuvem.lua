@@ -1086,6 +1086,7 @@ combo = macro(50, "Smart Cast - Activate", function()
     end
     if enviouMagia then
         ultimoDisparoTime = agora
+        
         if not tomouExhaustNesseCiclo then
             if storage.smartCastData.menorCooldownSeguro > COOLDOWN_MINIMO_ABSOLUTO then
                 storage.smartCastData.menorCooldownSeguro = math.max(COOLDOWN_MINIMO_ABSOLUTO, storage.smartCastData.menorCooldownSeguro - AJUSTE_DECREMENTO)
