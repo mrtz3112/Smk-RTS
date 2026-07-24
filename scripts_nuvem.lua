@@ -377,7 +377,6 @@ macro(100, "Stack Itens", function()
             end
         end
     end
-
     for _, container in pairs(containers) do
         for slotIndex, item in ipairs(container:getItems()) do
             if item:isStackable() and item:getCount() < 10000 then
@@ -398,31 +397,37 @@ macro(100, "Stack Itens", function()
     end
 end)
 local botsDesligadosPeloPVP = false
-
-enemy = macro(100, 'Revide PK', function()
+macro(100, 'Revide PK', function()
+local botsDesligadosPeloPVP = false
+local function alternarSafeFightBoxRTS()
+    local mapPanel = modules.game_interface and modules.game_interface.gameMapPanel
+    local root = mapPanel and mapPanel:getParent()
+    if root then
+        local pvpButton = root:recursiveGetChildById('safeFightBox')
+        if pvpButton then
+            pcall(function() pvpButton:onClick() end)
+        end
+    end
+end
+macro(100, 'Revide PK', function()
     local myPos = pos()
     local localPlayer = g_game.getLocalPlayer()
     if not localPlayer then return end
-    
     local agressorTarget = nil
     local agressorHp = 101
     local agressorDist = 100
-
     for _, creature in ipairs(getSpectators(myPos)) do
         if creature:isPlayer() and creature ~= localPlayer then
-            
             local estaMeAtacando = false
             if creature.isAttacking then
                 estaMeAtacando = creature:isAttacking()
             else
                 estaMeAtacando = (g_game.getAttackingCreature() == creature or creature:isTimedSquareVisible())
             end
-            
             if estaMeAtacando then
                 local specHp = creature:getHealthPercent()
                 local specPos = creature:getPosition()
                 local specDist = getDistanceBetween(myPos, specPos)
-                
                 if specHp and specHp > 0 then
                     if creature:canShoot() then
                         if not agressorTarget or specHp < agressorHp or (specHp == agressorHp and specDist < agressorDist) then
@@ -435,18 +440,14 @@ enemy = macro(100, 'Revide PK', function()
             end
         end
     end
-    
     if agressorTarget then
         if not botsDesligadosPeloPVP then
             if CaveBot and CaveBot.setOff then CaveBot.setOff() end
             if TargetBot and TargetBot.setOff then TargetBot.setOff() end
-            
-            if g_game.setFightMode then pcall(function() g_game.setFightMode(2) end) end
+            alternarSafeFightBoxRTS()
             if g_game.setChaseMode then pcall(function() g_game.setChaseMode(1) end) end
-            
             botsDesligadosPeloPVP = true
         end
-
         if g_game.getAttackingCreature() ~= agressorTarget then
             pcall(function()
                 modules.game_interface.processMouseAction(nil, 2, myPos, nil, agressorTarget, agressorTarget)
@@ -455,15 +456,12 @@ enemy = macro(100, 'Revide PK', function()
     else
         if botsDesligadosPeloPVP then
             local alvoAtualJogo = g_game.getAttackingCreature()
-            
             if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
-                
-                if g_game.setFightMode then pcall(function() g_game.setFightMode(1) end) end
+                alternarSafeFightBoxRTS()
                 if g_game.setChaseMode then pcall(function() g_game.setChaseMode(0) end) end
-                
+
                 if CaveBot and CaveBot.setOn then CaveBot.setOn() end
-                if TargetBot and TargetBot.setOn then TargetBot.setOn() end
-                
+                if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
                 botsDesligadosPeloPVP = false
             end
         end
@@ -1006,11 +1004,9 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 local distance = 2
 local amountOfMonsters = 2
 storage.dynamicCooldown = storage.dynamicCooldown or 2000 
-
 if storage.comboEnabled == nil then
     storage.comboEnabled = false
 end
-
 onTextMessage(function(mode, text)
     local msg = text:lower()
     if string.find(msg, "exha") or string.find(msg, "exhaust") then
@@ -1037,29 +1033,13 @@ combo = macro(storage.dynamicCooldown, "Smart Cast - Activate", function()
     if not g_game.isAttacking() then
         return
     end  
-    
-    local localPlayer = g_game.getLocalPlayer()
-    local target = g_game.getAttackingCreature()
-    local attackingPlayer = target and target:isPlayer()
-    
-    local haPlayersNaTela = false
-    for _, spectator in ipairs(getSpectators()) do
-        if spectator:isPlayer() and spectator ~= localPlayer then
-            haPlayersNaTela = true
-            break
-        end
-    end
-
     local specAmount = 0
-    if not attackingPlayer then
-        for i, mob in ipairs(getSpectators()) do
-            if (getDistanceBetween(pos(), mob:getPosition()) <= distance and mob:isMonster()) then
-                specAmount = specAmount + 1
-            end
+    for i, mob in ipairs(getSpectators()) do
+        if (getDistanceBetween(pos(), mob:getPosition()) <= distance and mob:isMonster()) then
+            specAmount = specAmount + 1
         end
     end
-
-    if (specAmount >= amountOfMonsters and not attackingPlayer and not haPlayersNaTela) then
+    if (specAmount >= amountOfMonsters) then
         local castedArea = false
         if storage.areaspell01 and storage.areaspell01 ~= "" then
             say(storage.areaspell01)
@@ -1106,7 +1086,6 @@ macro(200, function()
         storage.comboEnabled = combo.isOn()
     end
 end)
-
 UI.Label("Area Spells (If 2+ Mobs)"):setColor('#FFEA99')
 UI.TextEdit(storage.areaspell01 or "", function(widget, text) storage.areaspell01 = text end)
 UI.TextEdit(storage.areaspell02 or "", function(widget, text) storage.areaspell02 = text end)
@@ -1117,12 +1096,10 @@ UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Turn Wave ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-
 storage.dynamicCooldown = storage.dynamicCooldown or 2000 
 if storage.turnComboEnabled == nil then
     storage.turnComboEnabled = false
 end
-
 onTextMessage(function(mode, text)
     local msg = text:lower()
     if string.find(msg, "exha") or string.find(msg, "exhaust") then
@@ -1131,7 +1108,6 @@ onTextMessage(function(mode, text)
         return true 
     end
 end)
-
 if modules.game_textmessage and modules.game_textmessage.onReceive then
     local oldOnReceive = modules.game_textmessage.onReceive
     modules.game_textmessage.onReceive = function(mode, text)
@@ -1143,32 +1119,13 @@ if modules.game_textmessage and modules.game_textmessage.onReceive then
         return oldOnReceive(mode, text)
     end
 end
-
 turnCombo = macro(storage.dynamicCooldown, "Turn Wave - Activate", function()
     local target = g_game.getAttackingCreature()
     if not target then return end
-    
-    local localPlayer = g_game.getLocalPlayer()
     local targetPos = target:getPosition()
     local myPos = pos()
-    
-    local atacandoPlayerReal = target:isPlayer()
-
-    local haPlayersNaTela = false
-    for _, spectator in ipairs(getSpectators()) do
-        if spectator:isPlayer() and spectator ~= localPlayer then
-            haPlayersNaTela = true
-            break
-        end
-    end
-
-    if haPlayersNaTela and not atacandoPlayerReal then
-        return
-    end
-
     local diffX = targetPos.x - myPos.x
     local diffY = targetPos.y - myPos.y
-
     if math.abs(diffX) >= math.abs(diffY) then
         if diffX > 0 then
             g_game.turn(1)
@@ -1181,7 +1138,7 @@ turnCombo = macro(storage.dynamicCooldown, "Turn Wave - Activate", function()
         else
             g_game.turn(0)
         end
-    end
+    end   
     delay(30)
     if storage.turnSpell and storage.turnSpell ~= "" then
         say(storage.turnSpell)
@@ -1189,19 +1146,16 @@ turnCombo = macro(storage.dynamicCooldown, "Turn Wave - Activate", function()
         turnCombo.delay = storage.dynamicCooldown
     end
 end)
-
 if storage.turnComboEnabled then
     turnCombo.setOn()
 else
     turnCombo.setOff()
 end
-
 macro(200, function()
     if turnCombo then
         storage.turnComboEnabled = turnCombo.isOn()
     end
 end)
-
 addTextEdit("spellTurnConfig", storage.turnSpell or "", function(widget, text)
     storage.turnSpell = text:trim()
 end)
