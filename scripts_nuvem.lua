@@ -2182,3 +2182,33 @@ macro(100, function()
   if pvehud.skills3 then pvehud.skills3:setText("~ Reiatsu: " .. player:getMagicLevel() .. " - (" .. player:getMagicLevelPercent() .. "%)") end
   if pvehud.skills8 then pvehud.skills8:setText("~ Weapon: " .. player:getSkillLevel(2) .. " - (" .. player:getSkillLevelPercent(2) .. "%)") end
 end)
+local cavebotTab = "Cave"
+local targetingTab = "Target"
+
+setDefaultTab(cavebotTab)
+CaveBot = {}
+CaveBot.Extensions = {}
+importStyle("/cavebot/cavebot.otui")
+importStyle("/cavebot/config.otui")
+importStyle("/cavebot/editor.otui")
+importStyle("/cavebot/supply.otui")
+dofile("/cavebot/actions.lua")
+dofile("/cavebot/config.lua")
+dofile("/cavebot/editor.lua")
+dofile("/cavebot/example_functions.lua")
+dofile("/cavebot/recorder.lua")
+dofile("/cavebot/walking.lua")
+dofile("/cavebot/depositer.lua")
+dofile("/cavebot/supply.lua")
+dofile("/cavebot/cavebot.lua")
+
+setDefaultTab(targetingTab)
+TargetBot = {} -- global namespace
+importStyle("/targetbot/target.otui")
+importStyle("/targetbot/creature_editor.otui")
+dofile("/targetbot/creature.lua")
+dofile("/targetbot/creature_attack.lua")
+dofile("/targetbot/creature_editor.lua")
+dofile("/targetbot/creature_priority.lua")
+dofile("/targetbot/walking.lua")
+dofile("/targetbot/target.lua")
