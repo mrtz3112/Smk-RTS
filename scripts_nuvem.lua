@@ -201,6 +201,16 @@ ButtonT = UI.Button("Reconect", function()
 end)
 updateButtonReconectText()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+macro(100, "GrandFisher Mask", function()
+    if not g_game.isAttacking() and not g_game.getAttackingCreature() then
+        return
+    end
+    local helmet = getSlot(1)
+    if helmet then
+        use(helmet)
+        delay(10000)
+    end
+end)
 local effectIdToAvoid = 237
 local flags = { ignoreNonPathable = true }
 
@@ -385,16 +395,6 @@ macro(100, "Stack Itens", function()
                 end
             end
         end
-    end
-end)
-gfmask = macro(100, "GrandFisher Mask", function()
-    if not g_game.isAttacking() and not g_game.getAttackingCreature() then
-        return
-    end
-    local helmet = getSlot(1)
-    if helmet then
-        use(helmet)
-        delay(10000)
     end
 end)
 local botsDesligadosPeloPVP = false
