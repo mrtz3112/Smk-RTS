@@ -326,7 +326,6 @@ end
 if not storage.smartEatDelay then
   storage.smartEatDelay = 10000
 end
-
 macro(100, "Smart Eat", function()
   local player = g_game.getLocalPlayer()
   if not player then return end
@@ -357,7 +356,6 @@ end)
 local moneyContainer = UI.Container(function(widget, items)
   storage.moneyItems = items
 end, true)
-
 moneyContainer:setHeight(35)
 if #storage.moneyItems > 0 then
   moneyContainer:setItems(storage.moneyItems)
