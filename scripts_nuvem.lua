@@ -1340,7 +1340,7 @@ ui.HP:setValue(storage[panelName].hp)
 UI.TextEdit(storage.autohealspell1 or "regeneration", function(widget, text)    
   storage.autohealspell1 = text
 end)
-macro(1000, function()
+macro(1100, function()
  if not storage[panelName].enabled then return end
 
  if storage[panelName].setting then
