@@ -387,20 +387,6 @@ macro(100, "Stack Itens", function()
         end
     end
 end)
-macro(200, "Open Doors, function()
-  local playerPos = player:getPosition()
-  for x = -1, 1 do
-    for y = -1, 1 do
-      local tile = g_map.getTile({x = playerPos.x + x, y = playerPos.y + y, z = playerPos.z})
-      if tile then
-        local topItem = tile:getTopUseItem()
-        if topItem and (topItem:getId() >= 1646 and topItem:getId() <= 1649) then -- IDs comuns de portas de level/exemplo
-          g_game.use(topItem)
-        end
-      end
-    end
-  end
-end)
 gfmask = macro(100, "GrandFisher Mask", function()
     if not g_game.isAttacking() and not g_game.getAttackingCreature() then
         return
