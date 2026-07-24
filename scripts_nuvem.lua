@@ -1,3 +1,32 @@
+-- Função para registrar novas abas de forma limpa no topo da janela do bot
+local function anexarAbaNoBot(nomeAba)
+    -- Se o bot tiver uma barra de abas padrão registrada (comum no Smk/VBot)
+    if botTabBar then
+        local botaoAba = botTabBar:addTab(nomeAba)
+        local painelAba = g_ui.createWidget("Panel")
+        painelAba:fill("parent")
+        botTabBar:getTabWidget(botaoAba):addChild(painelAba)
+        return painelAba
+    else
+        -- Caso use um painel padrão embutido em módulos (fallback)
+        local painelAba = g_ui.createWidget("Panel", parent)
+        painelAba:fill("parent")
+        return painelAba
+    end
+end
+
+-- Criando as novas abas (Note que MAIN já existe nativamente no seu bot)
+local tabFight  = anexarAbaNoBot("Fight")
+local tabHeal   = anexarAbaNoBot("Heal")
+local tabTools  = anexarAbaNoBot("Tools")
+
+
+-- ============================================================================
+-- 2. ENGENHARIA DA ABA NATIVA: MAIN (ATRIBUIÇÃO EXATA NO PAINEL LOCAL)
+-- ============================================================================
+-- Como a aba "Main" já existe por padrão no seu cliente, vinculamos os elementos nela
+local painelMainNativo = parent
+
 setDefaultTab("Main")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("      Smk Custom: v3.5      "):setColor('#C39BD3')
