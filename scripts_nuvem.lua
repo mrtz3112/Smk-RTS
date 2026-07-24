@@ -1109,56 +1109,23 @@ UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Turn Wave ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-local COOLDOWN_MINIMO_ABSOLUTO = 1000 
-local COOLDOWN_MAXIMO = 2000          
-local AJUSTE_INCREMENTO = 20          
-local AJUSTE_DECREMENTO = 5
-if not storage.smartCastData then
-    storage.smartCastData = {
-        menorCooldownSeguro = 2000
-    }
-end
-local ultimoDisparoTime = 0
-local tomouExhaustNesseCiclo = false
-
 if storage.turnComboEnabled == nil then
     storage.turnComboEnabled = false
 end
-local function aplicarPenalidadeExhaust()
-    tomouExhaustNesseCiclo = true 
-    storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + AJUSTE_INCREMENTO)
-    print("[Turn Wave] Exhausted! Cooldown global aumentado para: " .. math.floor(storage.smartCastData.menorCooldownSeguro) .. "ms")
-end
-
-onTextMessage(function(mode, text)
-    local msg = text:lower()
-    if string.find(msg, "exha") or string.find(msg, "exhaust") then
-        aplicarPenalidadeExhaust()
-        return true 
-    end
-end)
-if modules.game_textmessage and modules.game_textmessage.onReceive then
-    local oldOnReceive = modules.game_textmessage.onReceive
-    modules.game_textmessage.onReceive = function(mode, text)
-        if string.find(text:lower(), "exha") or string.find(text:lower(), "exhaust") then
-            aplicarPenalidadeExhaust()
-            return 
-        end
-        return oldOnReceive(mode, text)
-    end
-end
+local ultimoDisparoTurnWave = 0
 turnCombo = macro(50, "Turn Wave - Activate", function()
     local target = g_game.getAttackingCreature()
     if not target then return end
     local agora = os.clock() * 1000 
-    if (agora - ultimoDisparoTime) < storage.smartCastData.menorCooldownSeguro then
+    local delaySmartCast = (storage.smartCastData and storage.smartCastData.menorCooldownSeguro) or 2000
+    if (agora - ultimoDisparoTurnWave) < delaySmartCast then
         return
     end
+
     local targetPos = target:getPosition()
     local myPos = pos()
     local diffX = targetPos.x - myPos.x
     local diffY = targetPos.y - myPos.y
-    
     if math.abs(diffX) >= math.abs(diffY) then
         if diffX > 0 then
             g_game.turn(1)
@@ -1171,22 +1138,11 @@ turnCombo = macro(50, "Turn Wave - Activate", function()
         else
             g_game.turn(0)
         end
-    end
+    end   
     delay(30)
-    local enviouMagia = false
     if storage.turnSpell and storage.turnSpell ~= "" then
         say(storage.turnSpell)
-        enviouMagia = true
-    end
-    if enviouMagia then
-        ultimoDisparoTime = agora
-        if not tomouExhaustNesseCiclo then
-            if storage.smartCastData.menorCooldownSeguro > COOLDOWN_MINIMO_ABSOLUTO then
-                storage.smartCastData.menorCooldownSeguro = math.max(COOLDOWN_MINIMO_ABSOLUTO, storage.smartCastData.menorCooldownSeguro - AJUSTE_DECREMENTO)
-            end
-        else
-            tomouExhaustNesseCiclo = false
-        end
+        ultimoDisparoTurnWave = agora
     end
 end)
 if storage.turnComboEnabled then turnCombo.setOn() else turnCombo.setOff() end
