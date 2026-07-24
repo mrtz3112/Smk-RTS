@@ -1877,3 +1877,308 @@ if mwall and mwall.setOff then
     mwall.setOff()
 end
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+
+local pvehud = setupUI([[
+Panel
+  id: pveMainPanel
+  size: 14 14
+  height: 500
+  anchors.top: parent.top
+  anchors.left: parent.left
+  margin-left: 2
+  margin-top: 5
+  opacity: 1
+
+  -- LABELS DO SCRIPT 1: CRÉDITOS
+  Label
+    id: iconlayer
+    height: 12
+    color: #C39BD3
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 25
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  Label
+    id: iconlayer2
+    height: 12
+    color: #C39BD3
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 40
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  -- LABELS DO SCRIPT 2: ATALHOS PVE
+  Label
+    id: tab1
+    height: 12
+    color: white
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 60
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  Label
+    id: cave
+    height: 12
+    color: white
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 75
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  Label
+    id: target
+    height: 12
+    color: white
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 90
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  Label
+    id: dash
+    height: 12
+    color: white
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 105
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  Label
+    id: buffsinfo
+    height: 12
+    color: white
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 120
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  -- LABELS DO SCRIPT 3: ATALHOS PVP
+  Label
+    id: tab2
+    height: 12
+    color: white
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 140
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  Label
+    id: mwallinfo
+    height: 12
+    color: white
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 155
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  Label
+    id: chaseatk
+    height: 12
+    color: white
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 170
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  Label
+    id: enemy
+    height: 12
+    color: white
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 185
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  Label
+    id: xsense
+    height: 12
+    color: white
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 200
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  -- LABELS DO SCRIPT 4: STATUS DE SKILLS
+  Label
+    id: tab3
+    height: 12
+    color: white
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 220
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  Label
+    id: skills1
+    height: 12
+    color: #87CEFA
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 235
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  Label
+    id: skills3
+    height: 12
+    color: #C39BD3
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 250
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+  Label
+    id: skills8
+    height: 12
+    color: #B0C4DE
+    font: verdana-11px-rounded
+    background-color: #00000090
+    anchors.top: parent.top
+    margin-top: 265
+    opacity: 0.87
+    text-auto-resize: true
+    text-align: center
+
+]], modules.game_interface.getMapPanel())
+
+macro(100, function()
+  if not pvehud then return end
+
+  if pvehud.iconlayer then pvehud.iconlayer:setText("     ~ [Smk Custom - v3.15] ~   ") end
+  if pvehud.iconlayer2 then pvehud.iconlayer2:setText(" ~ [Instagram: @cafeh_ofc] ~  ") end
+
+  if pvehud.tab1 then pvehud.tab1:setText("           ~           [PvE]           ~       ") end
+  
+  if pvehud.cave then
+    if CaveBot.isOn() then
+      pvehud.cave:setText("~ CaveBot: [Ctrl+1]")
+      pvehud.cave:setColor("#33ff99")
+    else
+      pvehud.cave:setText("~ CaveBot: [Ctrl+1]")
+      pvehud.cave:setColor("#ff6666")
+    end
+  end
+  
+  if pvehud.target then
+    if TargetBot.isOn() then
+      pvehud.target:setText("~ Target: [Ctrl+2]")
+      pvehud.target:setColor("#33ff99")
+    else
+      pvehud.target:setText("~ Target: [Ctrl+2]")
+      pvehud.target:setColor("#ff6666")
+    end
+  end
+  
+  if pvehud.dash then
+    if dash.isOn() then
+      pvehud.dash:setText("~ BugMap: [Ctrl+3]")
+      pvehud.dash:setColor("#33ff99")
+    else
+      pvehud.dash:setText("~ BugMap: [Ctrl+3]")
+      pvehud.dash:setColor("#ff6666")
+    end
+  end
+  
+  if pvehud.buffsinfo then
+    if buffs.isOn() then
+      pvehud.buffsinfo:setText("~ Haste & Buff: [Ctrl+4]")
+      pvehud.buffsinfo:setColor("#33ff99")
+    else
+      pvehud.buffsinfo:setText("~ Haste & Buff: [Ctrl+4]")
+      pvehud.buffsinfo:setColor("#ff6666")
+    end
+  end
+
+  if pvehud.tab2 then pvehud.tab2:setText("           ~           [PvP]           ~       ") end
+
+  if pvehud.mwallinfo then
+    if mwall.isOn() then
+      pvehud.mwallinfo:setText("~ MWall on Target: [Shift+1]")
+      pvehud.mwallinfo:setColor("#33ff99")
+    else
+      pvehud.mwallinfo:setText("~ MWall on Target: [Shift+1]")
+      pvehud.mwallinfo:setColor("#ff6666")
+    end
+  end
+
+  if pvehud.chaseatk then
+    if chaseatk.isOn() then
+      pvehud.chaseatk:setText("~ Hold Attack: [Shift+2]")
+      pvehud.chaseatk:setColor("#33ff99")
+    else
+      pvehud.chaseatk:setText("~ Hold Attack: [Shift+2]")
+      pvehud.chaseatk:setColor("#ff6666")
+    end
+  end
+
+  if pvehud.enemy then
+    if enemy.isOn() then
+      pvehud.enemy:setText("~ Enemy: [Shift+3]")
+      pvehud.enemy:setColor("#33ff99")
+    else
+      pvehud.enemy:setText("~ Enemy: [Shift+3]")
+      pvehud.enemy:setColor("#ff6666")
+    end
+  end
+
+  if pvehud.xsense then
+    if xsense.isOn() then
+      pvehud.xsense:setText("~ xSense: [Shift+4]")
+      pvehud.xsense:setColor("#33ff99")
+    else
+      pvehud.xsense:setText("~ xSense: [Shift+4]")
+      pvehud.xsense:setColor("#ff6666")
+    end
+  end
+
+  if pvehud.tab3 then pvehud.tab3:setText("           ~         [Skills]        ~         ") end
+  if pvehud.skills1 then pvehud.skills1:setText("~ Level: " .. player:getLevel() .. " - (" .. player:getLevelPercent() .. "%)") end
+  if pvehud.skills3 then pvehud.skills3:setText("~ Reiatsu: " .. player:getMagicLevel() .. " - (" .. player:getMagicLevelPercent() .. "%)") end
+  if pvehud.skills8 then pvehud.skills8:setText("~ Weapon: " .. player:getSkillLevel(2) .. " - (" .. player:getSkillLevelPercent(2) .. "%)") end
+end)
