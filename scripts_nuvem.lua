@@ -1277,7 +1277,7 @@ if painelIconesUI then
             if lblCdAtual then
                 local cdSalvoMilissegundos = storage.smartCastData and storage.smartCastData.menorCooldownSeguro or 2000
                 local cdEmSegundos = cdSalvoMilissegundos / 1000
-                lblCdAtual:setText("Cast: " .. string.format("%.2f", cdEmSegundos) .. "s")
+                lblCdAtual:setText(" Cast: " .. string.format("%.2f", cdEmSegundos) .. "s")
             end
         end)
     end
