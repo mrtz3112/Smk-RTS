@@ -523,27 +523,28 @@ local ignoreInput = UI.TextEdit(storage.ignoredPlayers or "", function(widget, t
     storage.ignoredPlayers = text
 end)
 ignoreInput:setHeight(25)
-enemy = macro(1, 'Enemy', "SHIFT+3", function()
+enemy = macro(30, 'Enemy', "SHIFT+3", function()
     local myPos = pos()
     local actualTarget
     local actualTargetHp = 101
-    local actualTargetDist = 100
-
+    local actualTargetDist = 10
     for _, creature in ipairs(getSpectators(myPos)) do
         local specHp = creature:getHealthPercent()
         local specPos = creature:getPosition()
         local specName = creature:getName()       
         if (creature:isPlayer() and specHp and specHp > 0) then
-            if not isPlayerIgnored(specName) then
-                if (creature:getEmblem() ~= 1 and creature:getShield() < 3 and creature ~= player) then
-                    if creature:canShoot() then
-                        local specDist = getDistanceBetween(myPos, specPos)
-                        
-                        if not actualTarget or specHp < actualTargetHp or (specHp == actualTargetHp and specDist < actualTargetDist) then
-                            actualTarget = creature
-                            actualTargetPos = specPos
-                            actualTargetHp = specHp
-                            actualTargetDist = specDist
+            local specSkull = creature:getSkull()
+            if (specSkull == 1 or specSkull == 4) then
+                if not isPlayerIgnored(specName) then
+                    if (creature:getEmblem() ~= 1 and creature:getShield() < 3 and creature ~= player) then
+                        if creature:canShoot() then
+                            local specDist = getDistanceBetween(myPos, specPos)
+                            if not actualTarget or specHp < actualTargetHp or (specHp == actualTargetHp and specDist < actualTargetDist) then
+                                actualTarget = creature
+                                actualTargetPos = specPos
+                                actualTargetHp = specHp
+                                actualTargetDist = specDist
+                            end
                         end
                     end
                 end
