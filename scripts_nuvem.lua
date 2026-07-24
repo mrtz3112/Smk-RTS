@@ -17,6 +17,40 @@ UI.Button("Macro Editor", function(newText)
     end
   end
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+ModulesG = modules._G
+local reconectEvent = nil
+local ButtonT = nil
+
+local function updateButtonReconectText()
+    if ModulesG.ReconnectXD then
+        ButtonT:setColoredText({"Reconnect:", "white", " ON", "green"})
+    else
+        ButtonT:setColoredText({"Reconnect:", "white", " OFF", "red"})
+    end
+end
+
+ButtonT = UI.Button("Reconect", function()
+    if not ModulesG.ReconnectXD then
+        ModulesG.loadstring([[
+            modules._G.ReconnectXD = true
+            reconectEvent = cycleEvent(function()
+                if not g_game.isOnline() then
+                    CharacterList.doLogin()
+                end
+            end, 2500)
+        ]])()
+    else
+        ModulesG.loadstring([[
+            modules._G.ReconnectXD = false
+            if reconectEvent then
+                removeEvent(reconectEvent)
+            end
+        ]])()
+    end
+    updateButtonReconectText()
+end)
+updateButtonReconectText()
+UI.Label("-----------------------------------"):setColor('#C39BD3')
 local panelName = "alarms"
 local ui = setupUI([[
 Panel
@@ -166,40 +200,6 @@ macro(100, function()
     end
   end
 end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-ModulesG = modules._G
-local reconectEvent = nil
-local ButtonT = nil
-
-local function updateButtonReconectText()
-    if ModulesG.ReconnectXD then
-        ButtonT:setColoredText({"Reconnect:", "white", " ON", "green"})
-    else
-        ButtonT:setColoredText({"Reconnect:", "white", " OFF", "red"})
-    end
-end
-
-ButtonT = UI.Button("Reconect", function()
-    if not ModulesG.ReconnectXD then
-        ModulesG.loadstring([[
-            modules._G.ReconnectXD = true
-            reconectEvent = cycleEvent(function()
-                if not g_game.isOnline() then
-                    CharacterList.doLogin()
-                end
-            end, 2500)
-        ]])()
-    else
-        ModulesG.loadstring([[
-            modules._G.ReconnectXD = false
-            if reconectEvent then
-                removeEvent(reconectEvent)
-            end
-        ]])()
-    end
-    updateButtonReconectText()
-end)
-updateButtonReconectText()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 macro(100, "GrandFisher Mask", function()
     if not g_game.isAttacking() and not g_game.getAttackingCreature() then
