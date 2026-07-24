@@ -3,7 +3,6 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("      Smk Custom: v3.5      "):setColor('#C39BD3')
 UI.Label("        Since 2025       "):setColor('#C39BD3')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---Macro Editor
 UI.Button("Macro Editor", function(newText)
     UI.MultilineEditorWindow(storage.combos or "", {title="Macro Editor", description="Aqui voce pode editar os seus combos."}, function(text)
       storage.combos = text
@@ -18,7 +17,6 @@ UI.Button("Macro Editor", function(newText)
     end
   end
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---Auto Reconnect
 ModulesG = modules._G
 local reconectEvent = nil
 local ButtonT = nil
@@ -53,7 +51,6 @@ ButtonT = UI.Button("Reconect", function()
 end)
 updateButtonReconectText()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---Auto Dodge
 local effectIdToAvoid = 237
 local flags = { ignoreNonPathable = true }
 
@@ -65,8 +62,6 @@ function hasEffect(tile, effectId)
     end
     return false
 end
-
--- Recorre en círculos concéntricos desde 1 sqm hasta maxRange
 function findNearestSafePosition(playerPos, maxRange)
     maxRange = maxRange or 7  -- menos rango = más rápido
     for r = 1, maxRange do
@@ -88,7 +83,6 @@ function findNearestSafePosition(playerPos, maxRange)
     end
     return nil
 end
-
 macro(30, "Dodge Red SQM Spells", function()
     local playerPos = player:getPosition()
 
@@ -102,7 +96,6 @@ macro(30, "Dodge Red SQM Spells", function()
         delay(100)
     end
 end)
---Auto Enter Dungeon
 local window_name = "Dungeons"
 macro(2000, "Enter Dungeons", function()
     for _, rootW in pairs(g_ui.getRootWidget():getChildren()) do
@@ -117,7 +110,6 @@ macro(2000, "Enter Dungeons", function()
         end
     end
 end)
---Auto Attack House Trainer
 if not storage.trainerMacroPauseUntil then
   storage.trainerMacroPauseUntil = 0
 end
@@ -188,7 +180,6 @@ local trainerMacro = macro(100, "House Trainer", function(macroObj)
     g_game.attack(closestTrainer)
   end
 end)
---AutoDeposit
 macro(100, "Deposit Gold", function()
   local coinIds = {3031, 3035, 3043, 10137} 
   local minAmount = 1
@@ -205,10 +196,9 @@ macro(100, "Deposit Gold", function()
     delay(500)
   end
 end)
---AutoStack
 macro(100, "Stack Itens", function()
     local containers = g_game.getContainers()
-    local itensMapeados = {} -- Tabela para rastrear o melhor destino de cada ID
+    local itensMapeados = {}
 
     for _, container in pairs(containers) do
         for slotIndex, item in ipairs(container:getItems()) do
@@ -247,7 +237,6 @@ macro(100, "Stack Itens", function()
         end
     end
 end)
---Auto GrandFisher Mask
 gfmask = macro(100, "GrandFisher Mask", function()
     if not g_game.isAttacking() and not g_game.getAttackingCreature() then
         return
@@ -258,7 +247,6 @@ gfmask = macro(100, "GrandFisher Mask", function()
         delay(10000)
     end
 end)
--- Auto-Defesa PVP Totalmente Automatizada (Especial Road to Shinigami)
 local botsDesligadosPeloPVP = false
 
 enemy = macro(100, 'Revide PK', function()
@@ -332,12 +320,11 @@ enemy = macro(100, 'Revide PK', function()
     end
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---Eat Food
 if type(storage.moneyItems) ~= "table" then
   storage.moneyItems = {}
 end
 if not storage.smartEatDelay then
-  storage.smartEatDelay = 10000 -- Altere aqui o valor em ms se quiser mudar o tempo fixo
+  storage.smartEatDelay = 10000
 end
 
 macro(100, "Smart Eat", function()
@@ -375,12 +362,11 @@ end, true)
 moneyContainer:setHeight(35)
 moneyContainer:setItems(storage.moneyItems)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---AutoFollow
 local Objects = {
     435, 1948, 432, 433, 412, 413, 421, 422, 423, 424, 425, 426, 476, 475, 479, 480, 
     369, 370, 411, 414, 434, 459, 469, 470, 8559, 8560, 1968, 7476, 482, 484, 485
-} -- IDs de Escadas, Buracos abertos, Cordas, Bueiros, Rampas e Portais
-local Doors = {7727, 8265, 1629, 1632, 5129, 5120, 8266, 7728, 5102, 5111} -- IDs de Portas
+}
+local Doors = {7727, 8265, 1629, 1632, 5129, 5120, 8266, 7728, 5102, 5111}
 
 if not storage.autoFollowConfig then 
     storage.autoFollowConfig = { player = "name" } 
@@ -402,17 +388,14 @@ macro(30, "Smart Follow", function()
     local target = getCreatureByName(leaderName)
     local myPos = pos()
 
-    -- 1. Se o líder está na tela, atualiza o rastro e verifica distância
     if target then
         local tpos = target:getPosition()
-        toFollowPos[tpos.z] = tpos -- Grava a última posição conhecida deste andar
+        toFollowPos[tpos.z] = tpos
         
-        -- Se estiver perto (até 1 de distância), não precisa andar
         if getDistanceBetween(myPos, tpos) <= 1 then 
             return 
         end
         
-        -- Tenta abrir portas adjacentes se estiver trancado perto do líder
         if getDistanceBetween(myPos, tpos) > 2 then
             for _, doorId in ipairs(Doors) do
                 for x = -1, 1 do
@@ -432,21 +415,17 @@ macro(30, "Smart Follow", function()
             end
         end
 
-        -- Executa o caminhar em direção ao líder na mesma tela
         autoWalk(tpos, 20, { ignoreNonPathable = true, precision = 1 })
         return
     end
 
-    -- 2. Se o líder SUMIU da tela (Mudou de andar / Usou escada)
     local lastLeaderPosInMyFloor = toFollowPos[myPos.z]
     if lastLeaderPosInMyFloor then
-        -- Se o bot ainda não chegou no ponto exato onde o líder sumiu, ele caminha até lá
         if getDistanceBetween(myPos, lastLeaderPosInMyFloor) > 0 then
             autoWalk(lastLeaderPosInMyFloor, 20, { ignoreNonPathable = true, precision = 0 })
             return
         end
 
-        -- Se o bot JÁ CHEGOU no ponto exato onde o líder sumiu, procura escadas/bueiros ao redor para usar
         for _, objectId in ipairs(Objects) do
             for x = -1, 1 do
                 for y = -1, 1 do
@@ -455,7 +434,7 @@ macro(30, "Smart Follow", function()
                     if tile then
                         for _, item in ipairs(tile:getItems()) do
                             if item:getId() == objectId then
-                                g_game.use(item) -- Clica na escada/bueiro/rampa
+                                g_game.use(item)
                                 return
                             end
                         end
@@ -468,7 +447,6 @@ end)
 
 UI.Separator()
 
--- Listener: Se você der "Follow" nativo (Clique direito -> Follow) em alguém, o macro atualiza o nome automaticamente
 onPlayerPositionChange(function(newPos, oldPos)
     if g_game.isFollowing() then
         local tfollow = g_game.getFollowingCreature()
@@ -482,7 +460,6 @@ onPlayerPositionChange(function(newPos, oldPos)
     end
 end)
 
--- Listener: Monitora os passos do líder pela tela para mapear o rastro perfeitamente
 onCreaturePositionChange(function(creature, newPos, oldPos)
     if not newPos then return end
     if creature:getName() == storage.autoFollowConfig.player then
@@ -490,12 +467,9 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
     end
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---Enemy
--- Inicializa a configuração da lista de ignorados no storage se não existir
 if not storage.ignoredPlayers then
     storage.ignoredPlayers = "ignore1,ignore2"
 end
--- Função auxiliar para verificar se o player está na lista de ignorados
 local function isPlayerIgnored(name)
     local cleanedName = name:lower():trim()
     for ignoredName in string.gmatch(storage.ignoredPlayers, "[^,]+") do
@@ -505,17 +479,15 @@ local function isPlayerIgnored(name)
     end
     return false
 end
--- Painel Visual: Cria o rótulo e a caixa de texto na interface do Bot
 local ignoreInput = UI.TextEdit(storage.ignoredPlayers or "", function(widget, text)
     storage.ignoredPlayers = text
 end)
 ignoreInput:setHeight(25)
--- Macro ajustado para priorizar Menor HP e Menor Distância
 enemy = macro(1, 'Enemy', "SHIFT+3", function()
     local myPos = pos()
     local actualTarget
-    local actualTargetHp = 101 -- Inicializa com HP acima do máximo para a comparação funcionar
-    local actualTargetDist = 100 -- Inicializa com distância alta
+    local actualTargetHp = 101
+    local actualTargetDist = 100
 
     for _, creature in ipairs(getSpectators(myPos)) do
         local specHp = creature:getHealthPercent()
@@ -527,10 +499,6 @@ enemy = macro(1, 'Enemy', "SHIFT+3", function()
                     if creature:canShoot() then
                         local specDist = getDistanceBetween(myPos, specPos)
                         
-                        -- CRITÉRIO DE ESCOLHA:
-                        -- 1. Se não houver alvo ainda OU
-                        -- 2. Se o HP do novo player for MENOR que o do alvo atual OU
-                        -- 3. Se o HP for IGUAL, escolhe quem tiver a MENOR distância (mais perto)
                         if not actualTarget or specHp < actualTargetHp or (specHp == actualTargetHp and specDist < actualTargetDist) then
                             actualTarget = creature
                             actualTargetPos = specPos
@@ -548,7 +516,6 @@ enemy = macro(1, 'Enemy', "SHIFT+3", function()
     end
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---X-Sense
 xsense = macro(30, "xSense", "SHIFT+4", function()
     local target = g_game.getAttackingCreature()
     if target and target:isPlayer() then
@@ -639,7 +606,7 @@ lastSense.init = function()
     schedule(1500, function()
       modules.game_textmessage.displayGameMessage('Arraste a box para o Norte segurando CTRL  --  Drag the box to the North pressing CTRL')
       lastSense.senseBox = setupUI(lastSense.widget, g_ui.getRootWidget())
-      --changeColor(lastSense.senseBox, {r = 255, g = 255, b = 255, a = 255}) -> Inutilizado.
+
       lastSense.senseBox:setHeight(50)
       lastSense.senseBox:setWidth(50)
       lastSense.senseBox:setPosition({x = 1030, y = 380})
@@ -743,7 +710,6 @@ function lastSense.setup()
 end
 lastSense.init()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---Target HP Percentage
 local showhp = macro(30, function() end)
 onCreatureHealthPercentChange(function(creature, healthPercent)
   if showhp:isOff() then return end
@@ -762,7 +728,6 @@ end)
 onCreatureDisappear(function(creature)
   creature:setText()
 end)
---Ice Hud HP Percent
 macro(30, function()
 local hp = g_ui.getRootWidget():recursiveGetChildById("healthCircleFront")
 hp:setText("   ".. hppercent().. "             ") 
@@ -774,7 +739,6 @@ local hp = g_ui.getRootWidget():recursiveGetChildById("manaCircleFront")
 hp:setText("                   ".. manapercent().. "          ") 
 hp:setColor("white")
 end)
---Auto Bless
 if player:getBlessings() == 0 then
   say("!bless")
   schedule(1000, function()
@@ -783,7 +747,6 @@ if player:getBlessings() == 0 then
     end
   end)
 end
---CaveBot Creator Always Opened
 macro(100, function()
   local botWindow = modules.game_bot.botWindow
   if not botWindow then return end
@@ -796,7 +759,6 @@ macro(100, function()
     end
   end
 end)
--- Magic wall & Wild growth timer
 local magicWallId = 10980
 local magicWallTime = 20000
 local wildGrowthId = 2130
@@ -838,7 +800,6 @@ setDefaultTab("Fight")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Haste & Buff ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
--- Função auxiliar interna para calcular a variável local isPz
 local function checkPz()
   local player = g_game.getLocalPlayer()
   if not player then return false end
@@ -846,7 +807,6 @@ local function checkPz()
   local isPz = pzFlag or (g_game.isInPz and g_game.isInPz())
   return isPz
 end
---buffs e haste
 local function checkPz()
   local player = g_game.getLocalPlayer()
   if not player then return false end
@@ -889,7 +849,6 @@ end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Spell at Target HP ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
--- HP Spell on HP Below
 local panelName = "hpbelowconfig"
 storage.dynamicCooldownHP = storage.dynamicCooldownHP or 2000 
 
@@ -1303,7 +1262,6 @@ setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Healing Spell ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---fast regen
 local panelName = "selfregen"
 local ui = setupUI([[
 Panel
@@ -1439,8 +1397,7 @@ end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Pet ~")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---Pet on Hp
-local panelName = "selfpetconfig" -- Alterado para evitar conflito com as poções e salvar permanentemente
+local panelName = "selfpetconfig"
 local ui = setupUI([[
 Panel
   height: 50
@@ -1491,10 +1448,8 @@ local allowedIds = {
     [10480] = 300000  -- 300 segundos
 }
 
--- Inicializa o histórico de uso dos itens se não existir
 if not storage.petItemCooldowns then storage.petItemCooldowns = {} end
 
--- CORREÇÃO: Removido o 'title = enabled' que quebrava o script, e adicionada trava de persistência
 if not storage[panelName] then
   storage[panelName] = {
       id = 10480, 
@@ -1526,10 +1481,8 @@ ui.HP.onValueChange = function(scroll, value)
   updateHpText()
 end
 
--- Carrega o ID do item salvo na interface visual
 ui.item:setItemId(storage[panelName].id)
 
--- CORREÇÃO: Impede que o slot salve o ID como 0 ao fechar/reiniciar o jogo de forma abrupta
 ui.item.onItemChange = function(widget)
   local novaId = widget:getItemId()
   if novaId and novaId > 0 then
@@ -1539,9 +1492,8 @@ end
 
 ui.HP:setValue(storage[panelName].hp)
 
--- Registrado explicitamente como petMacro para funcionar com o painel de botões coloridos
 petMacro = macro(100, function()
-    -- Sincroniza o botão visual com o estado atual da macro externa
+
     if ui and ui.title then
         ui.title:setOn(storage[panelName].enabled)
     end
@@ -1551,12 +1503,10 @@ petMacro = macro(100, function()
         local currentId = storage[panelName].id
         local itemCooldown = allowedIds[currentId]
         
-        -- VALIDAÇÃO: Só executa se o ID do item estiver registrado na lista permitida
         if itemCooldown then
             if hppercent() <= storage[panelName].hp then
                 local currentTime = now
                 local lastUsedTime = storage.petItemCooldowns[currentId] or 0
-                -- Verifica se o tempo de recarga específico deste item já expirou
                 if currentTime - lastUsedTime >= itemCooldown then
                     use(currentId)
                     storage.petItemCooldowns[currentId] = currentTime 
@@ -1568,8 +1518,7 @@ end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Potions ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---fast potion
-local panelNameFastPot = "selffastpot" -- Alterado para não conflitar com "selfpet"
+local panelNameFastPot = "selffastpot"
 local uiFastPot = setupUI([[
 Panel
   height: 50
@@ -1664,8 +1613,6 @@ macro(100, function()
 	end
 end)
 
-
---fast mana potion
 local panelNameManaPot = "selfmppot"
 local uiManaPot = setupUI([[
 Panel
@@ -1766,7 +1713,6 @@ setDefaultTab("Tools")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Extra ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---automsgtrade
 macro(100, "Auto Trade Msg", function()
   local trade = getChannelId("Trade")
   if not trade then
@@ -1783,44 +1729,37 @@ end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Guild Only ~")
 UI.Label("-----------------------------------"):setColor('#C39BD3') 
---auto invite pt from guild
 invpt = macro(500, "Auto Invite PT", function()
     if not g_game.isOnline() then return end
 
     local myPlayer = g_game.getLocalPlayer()
     if not myPlayer then return end
 
-    -- Pega todos os espectadores ao redor da posição atual (X, Y, Z) do seu boneco
     local spectators = getSpectators(pos())
     
     for _, v in ipairs(spectators) do
-        -- Garante que o alvo é um jogador válido na tela e não é você mesmo
+
         if v and v:isPlayer() and v ~= myPlayer then
-            -- v:getShield() == 0 (Sem Party) e v:getEmblem() == 1 (Verifica o emblema específico da sua guilda/aliança se houver)
+
             if v:getShield() == 0 and v:getEmblem() == 1 then
-                -- Envia o convite utilizando a ID de criatura nativa do OTClientv8
+
                 g_game.partyInvite(v:getId())
             end
         end
     end
 end)
---auto accept pt from guild
--- Intervalo de 1000ms (1 segundo) mantido para uma resposta rápida ao convite
+
 accpt = macro(1000, "Auto Join PT", function()
     if not g_game.isOnline() then return end
 
     local myPlayer = g_game.getLocalPlayer()
     if not myPlayer then return end
 
-    -- CORREÇÃO: Usa pos() para pegar as coordenadas completas (X,Y,Z)
     local spectators = getSpectators(pos())
     
     for _, v in ipairs(spectators) do
-        -- Garante que o alvo é um jogador válido e não é você mesmo
         if v and v:isPlayer() and v ~= myPlayer then
-            -- v:getShield() == 1 significa que ele é o Líder da Party que te convidou
             if v:getShield() == 1 and v:getEmblem() == 1 then
-                -- CORREÇÃO: O comando correto da engine do OTCv8 para aceitar é partyAccept
                 g_game.partyAccept(v:getId())
             end
         end
@@ -1834,7 +1773,6 @@ UI.Button("-  Zoom", function() zoomOut() end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ HUD Hotkeys ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---start/stop CaveBot
 macro(1, "Start/Stop CaveBot", ("CTRL+1"), function(killcave)
 if CaveBot.isOn() then
  CaveBot.setOff()
@@ -1844,7 +1782,6 @@ else
  killcave.setOff()
 end
 end)
---start/stop TargetBot
 macro(1, "Start/Stop TargetBot", ("CTRL+2"), function(killtarget)
 if TargetBot.isOn() then
  TargetBot.setOff()
@@ -1854,7 +1791,6 @@ else
  killtarget.setOff()
 end
 end)
---BugMap AWSD/Setas/NumPad
 local function checkPos(x, y)
  xyz = g_game.getLocalPlayer():getPosition()
  xyz.x = xyz.x + x
@@ -1889,7 +1825,6 @@ end)
 if dash and dash.setOff then
     dash.setOff()
 end
---HoldAttack
 chaseatk = macro(100, "Hold Target", "SHIFT+2", function()
   if g_game.isAttacking() 
 then
@@ -1909,7 +1844,6 @@ end)
 if chaseatk and chaseatk.setOff then
     chaseatk.setOff()
 end
---Auto MWall na Frente do Alvo
 local MW_ID = 10571
 local ultimoUso = 0
 
