@@ -4,7 +4,7 @@ UI.Label("      Smk Custom: v3.5      "):setColor('#C39BD3')
 UI.Label("        Since 2025       "):setColor('#C39BD3')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 --Macro Editor
-UI.Button("Macro Editor", function(newText)
+UI.Button("teste", function(newText)
     UI.MultilineEditorWindow(storage.combos or "", {title="Macro Editor", description="Aqui voce pode editar os seus combos."}, function(text)
       storage.combos = text
       reload()
