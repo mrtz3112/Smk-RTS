@@ -397,8 +397,6 @@ macro(100, "Stack Itens", function()
     end
 end)
 local botsDesligadosPeloPVP = false
-macro(100, 'Revide PK', function()
-local botsDesligadosPeloPVP = false
 local function alternarSafeFightBoxRTS()
     local mapPanel = modules.game_interface and modules.game_interface.gameMapPanel
     local root = mapPanel and mapPanel:getParent()
