@@ -890,9 +890,12 @@ end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Spell at Target HP ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-
 local panelName = "hpbelowconfig"
-storage.dynamicCooldownHP = storage.dynamicCooldownHP or 2000 
+if not storage.specialCastData then
+    storage.specialCastData = {
+        cooldownEspecial = 2000
+    }
+end
 
 if not storage[panelName] then
   storage[panelName] = {
@@ -901,56 +904,45 @@ if not storage[panelName] then
       enabled = false
   }
 end
-
+local ultimoDisparoEspecial = 0
+local tomouExhaustNoEspecial = false
 onTextMessage(function(mode, text)
+    if not storage[panelName].enabled then return end
     local msg = text:lower()
     if string.find(msg, "exha") or string.find(msg, "exhaust") then
-        storage.dynamicCooldownHP = storage.dynamicCooldownHP + 10
-        if storage.dynamicCooldownHP > 2000 then storage.dynamicCooldownHP = 2000 end 
-        if lowhp then lowhp.delay = storage.dynamicCooldownHP end
+        tomouExhaustNoEspecial = true
+        storage.specialCastData.cooldownEspecial = math.min(3000, storage.specialCastData.cooldownEspecial + 50)
         return true 
     end
 end)
-
-if modules.game_textmessage and modules.game_textmessage.onReceive then
-    local oldOnReceive = modules.game_textmessage.onReceive
-    modules.game_textmessage.onReceive = function(mode, text)
-        if string.find(text:lower(), "exha") or string.find(text:lower(), "exhaust") then
-            storage.dynamicCooldownHP = storage.dynamicCooldownHP + 10
-            if storage.dynamicCooldownHP > 2000 then storage.dynamicCooldownHP = 2000 end
-            if lowhp then lowhp.delay = storage.dynamicCooldownHP end
-            return 
-        end
-        return oldOnReceive(mode, text)
-    end
-end
-
-lowhp = macro(storage.dynamicCooldownHP, function()
+lowhp = macro(50, function()
     if not g_game.isAttacking() then
         return
     end  
+    
     local target = g_game.getAttackingCreature()
-    if target and target:getPosition() then 
-        if target:getHealthPercent() <= storage[panelName].hp then
-            if storage.hpspell and storage.hpspell ~= "" then
-                say(storage.hpspell)
-                storage.dynamicCooldownHP = math.max(200, storage.dynamicCooldownHP - 10)
-                lowhp.delay = storage.dynamicCooldownHP
+    if not target then return end
+    
+    local agora = os.clock() * 1000
+    if (agora - ultimoDisparoEspecial) < storage.specialCastData.cooldownEspecial then
+        return
+    end
+    if target:getHealthPercent() <= storage[panelName].hp then
+        if storage.hpspell and storage.hpspell ~= "" then
+            say(storage.hpspell)
+            ultimoDisparoEspecial = agora
+            if not tomouExhaustNoEspecial then
+                storage.specialCastData.cooldownEspecial = math.max(200, storage.specialCastData.cooldownEspecial - 10)
+            else
+                tomouExhaustNoEspecial = false
             end
         end
     end
 end)
-
-if storage[panelName].enabled then
-    lowhp.setOn()
-else
-    lowhp.setOff()
-end
-
+if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
 local ui = setupUI([[
 Panel
   height: 35
-    
   BotSwitch
     id: title
     anchors.left: parent.left
@@ -970,31 +962,40 @@ Panel
     step: 1
 ]], parent)
 ui:setId(panelName)
-
 ui.title:setOn(storage[panelName].enabled)
-
 ui.title.onClick = function(widget)
   storage[panelName].enabled = not storage[panelName].enabled
   widget:setOn(storage[panelName].enabled)
+  if storage.painelSalvo then
+      storage.painelSalvo.special = storage[panelName].enabled
+  end
+  
   if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
 end
-
 local updateHpText = function()
     if storage[panelName].setting then
         ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
     end
 end
-
 ui.HP.onValueChange = function(scroll, value)
   storage[panelName].hp = value
   updateHpText()
 end
-
 ui.HP:setValue(storage[panelName].hp)
 updateHpText()
-
 UI.TextEdit(storage.hpspell or "", function(widget, text) 
     storage.hpspell = text 
+end)
+macro(200, function()
+    if lowhp and storage.painelSalvo and storage.painelSalvo.special ~= nil then
+        if storage[panelName].enabled ~= storage.painelSalvo.special then
+            storage[panelName].enabled = storage.painelSalvo.special
+            if ui and ui.title then
+                ui.title:setOn(storage[panelName].enabled)
+            end
+            if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
+        end
+    end
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
