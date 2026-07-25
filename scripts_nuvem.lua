@@ -1,5 +1,5 @@
 -- CORREÇÃO CRÍTICA: Força a limpeza de URLs antigas ou inválidas presas na memória do bot
-local URL_BASE_REPOSITORIO = "https://githubusercontent.com"
+local URL_BASE_REPOSITORIO = "://githubusercontent.com"
 
 local arquivosParaSincronizar = {
     -- Arquivos estruturais da pasta Cavebot
