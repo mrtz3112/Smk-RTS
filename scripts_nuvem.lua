@@ -1445,17 +1445,13 @@ Panel
     
 ]], parent)
 ui:setId(panelName)
-
--- Configuração de Delays por ID Permitida (em milissegundos)
 local allowedIds = {
     [2993]  = 120000, -- 120 segundos
     [10479] = 120000, -- 120 segundos
     [10481] = 120000, -- 120 segundos
     [10480] = 300000  -- 300 segundos
 }
-
 if not storage.petItemCooldowns then storage.petItemCooldowns = {} end
-
 if not storage[panelName] then
   storage[panelName] = {
       id = 10481, 
@@ -1474,36 +1470,29 @@ ui.title.onClick = function(widget)
   storage[panelName].enabled = not storage[panelName].enabled
   widget:setOn(storage[panelName].enabled)
 end
-
 local updateHpText = function()
     if storage[panelName].setting then
     ui.help:setText("Health: < " .. storage[panelName].hp .. "%")
 	end
 end
 updateHpText()
-
 ui.HP.onValueChange = function(scroll, value)
   storage[panelName].hp = value
   updateHpText()
 end
-
 ui.item:setItemId(storage[panelName].id)
-
 ui.item.onItemChange = function(widget)
   local novaId = widget:getItemId()
   if novaId and novaId > 0 then
       storage[panelName].id = novaId
   end
 end
-
 ui.HP:setValue(storage[panelName].hp)
-
 petMacro = macro(100, function()
 
     if ui and ui.title then
         ui.title:setOn(storage[panelName].enabled)
     end
-
     if not storage[panelName].enabled then return end
     if storage[panelName].setting then
         local currentId = storage[panelName].id
@@ -1640,12 +1629,11 @@ uiFastPot.item.onItemChange = function(widget)
   if novaId and novaId > 0 then storage[panelNameFastPot].id = novaId end
 end
 uiFastPot.HP:setValue(storage[panelNameFastPot].hp)
-macro(100, function()
+macro(1000, function()
     if not storage[panelNameFastPot].enabled then return end
     if storage[panelNameFastPot].setting then
         if hppercent() <= storage[panelNameFastPot].hp then
             use(storage[panelNameFastPot].id)
-            delay(1000)
         end
     end
 end)
@@ -1670,12 +1658,11 @@ uiManaPot.item.onItemChange = function(widget)
   if novaId and novaId > 0 then storage[panelNameManaPot].id = novaId end
 end
 uiManaPot.HP:setValue(storage[panelNameManaPot].hp)
-macro(100, function()
+macro(1000, function()
     if not storage[panelNameManaPot].enabled then return end
     if storage[panelNameManaPot].setting then
         if manapercent() <= storage[panelNameManaPot].hp then
             use(storage[panelNameManaPot].id)
-            delay(1000)
         end
     end
 end)
