@@ -1016,7 +1016,7 @@ local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Spells')
-  size: 98 205
+  size: 98 198
   focusable: false
   draggable: true
 
@@ -1038,7 +1038,7 @@ MainWindow
       size: 80 40
       anchors.top: botaoSpecial.bottom
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 10
+      margin-top: 8
       margin-left: 1
 
     Button
@@ -1047,7 +1047,7 @@ MainWindow
       size: 80 40
       anchors.top: botaoSpells.bottom
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 10
+      margin-top: 8
       margin-left: 1
 
     Label
