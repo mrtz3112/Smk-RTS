@@ -822,7 +822,7 @@ Panel
     anchors.right: parent.right
     anchors.bottom: parent.verticalCenter
     text-align: center
-    !text: tr('Activate')
+    !text: tr('Especial - Activate')
 
   HorizontalScrollBar
     id: HP
@@ -985,13 +985,13 @@ UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Turn Wave ~"):setColor('#EBDEF0')
+UI.Label("~ Wave ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 if storage.turnComboEnabled == nil then
     storage.turnComboEnabled = false
 end
 local ultimoDisparoTurnWave = 0
-turnCombo = macro(50, "Turn Wave - Activate", function()
+turnCombo = macro(50, "Wave - Activate", function()
     local target = g_game.getAttackingCreature()
     if not target then return end
     local agora = os.clock() * 1000 
@@ -1061,7 +1061,7 @@ MainWindow
 
     Button
       id: botaoSpells
-      !text: tr('Single/Area')
+      !text: tr('Area/Single')
       size: 80 40
       anchors.top: botaoSpecial.bottom
       anchors.horizontalCenter: parent.horizontalCenter
