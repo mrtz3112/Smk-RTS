@@ -209,15 +209,12 @@ end)
 macro(100, "Stack Itens", function()
     local containers = g_game.getContainers()
     local itensMapeados = {}
-
     for _, container in pairs(containers) do
         for slotIndex, item in ipairs(container:getItems()) do
-
             if item:isStackable() and item:getCount() < 10000 then
                 local itemId = item:getId()
                 local count = item:getCount()
                 local posicaoAtual = container:getSlotPosition(slotIndex - 1)
-
                 if not itensMapeados[itemId] or count > itensMapeados[itemId].count then
                     itensMapeados[itemId] = {
                         posicao = posicaoAtual,
@@ -232,10 +229,8 @@ macro(100, "Stack Itens", function()
             if item:isStackable() and item:getCount() < 10000 then
                 local itemId = item:getId()
                 local destino = itensMapeados[itemId]
-
                 if destino then
                     local posicaoAtual = container:getSlotPosition(slotIndex - 1)
-
                     if posicaoAtual.x ~= destino.posicao.x or posicaoAtual.y ~= destino.posicao.y or posicaoAtual.slot ~= destino.posicao.slot then
                         g_game.move(item, destino.posicao, item:getCount())
                         delay(150)
@@ -270,12 +265,27 @@ macro(100, 'Revide PK', function()
             if creature.isAttacking then
                 estaMeAtacando = creature:isAttacking()
             else
+           macro(100, 'Revide PK', function()
+    local myPos = pos()
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer then return end
+    local agressorTarget = nil
+    local agressorHp = 101
+    local agressorDist = 100
+    for _, creature in ipairs(getSpectators(myPos)) do
+        if creature:isPlayer() and creature ~= localPlayer then
+            
+            local estaMeAtacando = false
+            if creature.isAttacking then
+                estaMeAtacando = creature:isAttacking()
+            else
                 estaMeAtacando = (g_game.getAttackingCreature() == creature or creature:isTimedSquareVisible())
             end
             if estaMeAtacando then
                 local specHp = creature:getHealthPercent()
                 local specPos = creature:getPosition()
                 local specDist = getDistanceBetween(myPos, specPos)
+                
                 if specHp and specHp > 0 then
                     if creature:canShoot() then
                         if not agressorTarget or specHp < agressorHp or (specHp == agressorHp and specDist < agressorDist) then
@@ -291,9 +301,11 @@ macro(100, 'Revide PK', function()
     if agressorTarget then
         if not botsDesligadosPeloPVP then
             if CaveBot and CaveBot.setOff then CaveBot.setOff() end
-            if TargetBot and TargetBot.setOff then TargetBot.setOff() end
-            alternarSafeFightBoxRTS()
+            if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
+            if g_game.setFightMode then pcall(function() g_game.setFightMode(2) end) end
+            definirSafeFightBox(true)       
             if g_game.setChaseMode then pcall(function() g_game.setChaseMode(1) end) end
+
             botsDesligadosPeloPVP = true
         end
         if g_game.getAttackingCreature() ~= agressorTarget then
@@ -305,9 +317,9 @@ macro(100, 'Revide PK', function()
         if botsDesligadosPeloPVP then
             local alvoAtualJogo = g_game.getAttackingCreature()
             if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
-                alternarSafeFightBoxRTS()
+                definirSafeFightBox(false)           
+                if g_game.setFightMode then pcall(function() g_game.setFightMode(1) end) end
                 if g_game.setChaseMode then pcall(function() g_game.setChaseMode(0) end) end
-
                 if CaveBot and CaveBot.setOn then CaveBot.setOn() end
                 if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
                 botsDesligadosPeloPVP = false
