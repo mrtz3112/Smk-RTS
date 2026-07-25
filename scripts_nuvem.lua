@@ -1622,7 +1622,6 @@ macro(30, "Smart Follow", function()
         end
     end
 end)
-UI.Separator()
 onPlayerPositionChange(function(newPos, oldPos)
     if g_game.isFollowing() then
         local tfollow = g_game.getFollowingCreature()
@@ -1642,7 +1641,6 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
     end
 end)
 UI.Separator()
---auto legendary
 local panelName = "AutoLegendary"
 storage[panelName] = storage[panelName] or {enabled = false}
 local config = storage[panelName]
