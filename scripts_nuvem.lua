@@ -1,3 +1,60 @@
+local URL_BASE_REPOSITORIO = "https://githubusercontent.com"
+local arquivosParaSincronizar = {
+    -- Arquivos estruturais da pasta Cavebot
+    "cavebot/cavebot.lua",
+    "cavebot/cavebot.otui",
+	"cavebot/config.lua",
+    "cavebot/config.otui",
+    -- Arquivos estruturais da pasta Targetbot
+    "targetbot/creature.lua",
+	"targetbot/creature_attack.lua",
+	"targetbot/creature_editor.lua",
+	"targetbot/creature_editor.otui",
+    "targetbot/creature_priority.lua",
+	"targetbot/functions.lua",
+	"targetbot/target.lua",
+    "targetbot/target.otui",
+	"targetbot/walking.lua"
+}
+local function baixarEGravarNoDisco(caminhoArquivo, callbackProximo)
+    local antiCache = "?t=" .. os.time()
+    local urlCompleta = URL_BASE_REPOSITORIO .. caminhoArquivo .. antiCache
+    
+    HTTP.get(urlCompleta, function(conteudo, erro)
+        if erro then
+            print("[Cloud Engine] Falha ao sincronizar o arquivo: " .. caminhoArquivo .. " | Erro: " .. tostring(erro))
+            if callbackProximo then callbackProximo() end
+            return
+        end
+        if conteudo and conteudo ~= "" then
+            local caminhoLocal = "/" .. caminhoArquivo
+            g_resources.writeFile(caminhoLocal, conteudo)
+            print("[Cloud Engine] Arquivo atualizado: " .. caminhoArquivo)
+        else
+            print("[Cloud Engine] Alerta: O arquivo remoto " .. caminhoArquivo .. " retornou vazio.")
+        end
+        if callbackProximo then callbackProximo() end
+    end)
+end
+local function iniciarSincronizacaoDePastas()
+    print("[Cloud Engine] Verificando e atualizando modulos locais (cavebot/targetbot)...")
+    local index = 1
+    
+    local function processarFila()
+        if index > #arquivosParaSincronizar then
+            print("[Cloud Engine] Todas as pastas e modulos foram atualizados com sucesso!")
+            return
+        end
+        local arquivoAtual = arquivosParaSincronizar[index]
+        index = index + 1
+        
+        baixarEGravarNoDisco(arquivoAtual, processarFila)
+    end
+    
+    processarFila()
+end
+iniciarSincronizacaoDePastas()
+
 setDefaultTab("Main")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("      Smk Custom: v4.0      "):setColor('#C39BD3')
