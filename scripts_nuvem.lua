@@ -258,6 +258,22 @@ local function definirSafeFightBox(deveAtivar)
         end
     end
 end
+local function definirModoAtaque(modo)
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end
+    
+    local idBotao = ""
+    if modo == "balanced" then
+        idBotao = "fightBalancedBox"
+    elseif modo == "offensive" then
+        idBotao = "fightOffensiveBox"
+    end
+    
+    local targetButton = rootWidget:recursiveGetChildById(idBotao)
+    if targetButton then
+        pcall(function() targetButton:onClick() end)
+    end
+end
 macro(100, 'Revide PK', function()
     local myPos = pos()
     local localPlayer = g_game.getLocalPlayer()
@@ -295,7 +311,8 @@ macro(100, 'Revide PK', function()
         if not botsDesligadosPeloPVP then
             if CaveBot and CaveBot.setOff then CaveBot.setOff() end
             if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
-            if g_game.setFightMode then pcall(function() g_game.setFightMode(2) end) end
+            definirModoAtaque("balanced")
+            
             definirSafeFightBox(true)       
             if g_game.setChaseMode then pcall(function() g_game.setChaseMode(1) end) end
 
@@ -311,10 +328,12 @@ macro(100, 'Revide PK', function()
             local alvoAtualJogo = g_game.getAttackingCreature()
             if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
                 definirSafeFightBox(false)           
-                if g_game.setFightMode then pcall(function() g_game.setFightMode(1) end) end
+                definirModoAtaque("offensive")
+                
                 if g_game.setChaseMode then pcall(function() g_game.setChaseMode(0) end) end
                 if CaveBot and CaveBot.setOn then CaveBot.setOn() end
                 if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
+                
                 botsDesligadosPeloPVP = false
             end
         end
