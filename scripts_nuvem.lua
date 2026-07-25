@@ -1038,7 +1038,6 @@ if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 if not storage.smartCastData then
     storage.smartCastData = { menorCooldownSeguro = 2000 }
 end
-
 local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
@@ -1046,10 +1045,12 @@ MainWindow
   size: 98 198
   focusable: false
   draggable: true
+  phantom: false
 
   Panel
     id: containerIcones
     anchors.fill: parent
+    phantom: false
 
     Button
       id: botaoSpecial
@@ -1088,7 +1089,12 @@ MainWindow
       margin-top: 6
       margin-left: 10
 ]], modules.game_interface.getMapPanel())
-
+painelIconesUI.onMousePress = function(widget, mousePos, button)
+    return true
+end
+painelIconesUI.onMouseRelease = function(widget, mousePos, button)
+    return true
+end
 local function isMacroActive(macroRef, storageKey)
     if macroRef and type(macroRef) == "table" and macroRef.isOn then
         return macroRef.isOn()
@@ -1112,10 +1118,10 @@ if painelIconesUI then
         local btnSpells = container:getChildById("botaoSpells")
         local btnWave = container:getChildById("botaoWave")
         local lblCdAtual = container:getChildById("labelCdAtual")
-
         if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
         if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
         if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
+        
         local jaSincronizou = false
         macro(100, function()
             if not jaSincronizou then
