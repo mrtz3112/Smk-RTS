@@ -1524,6 +1524,12 @@ end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Potions ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+-- Define um container padrão seguro caso o script rode isolado
+local containerPai = modules.game_interface.getMapPanel()
+
+-------------------------------------------------------------------------------
+-- 1. PAINEL E MACRO: HEALTH POTION
+-------------------------------------------------------------------------------
 local panelNameFastPot = "selffastpot"
 local uiFastPot = setupUI([[
 Panel
@@ -1564,7 +1570,7 @@ Panel
     maximum: 100
     step: 1
     
-]], parent)
+]], containerPai)
 uiFastPot:setId(panelNameFastPot)
 if not storage[panelNameFastPot] then
   storage[panelNameFastPot] = {
@@ -1581,8 +1587,8 @@ uiFastPot.title.onClick = function(widget)
 end
 local updateHpText = function()
     if storage[panelNameFastPot].setting then
-    uiFastPot.help:setText("Health: < " .. storage[panelNameFastPot].hp .. "%")
-	end
+        uiFastPot.help:setText("Health: < " .. storage[panelNameFastPot].hp .. "%")
+    end
 end
 updateHpText()
 uiFastPot.HP.onValueChange = function(scroll, value)
@@ -1598,13 +1604,13 @@ uiFastPot.item.onItemChange = function(widget)
 end
 uiFastPot.HP:setValue(storage[panelNameFastPot].hp)
 macro(100, function()
- if not storage[panelNameFastPot].enabled then return end
- if storage[panelNameFastPot].setting then
-    if hppercent() <= storage[panelNameFastPot].hp then
-        use(storage[panelNameFastPot].id)
-		delay(1000)
+    if not storage[panelNameFastPot].enabled then return end
+    if storage[panelNameFastPot].setting then
+        if hppercent() <= storage[panelNameFastPot].hp then
+            use(storage[panelNameFastPot].id)
+            delay(1000)
+        end
     end
-	end
 end)
 local panelNameManaPot = "selfmppot"
 local uiManaPot = setupUI([[
@@ -1646,7 +1652,7 @@ Panel
     maximum: 100
     step: 1
     
-]], parent)
+]], containerPai)
 uiManaPot:setId(panelNameManaPot)
 if not storage[panelNameManaPot] then
   storage[panelNameManaPot] = {
@@ -1655,7 +1661,7 @@ if not storage[panelNameManaPot] then
       setting = true,
       hp = 50
   }
-else
+end
 uiManaPot.title:setOn(storage[panelNameManaPot].enabled)
 uiManaPot.title.onClick = function(widget)
   storage[panelNameManaPot].enabled = not storage[panelNameManaPot].enabled
@@ -1663,8 +1669,8 @@ uiManaPot.title.onClick = function(widget)
 end
 local updateMpText = function()
     if storage[panelNameManaPot].setting then
-    uiManaPot.help:setText("Mana: < " .. storage[panelNameManaPot].hp .. "%")
-	end
+        uiManaPot.help:setText("Mana: < " .. storage[panelNameManaPot].hp .. "%")
+    end
 end
 updateMpText()
 uiManaPot.HP.onValueChange = function(scroll, value)
@@ -1680,14 +1686,13 @@ uiManaPot.item.onItemChange = function(widget)
 end
 uiManaPot.HP:setValue(storage[panelNameManaPot].hp)
 macro(100, function()
- if not storage[panelNameManaPot].enabled then return end
-
- if storage[panelNameManaPot].setting then
-    if manapercent() <= storage[panelNameManaPot].hp then
-        use(storage[panelNameManaPot].id)
-		delay(1000)
+    if not storage[panelNameManaPot].enabled then return end
+    if storage[panelNameManaPot].setting then
+        if manapercent() <= storage[panelNameManaPot].hp then
+            use(storage[panelNameManaPot].id)
+            delay(1000)
+        end
     end
-	end
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 setDefaultTab("Tools")
