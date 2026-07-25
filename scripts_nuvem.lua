@@ -1631,6 +1631,209 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
     end
 end)
 UI.Separator()
+--auto roll
+local panelName = "roll"
+storage[panelName] = storage[panelName] or {enabled = false}
+local config = storage[panelName]
+if type(storage.rollItem) == "table" then
+  storage.rollItem = storage.rollItem or 10177
+elseif type(storage.rollItem) ~= "number" then
+  storage.rollItem = 10177
+end
+local itemStats = {
+  ["Max HP"] = {{itemStat="Max HP"}},
+  ["Armor Value"] = {{itemStat = "Armor Value"}},
+  ["Healing"] = {{itemStat = "Healing"}},
+  ["Loot Bonus"] = {{itemStat="Bonus Loot"}},
+  ["Experience"] = {{itemStat="Experience"}},
+  ["Elite Chance"] = {{itemStat="Elite Chance"}},
+  ["Physical Damage"] = {{itemStat="Physical Damage"}},
+  ["Reiatsu Damage"] = {{itemStat="Reiatsu Damage"}},
+  ["Player Protection"] = {{itemStat="Player Protection"}},
+  ["Attack Speed"] = {{itemStat="Attack Speed"}},
+  ["Casting Speed"] = {{itemStat="Casting Speed"}},
+  ["Critical Hit Chance"] = {{itemStat="Critical Hit Chance"}},
+  ["DoT Damage"] = {{itemStat="DoT Damage"}},
+  ["HP Regeneration"] = {{itemStat="HP Regeneration"}},
+}
+local ui = setupUI([[
+RollItem < Panel
+  height: 40
+  margin-top: 2
+  
+  BotItem
+    id: item1
+    anchors.top: parent.top
+    anchors.horizontalCenter: parent.horizontalCenter
+
+Panel
+  height: 65
+
+  BotSwitch
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    text-align: center
+    width: 130
+    !text: tr('Item Roll')
+
+  Button
+    id: edit
+    anchors.top: parent.top
+    anchors.left: title.right
+    anchors.right: parent.right
+    margin-left: 3
+    height: 17
+    text: Setup
+    
+  RollItem
+    id: items
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: title.bottom
+    margin-top: 5
+]])
+local configWindow = setupUI([[
+MainWindow
+  id: configWindow
+  !text: tr('Roll Setup')
+  size: 200 410
+  focusable: false
+  draggable: true
+  phantom: false
+
+  ScrollablePanel
+    id: itemStats
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: uberRoll.top
+    margin-bottom: 8
+    vertical-scrollbar: listaScroll
+    layout:
+      type: verticalBox
+      spacing: 5
+
+  VerticalScrollBar
+    id: listaScroll
+    anchors.top: itemStats.top
+    anchors.bottom: itemStats.bottom
+    anchors.right: parent.right
+    step: 14
+    pixels-scroll: true
+
+  CheckBox
+    id: uberRoll
+    text: Use Uber Roll (12309)
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: closeButton.top
+    margin-bottom: 8
+
+  Button
+    id: closeButton
+    text: Close
+    width: 90
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.bottom: parent.bottom
+]], modules.game_interface.getMapPanel())
+configWindow:hide()
+configWindow:setId(panelName)
+configWindow.onMousePress = function(widget, mousePos, button)
+    return true
+end
+configWindow.onMouseRelease = function(widget, mousePos, button)
+    return true
+end
+local panel = configWindow:getChildById("itemStats")
+ui.title:setOn(config.enabled)
+ui.title.onClick = function(widget)
+  config.enabled = not config.enabled
+  widget:setOn(config.enabled)
+end
+ui.edit.onClick = function()
+  configWindow:show()
+  configWindow:raise()
+  configWindow:focus()
+end
+configWindow.closeButton.onClick = function(widget)
+  configWindow:hide()
+end
+if ui.items and ui.items.item1 then
+  ui.items.item1.onItemChange = function(widget)
+    storage.rollItem = widget:getItemId()
+  end
+  ui.items.item1:setItemId(tonumber(storage.rollItem) or 10177)    
+end
+for itemStat, entry in pairs(itemStats) do
+  local check = g_ui.createWidget("CheckBox", panel)
+  if check then
+    check:setText(itemStat)
+    check:setChecked(config[itemStat] or false)
+    check.onClick = function()
+      config[itemStat] = not config[itemStat]
+      check:setChecked(config[itemStat])
+    end
+  end
+end
+configWindow.uberRoll:setChecked(config.uberRoll or false)
+configWindow.uberRoll.onClick = function(widget)
+  config.uberRoll = not config.uberRoll
+  widget:setChecked(config.uberRoll)
+end
+onTextMessage(function(mode, text)
+  if not config.enabled then return end
+    local selectedCount = 0
+    for itemStat, _ in pairs(itemStats) do
+      if config[itemStat] then
+        selectedCount = selectedCount + 1
+      end
+    end
+    if selectedCount > 4 then
+      config.enabled = false
+      ui.title:setOn(false)
+      modules.game_textmessage.displayGameMessage("The maximum number of bonuses that can be rolled is 4.")
+      return
+    end
+    local optionsFoundInMessage = 0 
+    for itemStat, entry in pairs(itemStats) do
+      if config[itemStat] then
+        for i = 1, #entry do
+          if string.find(text, entry[i].itemStat) then
+            optionsFoundInMessage = optionsFoundInMessage + 1
+          end
+        end
+      end
+    end
+    if optionsFoundInMessage > 0 then
+      if (optionsFoundInMessage == 4 and selectedCount == 4) or 
+         (optionsFoundInMessage == 3 and selectedCount == 3) or 
+         (optionsFoundInMessage == 2 and selectedCount == 2) or 
+         (optionsFoundInMessage == 1 and selectedCount == 1) then
+        config.enabled = false
+        ui.title:setOn(false)
+        return
+      end
+    end
+end)
+macro(250, function()
+  if not config.enabled then return end
+  local useItem = nil
+  if config.uberRoll then
+    useItem = findItem(12309)
+  else
+    useItem = findItem(11060)
+  end
+  local eqItem = findItem(tonumber(storage.rollItem))
+  if useItem and eqItem then
+    if config.uberRoll then
+      useWith(12309, eqItem)
+    else
+      useWith(11060, eqItem)
+    end
+  end
+end)
+UI.Separator()
 local panelName = "AutoLegendary"
 storage[panelName] = storage[panelName] or {enabled = false}
 local config = storage[panelName]
