@@ -206,12 +206,13 @@ macro(100, "Deposit Gold", function()
     delay(500)
   end
 end)
-macro(100, "Stack Itens", function()
+macro(250, "Stack Itens", function()
     local containers = g_game.getContainers()
+    if not containers then return end
     local itensMapeados = {}
     for _, container in pairs(containers) do
         for slotIndex, item in ipairs(container:getItems()) do
-            if item:isStackable() and item:getCount() < 10000 then
+            if item:isStackable() and item:getCount() < 1000 then
                 local itemId = item:getId()
                 local count = item:getCount()
                 local posicaoAtual = container:getSlotPosition(slotIndex - 1)
@@ -226,15 +227,17 @@ macro(100, "Stack Itens", function()
     end
     for _, container in pairs(containers) do
         for slotIndex, item in ipairs(container:getItems()) do
-            if item:isStackable() and item:getCount() < 10000 then
+            if item:isStackable() and item:getCount() < 1000 then
                 local itemId = item:getId()
                 local destino = itensMapeados[itemId]
                 if destino then
                     local posicaoAtual = container:getSlotPosition(slotIndex - 1)
                     if posicaoAtual.x ~= destino.posicao.x or posicaoAtual.y ~= destino.posicao.y or posicaoAtual.slot ~= destino.posicao.slot then
-                        g_game.move(item, destino.posicao, item:getCount())
-                        delay(150)
-                        return "retry"
+                        local moverQuantidade = math.min(item:getCount(), 100 - destino.count)
+                        if moverQuantidade > 0 then
+                            g_game.move(item, destino.posicao, moverQuantidade)
+                            return
+                        end
                     end
                 end
             end
@@ -242,13 +245,16 @@ macro(100, "Stack Itens", function()
     end
 end)
 local botsDesligadosPeloPVP = false
-local function alternarSafeFightBoxRTS()
+local function definirSafeFightBox(deveAtivar)
     local mapPanel = modules.game_interface and modules.game_interface.gameMapPanel
     local root = mapPanel and mapPanel:getParent()
     if root then
         local pvpButton = root:recursiveGetChildById('safeFightBox')
         if pvpButton then
-            pcall(function() pvpButton:onClick() end)
+            local estaAtivo = pvpButton:isOn()
+            if (deveAtivar and not estaAtivo) or (not deveAtivar and estaAtivo) then
+                pcall(function() pvpButton:onClick() end)
+            end
         end
     end
 end
