@@ -956,23 +956,33 @@ local distance = 2
 local amountOfMonsters = 2
 local COOLDOWN_MINIMO_ABSOLUTO = 1000 
 local COOLDOWN_MAXIMO = 2000          
-local AJUSTE_INCREMENTO = 20          
-local AJUSTE_DECREMENTO = 5           
 if not storage.smartCastData then
     storage.smartCastData = {
-        menorCooldownSeguro = 2000
+        menorCooldownSeguro = 2000,
+        calibrando = true,
+        ajusteFino = false
     }
+else
+    storage.smartCastData.calibrando = false
+    storage.smartCastData.ajusteFino = false
 end
 local ultimoDisparoTime = 0
-local tomouExhaustNesseCiclo = false
-
 if storage.comboEnabled == nil then
     storage.comboEnabled = false
 end
 local function aplicarPenalidadeExhaust()
-    tomouExhaustNesseCiclo = true 
-    storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + AJUSTE_INCREMENTO)
-    print("[Smart Cast] Exhausted! Cooldown global aumentado para: " .. math.floor(storage.smartCastData.menorCooldownSeguro) .. "ms")
+    if storage.smartCastData.calibrando then
+        if not storage.smartCastData.ajusteFino then
+            storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + 20)
+            storage.smartCastData.ajusteFino = true
+            print("[Smart Cast] Primeiro Exhausted! Recuando +20ms e iniciando Ajuste Fino (-1ms)...")
+        else
+            storage.smartCastData.calibrando = false
+            storage.smartCastData.ajusteFino = false
+            storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + 10)
+            print("[Smart Cast] Calibração Concluída! Margem de +10ms adicionada. Valor SEGURO travado em: " .. math.floor(storage.smartCastData.menorCooldownSeguro) .. "ms")
+        end
+    end
 end
 onTextMessage(function(mode, text)
     local msg = text:lower()
@@ -1016,7 +1026,6 @@ combo = macro(50, "Smart Cast - Activate", function()
         local areaSpells = {}
         if storage.areaspell01 and storage.areaspell01 ~= "" then table.insert(areaSpells, storage.areaspell01) end
         if storage.areaspell02 and storage.areaspell02 ~= "" then table.insert(areaSpells, storage.areaspell02) end
-        
         if #areaSpells > 0 then
             if indexArea > #areaSpells then indexArea = 1 end
             say(areaSpells[indexArea])
@@ -1028,7 +1037,6 @@ combo = macro(50, "Smart Cast - Activate", function()
         if storage.spell01 and storage.spell01 ~= "" then table.insert(singleSpells, storage.spell01) end
         if storage.spell02 and storage.spell02 ~= "" then table.insert(singleSpells, storage.spell02) end
         if storage.spell03 and storage.spell03 ~= "" then table.insert(singleSpells, storage.spell03) end
-        
         if #singleSpells > 0 then
             if indexSingle > #singleSpells then indexSingle = 1 end
             say(singleSpells[indexSingle])
@@ -1038,13 +1046,14 @@ combo = macro(50, "Smart Cast - Activate", function()
     end
     if enviouMagia then
         ultimoDisparoTime = agora
-        
-        if not tomouExhaustNesseCiclo then
+        if storage.smartCastData.calibrando then
             if storage.smartCastData.menorCooldownSeguro > COOLDOWN_MINIMO_ABSOLUTO then
-                storage.smartCastData.menorCooldownSeguro = math.max(COOLDOWN_MINIMO_ABSOLUTO, storage.smartCastData.menorCooldownSeguro - AJUSTE_DECREMENTO)
+                if storage.smartCastData.ajusteFino then
+                    storage.smartCastData.menorCooldownSeguro = math.max(COOLDOWN_MINIMO_ABSOLUTO, storage.smartCastData.menorCooldownSeguro - 1)
+                else
+                    storage.smartCastData.menorCooldownSeguro = math.max(COOLDOWN_MINIMO_ABSOLUTO, storage.smartCastData.menorCooldownSeguro - 10)
+                end
             end
-        else
-            tomouExhaustNesseCiclo = false
         end
     end
 end)
@@ -1069,16 +1078,23 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 if storage.turnComboEnabled == nil then
     storage.turnComboEnabled = false
 end
+local COOLDOWN_MINIMO_ABSOLUTO = 1000
+if not storage.smartCastData then
+    storage.smartCastData = {
+        menorCooldownSeguro = 2000,
+        calibrando = false,
+        ajusteFino = false
+    }
+end
 local ultimoDisparoTurnWave = 0
 turnCombo = macro(50, "Wave - Activate", function()
     local target = g_game.getAttackingCreature()
     if not target then return end
     local agora = os.clock() * 1000 
-    local delaySmartCast = (storage.smartCastData and storage.smartCastData.menorCooldownSeguro) or 2000
+    local delaySmartCast = storage.smartCastData.menorCooldownSeguro or 2000
     if (agora - ultimoDisparoTurnWave) < delaySmartCast then
         return
     end
-
     local targetPos = target:getPosition()
     local myPos = pos()
     local diffX = targetPos.x - myPos.x
@@ -1100,6 +1116,15 @@ turnCombo = macro(50, "Wave - Activate", function()
     if storage.turnSpell and storage.turnSpell ~= "" then
         say(storage.turnSpell)
         ultimoDisparoTurnWave = agora
+        if storage.smartCastData.calibrando then
+            if storage.smartCastData.menorCooldownSeguro > COOLDOWN_MINIMO_ABSOLUTO then
+                if storage.smartCastData.ajusteFino then
+                    storage.smartCastData.menorCooldownSeguro = math.max(COOLDOWN_MINIMO_ABSOLUTO, storage.smartCastData.menorCooldownSeguro - 1)
+                else
+                    storage.smartCastData.menorCooldownSeguro = math.max(COOLDOWN_MINIMO_ABSOLUTO, storage.smartCastData.menorCooldownSeguro - 10)
+                end
+            end
+        end
     end
 end)
 if storage.turnComboEnabled then turnCombo.setOn() else turnCombo.setOff() end
@@ -1115,13 +1140,13 @@ if storage.painelSalvo.special == nil then storage.painelSalvo.special = false e
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 if not storage.smartCastData then
-    storage.smartCastData = { menorCooldownSeguro = 2000 }
+    storage.smartCastData = { menorCooldownSeguro = 2000, calibrando = true, ajusteFino = false }
 end
 local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Spells')
-  size: 98 198
+  size: 98 225
   focusable: false
   draggable: true
   phantom: false
@@ -1159,15 +1184,24 @@ MainWindow
 
     Label
       id: labelCdAtual
-      text: CD: 2.00s
-      size: 80 40
+      text: Cast: 2.00s
+      size: 80 16
       font: verdana-11px-rounded
       color: #FFEA99
+      text-align: center
       anchors.top: botaoWave.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 6
-      margin-left: 10
+
+    Button
+      id: botaoRecalibrar
+      !text: tr('Recalculate')
+      size: 80 20
+      anchors.top: labelCdAtual.bottom
+      anchors.horizontalCenter: parent.horizontalCenter
+      margin-top: 4
 ]], modules.game_interface.getMapPanel())
+
 painelIconesUI.onMousePress = function(widget, mousePos, button)
     return true
 end
@@ -1180,6 +1214,7 @@ local function isMacroActive(macroRef, storageKey)
     end
     return storage.painelSalvo[storageKey]
 end
+
 local function alternarEstadoMacro(macroRef, storageKey)
     local novoEstado = not storage.painelSalvo[storageKey]
     storage.painelSalvo[storageKey] = novoEstado
@@ -1197,10 +1232,19 @@ if painelIconesUI then
         local btnSpells = container:getChildById("botaoSpells")
         local btnWave = container:getChildById("botaoWave")
         local lblCdAtual = container:getChildById("labelCdAtual")
+        local btnRecalibrar = container:getChildById("botaoRecalibrar")
         if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
         if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
         if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
-        
+        if btnRecalibrar then
+            btnRecalibrar.onClick = function()
+                local tempoAtual = storage.smartCastData.menorCooldownSeguro or 2000
+                storage.smartCastData.menorCooldownSeguro = math.min(2000, tempoAtual + 200)
+                storage.smartCastData.calibrando = true
+                storage.smartCastData.ajusteFino = false 
+                print("[Smart Cast] Recalcular Clicado! Cooldown aumentado para: " .. math.floor(storage.smartCastData.menorCooldownSeguro) .. "ms. Buscando novo limite...")
+            end
+        end
         local jaSincronizou = false
         macro(100, function()
             if not jaSincronizou then
@@ -1215,7 +1259,8 @@ if painelIconesUI then
             if lblCdAtual then
                 local cdSalvoMilissegundos = storage.smartCastData and storage.smartCastData.menorCooldownSeguro or 2000
                 local cdEmSegundos = cdSalvoMilissegundos / 1000
-                lblCdAtual:setText("Cast: " .. string.format("%.2f", cdEmSegundos) .. "s")
+                local sufixo = (storage.smartCastData and storage.smartCastData.calibrando) and "s [C]" or "s"
+                lblCdAtual:setText("Cast: " .. string.format("%.2f", cdEmSegundos) .. sufixo)
             end
         end)
     end
