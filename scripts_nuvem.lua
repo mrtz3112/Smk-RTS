@@ -1542,22 +1542,17 @@ followTE:setHeight(25)
 
 macro(30, "Smart Follow", function() 
     if not g_game.isOnline() then return end
-    
     local myPlayer = g_game.getLocalPlayer()
     if not myPlayer or myPlayer:isWalking() then return end
-
     local leaderName = storage.autoFollowConfig.player
     local target = getCreatureByName(leaderName)
     local myPos = pos()
-
     if target then
         local tpos = target:getPosition()
         toFollowPos[tpos.z] = tpos
-        
         if getDistanceBetween(myPos, tpos) <= 1 then 
             return 
-        end
-        
+        end  
         if getDistanceBetween(myPos, tpos) > 2 then
             for _, doorId in ipairs(Doors) do
                 for x = -1, 1 do
@@ -1576,18 +1571,15 @@ macro(30, "Smart Follow", function()
                 end
             end
         end
-
         autoWalk(tpos, 20, { ignoreNonPathable = true, precision = 1 })
         return
     end
-
     local lastLeaderPosInMyFloor = toFollowPos[myPos.z]
     if lastLeaderPosInMyFloor then
         if getDistanceBetween(myPos, lastLeaderPosInMyFloor) > 0 then
             autoWalk(lastLeaderPosInMyFloor, 20, { ignoreNonPathable = true, precision = 0 })
             return
         end
-
         for _, objectId in ipairs(Objects) do
             for x = -1, 1 do
                 for y = -1, 1 do
@@ -1606,9 +1598,7 @@ macro(30, "Smart Follow", function()
         end
     end
 end)
-
 UI.Separator()
-
 onPlayerPositionChange(function(newPos, oldPos)
     if g_game.isFollowing() then
         local tfollow = g_game.getFollowingCreature()
@@ -1621,11 +1611,63 @@ onPlayerPositionChange(function(newPos, oldPos)
         end
     end
 end)
-
 onCreaturePositionChange(function(creature, newPos, oldPos)
     if not newPos then return end
     if creature:getName() == storage.autoFollowConfig.player then
         toFollowPos[newPos.z] = newPos
+    end
+end)
+UI.Separator()
+--auto legendary
+local panelName = "AutoLegendary"
+storage[panelName] = storage[panelName] or {enabled = false}
+local config = storage[panelName]
+local scrollId = 11351
+local ui = setupUI([[
+Panel
+  height: 58
+
+  BotSwitch
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: Auto Legendary
+
+  BotItem
+    id: item
+    anchors.top: prev.bottom
+    anchors.horizontalCenter: prev.horizontalCenter
+    margin-top: 5
+    width: 34
+    height: 34
+]])
+storage.legendaryItem = storage.legendaryItem or 0
+ui.item:setItemId(storage.legendaryItem)
+ui.item.onItemChange = function(widget)
+    storage.legendaryItem = widget:getItemId()
+end
+ui.title:setOn(config.enabled)
+ui.title.onClick = function(widget)
+    config.enabled = not config.enabled
+    widget:setOn(config.enabled)
+end
+macro(1000, function()
+    if not config.enabled then return end
+
+    local scroll = findItem(scrollId)
+    local item = findItem(storage.legendaryItem)
+
+    if scroll and item then
+        useWith(scroll, item)
+    end
+end)
+onTextMessage(function(mode, text)
+    text = text:upper()
+
+    if text:find("NEW RARITY: LEGENDARY") then
+        config.enabled = false
+        ui.title:setOn(false)
     end
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
