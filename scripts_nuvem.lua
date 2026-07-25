@@ -258,20 +258,7 @@ macro(100, 'Revide PK', function()
     if not localPlayer then return end
     local agressorTarget = nil
     local agressorHp = 101
-    local agressorDist = 100
-    for _, creature in ipairs(getSpectators(myPos)) do
-        if creature:isPlayer() and creature ~= localPlayer then
-            local estaMeAtacando = false
-            if creature.isAttacking then
-                estaMeAtacando = creature:isAttacking()
-            else
-           macro(100, 'Revide PK', function()
-    local myPos = pos()
-    local localPlayer = g_game.getLocalPlayer()
-    if not localPlayer then return end
-    local agressorTarget = nil
-    local agressorHp = 101
-    local agressorDist = 100
+    local agressorDist = 10
     for _, creature in ipairs(getSpectators(myPos)) do
         if creature:isPlayer() and creature ~= localPlayer then
             
