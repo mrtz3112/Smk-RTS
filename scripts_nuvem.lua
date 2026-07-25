@@ -1016,7 +1016,7 @@ local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Spells')
-  size: 100 210
+  size: 100 205
   focusable: false
   draggable: true
 
@@ -1059,8 +1059,8 @@ MainWindow
       color: #FFEA99
       anchors.top: botaoWave.bottom
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 12
-      margin-left: 10
+      margin-top: 6
+      margin-left: 11
 ]], modules.game_interface.getMapPanel())
 
 local function isMacroActive(macroRef, storageKey)
