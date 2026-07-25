@@ -1,5 +1,5 @@
 -- CORREÇÃO CRÍTICA: Força a limpeza de URLs antigas ou inválidas presas na memória do bot
-local URL_BASE_REPOSITORIO = "://githubusercontent.com"
+local URL_BASE_REPOSITORIO = "https://github.com/mrtz3112/Smk-RTS.git"
 
 local arquivosParaSincronizar = {
     -- Arquivos estruturais da pasta Cavebot
