@@ -1569,7 +1569,7 @@ uiFastPot:setId(panelNameFastPot)
 
 if not storage[panelNameFastPot] then
   storage[panelNameFastPot] = {
-      id = 3600,
+      id = 11346,
       enabled = false,
       setting = true,
       hp = 100
@@ -1664,7 +1664,7 @@ uiManaPot:setId(panelNameManaPot)
 
 if not storage[panelNameManaPot] then
   storage[panelNameManaPot] = {
-      id = 11860,
+      id = 10271,
       enabled = false,
       setting = true,
       hp = 20
