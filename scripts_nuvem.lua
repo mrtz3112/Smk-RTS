@@ -1011,52 +1011,56 @@ if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 if not storage.smartCastData then
     storage.smartCastData = { menorCooldownSeguro = 2000 }
 end
+
 local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
-  !text: tr('Fight')
-  size: 100 220
+  !text: tr('Spells')
+  size: 100 210
   focusable: false
   draggable: true
 
   Panel
     id: containerIcones
     anchors.fill: parent
-    padding: 5
 
     Button
       id: botaoSpecial
-      !text: tr('Special')
-      size: 65 35
+      !text: tr('Especial')
+      size: 80 40
       anchors.top: parent.top
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 5
+      margin-top: 2
+      margin-left: 2
 
     Button
       id: botaoSpells
-      !text: tr('Spells')
-      size: 65 35
+      !text: tr('Single/Area')
+      size: 80 40
       anchors.top: botaoSpecial.bottom
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 15
+      margin-top: 10
+      margin-left: 2
 
     Button
       id: botaoWave
       !text: tr('Wave')
-      size: 65 35
+      size: 80 40
       anchors.top: botaoSpells.bottom
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 15
+      margin-top: 10
+      margin-left: 2
 
     Label
       id: labelCdAtual
       text: CD: 2.00s
-      size: 65 35
+      size: 80 40
       font: verdana-11px-rounded
       color: #FFEA99
       anchors.top: botaoWave.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 12
+      margin-left: 10
 ]], modules.game_interface.getMapPanel())
 
 local function isMacroActive(macroRef, storageKey)
@@ -1100,7 +1104,7 @@ if painelIconesUI then
             if lblCdAtual then
                 local cdSalvoMilissegundos = storage.smartCastData and storage.smartCastData.menorCooldownSeguro or 2000
                 local cdEmSegundos = cdSalvoMilissegundos / 1000
-                lblCdAtual:setText(" Cast: " .. string.format("%.2f", cdEmSegundos) .. "s")
+                lblCdAtual:setText("Cast: " .. string.format("%.2f", cdEmSegundos) .. "s")
             end
         end)
     end
