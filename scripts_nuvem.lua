@@ -721,13 +721,6 @@ local function checkPz()
   local isPz = pzFlag or (g_game.isInPz and g_game.isInPz())
   return isPz
 end
-local function checkPz()
-  local player = g_game.getLocalPlayer()
-  if not player then return false end
-  local pzFlag = bit.band(player:getStates(), 1) == 1 or bit.band(player:getStates(), 16384) == 16384
-  local isPz = pzFlag or (g_game.isInPz and g_game.isInPz())
-  return isPz
-end
 buffs = macro(100,"Haste", "CTRL+4", function()
   local isPz = checkPz()
   if isPz then return end
@@ -749,16 +742,6 @@ macro(100, "Buff Lv250", "CTRL+4", function()
 end)
 UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
   storage.buffskill01 = text
-end)
-macro(100, "Buff Lv450", "CTRL+4", function()
-  local isPz = checkPz()
-  if isPz then return end
-  if not g_game.isAttacking() then return end
-  say(storage.buffskill02)
-  delay(30100)
-end)
-UI.TextEdit(storage.buffskill02 or "", function(widget, text)    
-  storage.buffskill02 = text
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Spell at Target HP ~"):setColor('#EBDEF0')
