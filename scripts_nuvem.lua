@@ -1572,7 +1572,7 @@ if not storage[panelNameFastPot] then
       id = 11346,
       enabled = false,
       setting = true,
-      hp = 100
+      hp = 70
   }
 else
   if not storage[panelNameFastPot].id or storage[panelNameFastPot].id == 0 then
@@ -1667,7 +1667,7 @@ if not storage[panelNameManaPot] then
       id = 10271,
       enabled = false,
       setting = true,
-      hp = 20
+      hp = 50
   }
 else
   if not storage[panelNameManaPot].id or storage[panelNameManaPot].id == 0 then
