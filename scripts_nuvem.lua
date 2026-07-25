@@ -1458,7 +1458,7 @@ if not storage.petItemCooldowns then storage.petItemCooldowns = {} end
 
 if not storage[panelName] then
   storage[panelName] = {
-      id = 10480, 
+      id = 10481, 
       enabled = false,
       setting = true,
       hp = 100
@@ -1566,38 +1566,29 @@ Panel
     
 ]], parent)
 uiFastPot:setId(panelNameFastPot)
-
 if not storage[panelNameFastPot] then
   storage[panelNameFastPot] = {
-      id = 11346,
+      id = 11211,
       enabled = false,
       setting = true,
       hp = 70
   }
-else
-  if not storage[panelNameFastPot].id or storage[panelNameFastPot].id == 0 then
-      storage[panelNameFastPot].id = 3600
-  end
 end
-
 uiFastPot.title:setOn(storage[panelNameFastPot].enabled)
 uiFastPot.title.onClick = function(widget)
   storage[panelNameFastPot].enabled = not storage[panelNameFastPot].enabled
   widget:setOn(storage[panelNameFastPot].enabled)
 end
-
 local updateHpText = function()
     if storage[panelNameFastPot].setting then
     uiFastPot.help:setText("Health: < " .. storage[panelNameFastPot].hp .. "%")
 	end
 end
-
 updateHpText()
 uiFastPot.HP.onValueChange = function(scroll, value)
   storage[panelNameFastPot].hp = value
   updateHpText()
 end
-
 uiFastPot.item:setItemId(storage[panelNameFastPot].id)
 uiFastPot.item.onItemChange = function(widget)
   local novaId = widget:getItemId()
@@ -1605,12 +1596,9 @@ uiFastPot.item.onItemChange = function(widget)
       storage[panelNameFastPot].id = novaId
   end
 end
-
 uiFastPot.HP:setValue(storage[panelNameFastPot].hp)
-
 macro(100, function()
  if not storage[panelNameFastPot].enabled then return end
-
  if storage[panelNameFastPot].setting then
     if hppercent() <= storage[panelNameFastPot].hp then
         use(storage[panelNameFastPot].id)
@@ -1618,7 +1606,6 @@ macro(100, function()
     end
 	end
 end)
-
 local panelNameManaPot = "selfmppot"
 local uiManaPot = setupUI([[
 Panel
@@ -1661,7 +1648,6 @@ Panel
     
 ]], parent)
 uiManaPot:setId(panelNameManaPot)
-
 if not storage[panelNameManaPot] then
   storage[panelNameManaPot] = {
       id = 10271,
@@ -1670,29 +1656,21 @@ if not storage[panelNameManaPot] then
       hp = 50
   }
 else
-  if not storage[panelNameManaPot].id or storage[panelNameManaPot].id == 0 then
-      storage[panelNameManaPot].id = 11860
-  end
-end
-
 uiManaPot.title:setOn(storage[panelNameManaPot].enabled)
 uiManaPot.title.onClick = function(widget)
   storage[panelNameManaPot].enabled = not storage[panelNameManaPot].enabled
   widget:setOn(storage[panelNameManaPot].enabled)
 end
-
 local updateMpText = function()
     if storage[panelNameManaPot].setting then
     uiManaPot.help:setText("Mana: < " .. storage[panelNameManaPot].hp .. "%")
 	end
 end
-
 updateMpText()
 uiManaPot.HP.onValueChange = function(scroll, value)
   storage[panelNameManaPot].hp = value
   updateMpText()
 end
-
 uiManaPot.item:setItemId(storage[panelNameManaPot].id)
 uiManaPot.item.onItemChange = function(widget)
   local novaId = widget:getItemId()
@@ -1700,9 +1678,7 @@ uiManaPot.item.onItemChange = function(widget)
       storage[panelNameManaPot].id = novaId
   end
 end
-
 uiManaPot.HP:setValue(storage[panelNameManaPot].hp)
-
 macro(100, function()
  if not storage[panelNameManaPot].enabled then return end
 
@@ -1714,7 +1690,6 @@ macro(100, function()
 	end
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-
 setDefaultTab("Tools")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Extra ~"):setColor('#EBDEF0')
