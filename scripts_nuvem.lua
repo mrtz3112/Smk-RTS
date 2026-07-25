@@ -16,7 +16,7 @@ UI.Button("Macro Editor", function(newText)
       end)
     end
   end
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Separator()
 ModulesG = modules._G
 local reconectEvent = nil
 local ButtonT = nil
@@ -50,7 +50,6 @@ ButtonT = UI.Button("Reconect", function()
     updateButtonReconectText()
 end)
 updateButtonReconectText()
-UI.Label("-----------------------------------"):setColor('#C39BD3')
 macro(100, "GrandFisher Mask", function()
     if not g_game.isAttacking() and not g_game.getAttackingCreature() then
         return
@@ -339,7 +338,7 @@ macro(100, 'Revide PK', function()
         end
     end
 end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Separator()
 if type(storage.moneyItems) ~= "table" then
   storage.moneyItems = {}
 end
@@ -380,7 +379,7 @@ moneyContainer:setHeight(35)
 if #storage.moneyItems > 0 then
   moneyContainer:setItems(storage.moneyItems)
 end
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Separator()
 if not storage.ignoredPlayers then
     storage.ignoredPlayers = "ignore1,ignore2"
 end
@@ -430,7 +429,7 @@ enemy = macro(30, 'Enemy', "SHIFT+3", function()
         modules.game_interface.processMouseAction(nil, 2, myPos, nil, actualTarget, actualTarget)
     end
 end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Separator()
 xsense = macro(30, "xSense", "SHIFT+4", function()
     local target = g_game.getAttackingCreature()
     if target and target:isPlayer() then
@@ -974,10 +973,14 @@ if storage.comboEnabled then combo.setOn() else combo.setOff() end
 macro(200, function()
     if combo then storage.comboEnabled = combo.isOn() end
 end)
+UI.Separator()
 UI.Label("Area Spells (If 2+ Mobs)"):setColor('#FFEA99')
+UI.Separator()
 UI.TextEdit(storage.areaspell01 or "", function(widget, text) storage.areaspell01 = text end)
 UI.TextEdit(storage.areaspell02 or "", function(widget, text) storage.areaspell02 = text end)
+UI.Separator()
 UI.Label("Single Spells"):setColor('#FFEA99')
+UI.Separator()
 UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text end)
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text end)
@@ -1557,13 +1560,11 @@ local Doors = {7727, 8265, 1629, 1632, 5129, 5120, 8266, 7728, 5102, 5111}
 if not storage.autoFollowConfig then 
     storage.autoFollowConfig = { player = "name" } 
 end
-
 local toFollowPos = {}
 local followTE = UI.TextEdit(storage.autoFollowConfig.player, function(widget, newText)
     storage.autoFollowConfig.player = newText
 end)
 followTE:setHeight(25)
-
 macro(30, "Smart Follow", function() 
     if not g_game.isOnline() then return end
     local myPlayer = g_game.getLocalPlayer()
