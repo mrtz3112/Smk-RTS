@@ -1140,7 +1140,7 @@ if storage.painelSalvo.special == nil then storage.painelSalvo.special = false e
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 if not storage.smartCastData then
-    storage.smartCastData = { menorCooldownSeguro = 2000, calibrando = true, ajusteFino = false }
+    storage.smartCastData = { menorCooldownSeguro = 2000, calibrando = true, ajusteFino = false, jaCalibrouAlgumaVez = false }
 end
 local painelIconesUI = setupUI([[
 MainWindow
@@ -1214,11 +1214,9 @@ local function isMacroActive(macroRef, storageKey)
     end
     return storage.painelSalvo[storageKey]
 end
-
 local function alternarEstadoMacro(macroRef, storageKey)
     local novoEstado = not storage.painelSalvo[storageKey]
     storage.painelSalvo[storageKey] = novoEstado
-
     if macroRef and type(macroRef) == "table" and macroRef.setOn then
         macroRef.setOn(novoEstado)
     elseif macroRef and type(macroRef) == "function" then
@@ -1238,11 +1236,11 @@ if painelIconesUI then
         if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
         if btnRecalibrar then
             btnRecalibrar.onClick = function()
-                local tempoAtual = storage.smartCastData.menorCooldownSeguro or 2000
-                storage.smartCastData.menorCooldownSeguro = math.min(2000, tempoAtual + 200)
+                storage.smartCastData.menorCooldownSeguro = 2000
                 storage.smartCastData.calibrando = true
-                storage.smartCastData.ajusteFino = false 
-                print("[Smart Cast] Recalcular Clicado! Cooldown aumentado para: " .. math.floor(storage.smartCastData.menorCooldownSeguro) .. "ms. Buscando novo limite...")
+                storage.smartCastData.ajusteFino = false
+                storage.smartCastData.jaCalibrouAlgumaVez = false
+                print("[Smart Cast] Recalculate Clicado! Cooldown resetado para 2000ms. Iniciando nova calibração...")
             end
         end
         local jaSincronizou = false
