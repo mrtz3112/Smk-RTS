@@ -957,7 +957,7 @@ macro(200, function()
     if combo then storage.comboEnabled = combo.isOn() end
 end)
 UI.Separator()
-UI.Label("Area Spells (If 2+ Mobs)"):setColor('#FFEA99')
+UI.Label("Area Spells (2+ Mobs)"):setColor('#FFEA99')
 UI.Separator()
 UI.TextEdit(storage.areaspell01 or "", function(widget, text) storage.areaspell01 = text end)
 UI.TextEdit(storage.areaspell02 or "", function(widget, text) storage.areaspell02 = text end)
