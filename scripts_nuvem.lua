@@ -876,7 +876,7 @@ local function updateTargetWidget(targetNameText, percent, hasTarget)
     if not hasTarget then return end
     local rootWidth = g_ui.getRootWidget():getWidth()
     local posX = (rootWidth / 2) - (target:getWidth() / 2) + 90
-    local posY = 60 
+    local posY = 80 
     target:setPosition({ x = posX, y = posY })
     target.targetTitle:setText(targetNameText)    
     target.progressBar:setText(string.format("%d%%", percent))
