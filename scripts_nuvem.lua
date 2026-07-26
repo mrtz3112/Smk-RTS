@@ -571,13 +571,14 @@ onTalk(function(...)
     end
 end)
 lastSense = {}
-UI.Button('Configure xSense', function()
+UI.Button('Configurar xSense', function()
   if lastSense.senseBox then
     lastSense.senseBox:destroy()
   end
   storage.sensePositions = nil
   lastSense.init()
 end)
+
 lastSense.widget = [[
 UIWidget
   background-color: black
@@ -587,34 +588,45 @@ UIWidget
   phantom: false
   draggable: true
 ]]
+
+
 lastSense.pointerWidget = setupUI([[
 Panel
   image-source: /images/ui/panel_flat
   size: 40 40
 ]], g_ui.getRootWidget())
+
 HTTP.downloadImage("https://i.imgur.com/Nq5O8WV.png", function(image)
     return lastSense.pointerWidget:setImageSource(image)
 end)
+
+
 lastSense.init = function()
+
   if not storage.sensePositions or table.size(storage.sensePositions) < 4 then
     lastSense.startMapeation = true
     storage.sensePositions = {}
   end
+
+
   if lastSense.startMapeation then
+
+
     lastSense.directions, lastSense.actualSense = {
-      'norte',
-      'sul',
-      'esquerda',
-      'direita'
+      'Norte',
+      'Sul',
+      'Esquerda',
+      'Direita'
     }, 1
-    modules.game_textmessage.displayGameMessage('Configuring your Sense.')
+    modules.game_textmessage.displayGameMessage('Vamos configurar o sense!')
     schedule(1500, function()
-      modules.game_textmessage.displayGameMessage('Arraste a box para o norte segurando CTRL  --  Drag the box to the north pressing CTRL')
+      modules.game_textmessage.displayGameMessage('Arraste a caixinha para o Norte, segurando CTRL.')
       lastSense.senseBox = setupUI(lastSense.widget, g_ui.getRootWidget())
+      --changeColor(lastSense.senseBox, {r = 255, g = 255, b = 255, a = 255}) -> Inutilizado.
       lastSense.senseBox:setHeight(50)
       lastSense.senseBox:setWidth(50)
       lastSense.senseBox:setPosition({x = 1030, y = 380})
-      lastSense.senseBox:setText('BOX')
+      lastSense.senseBox:setText('AQUI')
       lastSense.senseBox.onDragEnter = function(widget, mousePos)
         if not modules.corelib.g_keyboard.isCtrlPressed() then
           return false
@@ -623,6 +635,7 @@ lastSense.init = function()
         widget.movingReference = { x = mousePos.x - widget:getX(), y = mousePos.y - widget:getY() }
         return true
       end
+  
       lastSense.senseBox.onDragMove = function(widget, mousePos, moved)
         local parentRect = widget:getParent():getRect()
         local x = math.min(math.max(parentRect.x, mousePos.x - widget.movingReference.x), parentRect.x + parentRect.width - widget:getWidth())
@@ -630,6 +643,7 @@ lastSense.init = function()
         widget:move(x, y)
         return true
       end
+  
       lastSense.senseBox.onDragLeave = function(widget, pos)
         storage.sensePositions[
           lastSense.directions[lastSense.actualSense]
@@ -637,15 +651,15 @@ lastSense.init = function()
         schedule(500, function()
           lastSense.actualSense = lastSense.actualSense + 1
           if lastSense.actualSense > 4 then
-            modules.game_textmessage.displayGameMessage('Sense ready to use.')
+            modules.game_textmessage.displayGameMessage('Configurado, pode aproveitar o seu Sense!')
             lastSense.senseBox:destroy()
             lastSense.setup()
             return true
           end
           local actualDirection = lastSense.directions[lastSense.actualSense]
-          local showText = '[PT] Arraste a box para ' .. actualDirection .. ', segurando CTRL -- [ENG] Drag the box to the ' .. actualDirection .. ', pressing CTRL'
+          local showText = 'Arraste a caixinha para o ' .. actualDirection .. ', segurando CTRL.'
           if string.sub(actualDirection, actualDirection:len(), actualDirection:len()) == 'a' then
-            showText = '[PT] Arraste a box para ' .. actualDirection .. ', segurando CTRL -- [ENG] Drag the box to the ' .. actualDirection .. ', pressing CTRL'
+            showText = 'Arraste a caixinha para a ' .. actualDirection .. ', segurando CTRL.'
           end
           modules.game_textmessage.displayGameMessage(showText)
         end)
@@ -655,7 +669,9 @@ lastSense.init = function()
   else
     lastSense.setup()
   end
+  
 end
+
 function lastSense.setup()
   macro(100, function()
       local sensePlayer = getCreatureByName(tostring(lastSense.actualSense))
@@ -665,8 +681,10 @@ function lastSense.setup()
         lastSense.pointerWidget:show()
       end
     end
-  ) 
+  )
+  
   local north, south, west, east = storage.sensePositions['Norte'], storage.sensePositions['Sul'], storage.sensePositions['Esquerda'], storage.sensePositions['Direita']
+  
   lastSense.savePos = {
     ['north'] = {x = north.x, y = north.y, rotation = 0},
     ['south'] = {x = south.x, y = south.y, rotation = 180},
@@ -677,6 +695,8 @@ function lastSense.setup()
     ['north-west'] = {x = west.x, y = north.y, rotation = 315},
     ['south-west'] = {x = west.x, y = south.y, rotation = 225}
   }
+  
+  
   lastSense.actualPosition = function(text)
     return lastSense.savePos[text]
   end
