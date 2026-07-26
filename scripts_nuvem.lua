@@ -355,7 +355,8 @@ end)
 UI.TextEdit(storage.idcomida or "id da food", function(widget, text)    
   storage.idcomida = text
 end)
-UI.Separator()--enemy
+UI.Separator()
+--enemy
 if not storage.ignoredPlayers then
     storage.ignoredPlayers = "ignore1,ignore2"
 end
@@ -1220,9 +1221,16 @@ if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
+
+-- CORREÇÃO: Força o calibrador a reiniciar ativo toda vez que o bot carrega o script
 if not storage.smartCastData then
-    storage.smartCastData = { menorCooldownSeguro = 2000, calibrando = true, ajusteFino = false, jaCalibrouAlgumaVez = false }
+    storage.smartCastData = { menorCooldownSeguro = 2000 }
 end
+-- Sobrescreve os status salvos no JSON para forçar a calibração [C] na inicialização
+storage.smartCastData.calibrando = true
+storage.smartCastData.ajusteFino = false
+storage.smartCastData.jaCalibrouAlgumaVez = false
+
 local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
@@ -1284,6 +1292,7 @@ MainWindow
 ]], modules.game_interface.getMapPanel())
 painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
 painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
+
 local function isMacroActive(macroRef, storageKey)
     if macroRef and type(macroRef) == "table" and macroRef.isOn and type(macroRef.isOn) == "function" then
         local success, result = pcall(function() return macroRef.isOn() end)
@@ -1291,6 +1300,7 @@ local function isMacroActive(macroRef, storageKey)
     end
     return storage.painelSalvo and storage.painelSalvo[storageKey] or false
 end
+
 local function alternarEstadoMacro(macroRef, storageKey)
     if not storage.painelSalvo then storage.painelSalvo = {} end
     local novoEstado = not storage.painelSalvo[storageKey]
@@ -1302,6 +1312,7 @@ local function alternarEstadoMacro(macroRef, storageKey)
         pcall(macroRef)
     end
 end
+
 local function forcarRecalibracaoSmartCast(motivo)
     if not storage.smartCastData then storage.smartCastData = {} end
     storage.smartCastData.menorCooldownSeguro = 2000
@@ -1310,6 +1321,7 @@ local function forcarRecalibracaoSmartCast(motivo)
     storage.smartCastData.jaCalibrouAlgumaVez = false
     print("[Smart Cast] Calibracao ATIVADA! Motivo: " .. tostring(motivo) .. ". Cooldown resetado para 2000ms.")
 end
+
 if painelIconesUI then
     local container = painelIconesUI:getChildById("containerIcones")
     if container then
