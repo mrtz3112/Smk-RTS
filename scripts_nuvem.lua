@@ -602,14 +602,14 @@ lastSense.init = function()
   end
   if lastSense.startMapeation then
     lastSense.directions, lastSense.actualSense = {
-      'Norte',
-      'Sul',
-      'Esquerda',
-      'Direita'
+      'norte',
+      'sul',
+      'esquerda',
+      'direita'
     }, 1
     modules.game_textmessage.displayGameMessage('Configuring your Sense.')
     schedule(1500, function()
-      modules.game_textmessage.displayGameMessage('Arraste a box para o Norte segurando CTRL  --  Drag the box to the North pressing CTRL')
+      modules.game_textmessage.displayGameMessage('Arraste a box para o norte segurando CTRL  --  Drag the box to the north pressing CTRL')
       lastSense.senseBox = setupUI(lastSense.widget, g_ui.getRootWidget())
       lastSense.senseBox:setHeight(50)
       lastSense.senseBox:setWidth(50)
@@ -666,7 +666,7 @@ function lastSense.setup()
       end
     end
   ) 
-  local north, south, west, east = storage.sensePositions['Norte'], storage.sensePositions['Sul'], storage.sensePositions['Esquerda'], storage.sensePositions['Direita']
+  local north, south, west, east = storage.sensePositions['norte'], storage.sensePositions['sul'], storage.sensePositions['esquerda'], storage.sensePositions['direita']
   lastSense.savePos = {
     ['north'] = {x = north.x, y = north.y, rotation = 0},
     ['south'] = {x = south.x, y = south.y, rotation = 180},
