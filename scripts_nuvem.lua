@@ -476,6 +476,7 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
     end
 end)
 UI.Separator()
+--enemy
 if not storage.ignoredPlayers then
     storage.ignoredPlayers = "ignore1,ignore2"
 end
@@ -492,7 +493,27 @@ local ignoreInput = UI.TextEdit(storage.ignoredPlayers or "", function(widget, t
     storage.ignoredPlayers = text
 end)
 ignoreInput:setHeight(25)
+local function definirModoAtaque(modo)
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end 
+    local idBotao = ""
+    if modo == "balanced" then
+        idBotao = "fightBalancedBox"
+    elseif modo == "offensive" then
+        idBotao = "fightOffensiveBox"
+    end
+    local targetButton = rootWidget:recursiveGetChildById(idBotao)
+    if targetButton then
+        pcall(function() targetButton:onClick() end)
+    end
+end
+local estadoAnteriorMacro = false
 enemy = macro(30, 'Enemy', "SHIFT+3", function()
+    if not estadoAnteriorMacro then
+        definirModoAtaque("balanced")
+        estadoAnteriorMacro = true
+        print("[Enemy] Macro Ligada! Modo Balanced Setado.")
+    end
     local myPos = pos()
     local actualTarget
     local actualTargetHp = 101
@@ -520,9 +541,15 @@ enemy = macro(30, 'Enemy', "SHIFT+3", function()
             end
         end
     end
-    
     if actualTarget and g_game.getAttackingCreature() ~= actualTarget then
         modules.game_interface.processMouseAction(nil, 2, myPos, nil, actualTarget, actualTarget)
+    end
+end)
+macro(250, function()
+    if enemy and not enemy.isOn() and estadoAnteriorMacro then
+        definirModoAtaque("offensive")
+        estadoAnteriorMacro = false
+        print("[Enemy] Macro Desligada! Modo Offensive Restaurado.")
     end
 end)
 UI.Separator()
