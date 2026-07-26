@@ -1031,7 +1031,7 @@ local panelName = "hpbelowconfig"
 if not storage[panelName] then
   storage[panelName] = {
       setting = true,
-      hp = 20,
+      hp = 80,
       enabled = false
   }
 end
@@ -1148,7 +1148,7 @@ local function aplicarPenalidadeExhaust()
         else
             storage.smartCastData.calibrando = false
             storage.smartCastData.ajusteFino = false
-            storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + 12)
+            storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + 10)
             print("[Smart Cast] Calibração Concluída! Margem de +10ms adicionada. Valor SEGURO travado em: " .. math.floor(storage.smartCastData.menorCooldownSeguro) .. "ms")
         end
     end
@@ -1465,9 +1465,9 @@ ui:setId(panelName)
 if not storage[panelName] then
   storage[panelName] = {
       title = enabled,
-      enabled = false,
+      enabled = true,
       setting = true,
-      hp = 20
+      hp = 95
   }
 end
 ui.title:setOn(storage[panelName].enabled)
@@ -1531,7 +1531,7 @@ ui:setId(panelName)
 if not storage[panelName] then
   storage[panelName] = {
       title = enabled,
-      enabled = false,
+      enabled = true,
       setting = true,
       hp = 20
   }
@@ -1571,7 +1571,6 @@ macro(100, function()
         if (tempoAgora - ultimoUsoBarreira) >= DELAY_SEGUNDOS then
             say(storage.autobarrier)
             ultimoUsoBarreira = tempoAgora
-            
             print("[Auto Barrier] Magia conjurada! Aguardando " .. DELAY_SEGUNDOS .. " segundos de recarga.")
         end
     end
@@ -1634,11 +1633,11 @@ if not storage[panelName] then
       id = 10481, 
       enabled = false,
       setting = true,
-      hp = 100
+      hp = 95
   }
 else
   if not storage[panelName].id or storage[panelName].id == 0 then
-      storage[panelName].id = 10480
+      storage[panelName].id = 10481
   end
 end
 
