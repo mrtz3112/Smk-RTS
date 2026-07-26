@@ -1028,12 +1028,6 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Spell at Target HP ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 local panelName = "hpbelowconfig"
-if not storage.specialCastData then
-    storage.specialCastData = {
-        cooldownEspecial = 2000
-    }
-end
-
 if not storage[panelName] then
   storage[panelName] = {
       setting = true,
@@ -1042,37 +1036,24 @@ if not storage[panelName] then
   }
 end
 local ultimoDisparoEspecial = 0
-local tomouExhaustNoEspecial = false
-onTextMessage(function(mode, text)
-    if not storage[panelName].enabled then return end
-    local msg = text:lower()
-    if string.find(msg, "exha") or string.find(msg, "exhaust") then
-        tomouExhaustNoEspecial = true
-        storage.specialCastData.cooldownEspecial = math.min(3000, storage.specialCastData.cooldownEspecial + 50)
-        return true 
-    end
-end)
-lowhp = macro(50, function()
+local cooldownFixoEspecial = 50000 
+lowhp = macro(100, function()
     if not g_game.isAttacking() then
         return
     end  
-    
     local target = g_game.getAttackingCreature()
     if not target then return end
-    
+    if not target:isPlayer() then 
+        return 
+    end
     local agora = os.clock() * 1000
-    if (agora - ultimoDisparoEspecial) < storage.specialCastData.cooldownEspecial then
+    if (agora - ultimoDisparoEspecial) < cooldownFixoEspecial then
         return
     end
     if target:getHealthPercent() <= storage[panelName].hp then
         if storage.hpspell and storage.hpspell ~= "" then
             say(storage.hpspell)
             ultimoDisparoEspecial = agora
-            if not tomouExhaustNoEspecial then
-                storage.specialCastData.cooldownEspecial = math.max(200, storage.specialCastData.cooldownEspecial - 10)
-            else
-                tomouExhaustNoEspecial = false
-            end
         end
     end
 end)
@@ -1098,17 +1079,19 @@ Panel
     maximum: 100
     step: 1
 ]], parent)
+
 ui:setId(panelName)
 ui.title:setOn(storage[panelName].enabled)
 ui.title.onClick = function(widget)
   storage[panelName].enabled = not storage[panelName].enabled
   widget:setOn(storage[panelName].enabled)
+  
   if storage.painelSalvo then
       storage.painelSalvo.special = storage[panelName].enabled
   end
-  
   if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
 end
+
 local updateHpText = function()
     if storage[panelName].setting then
         ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
@@ -1120,6 +1103,7 @@ ui.HP.onValueChange = function(scroll, value)
 end
 ui.HP:setValue(storage[panelName].hp)
 updateHpText()
+
 UI.TextEdit(storage.hpspell or "", function(widget, text) 
     storage.hpspell = text 
 end)
