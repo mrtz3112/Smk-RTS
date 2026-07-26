@@ -947,7 +947,7 @@ local panelName = "hpbelowconfig"
 if not storage[panelName] then
   storage[panelName] = {
       setting = true,
-      hp = 20,
+      hp = 80,
       enabled = false
   }
 end
