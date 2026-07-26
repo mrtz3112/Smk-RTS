@@ -725,25 +725,6 @@ function lastSense.setup()
 end
 lastSense.init()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---Target HP Percentage
-local showhp = macro(30, function() end)
-onCreatureHealthPercentChange(function(creature, healthPercent)
-  if showhp:isOff() then return end
-  if creature:getName() == name() then return end
-  if healthPercent >= 65 then
-    creature:setText("\n\n\nTarget HP: " .. healthPercent .. "%", color)
-    color = 'green'
-  elseif healthPercent <= 64 then
-    creature:setText("\n\n\nTarget HP: " .. healthPercent .. "%", color)
-    color = 'yellow'
-  elseif healthPercent <= 25 then
-    creature:setText("\n\n\nTarget HP: " .. healthPercent .. "%", color)
-    color = 'red'
-  end
-end)
-onCreatureDisappear(function(creature)
-  creature:setText()
-end)
 --Ice Hud HP Percent
 macro(30, function()
 local hp = g_ui.getRootWidget():recursiveGetChildById("healthCircleFront")
