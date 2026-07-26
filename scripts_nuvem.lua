@@ -1,6 +1,6 @@
 setDefaultTab("Main")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("      Smk Custom: v4.0      "):setColor('#C39BD3')
+UI.Label("      Smk Custom: v4.1      "):setColor('#C39BD3')
 UI.Label("        Since 2022       "):setColor('#C39BD3')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Button("Macro Editor", function(newText)
@@ -2476,7 +2476,7 @@ Panel
 macro(100, function()
   if not pvehud then return end
 
-  if pvehud.iconlayer then pvehud.iconlayer:setText("     ~ [Smk Custom - v4.0] ~   ") end
+  if pvehud.iconlayer then pvehud.iconlayer:setText("     ~ [Smk Custom - v4.1] ~   ") end
   if pvehud.iconlayer2 then pvehud.iconlayer2:setText(" ~ [Instagram: @cafeh_ofc] ~  ") end
 
   if pvehud.tab1 then pvehud.tab1:setText("           ~           [PvE]           ~       ") end
