@@ -1578,7 +1578,7 @@ local allowedIds = {
     [2993]  = 120000, -- 120 segundos
     [10479] = 120000, -- 120 segundos
     [10481] = 120000, -- 120 segundos
-    [10480] = 300000  -- 300 segundos
+    [10480] = 120000  -- 300 segundos
 }
 if not storage.petItemCooldowns then storage.petItemCooldowns = {} end
 if not storage[panelName] then
