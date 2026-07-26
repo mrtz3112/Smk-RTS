@@ -345,6 +345,7 @@ end
 if not storage.smartEatDelay then
   storage.smartEatDelay = 10000
 end
+--Eat Food
 macro(100, "Eat Food", function()
   if isInPz() then return end
   if storage.idcomida and storage.idcomida ~= "" then
@@ -355,7 +356,84 @@ end)
 UI.TextEdit(storage.idcomida or "id da food", function(widget, text)    
   storage.idcomida = text
 end)
+UI.Separator()--enemy
+if not storage.ignoredPlayers then
+    storage.ignoredPlayers = "ignore1,ignore2"
+end
+local function isPlayerIgnored(name)
+    local cleanedName = name:lower():trim()
+    for ignoredName in string.gmatch(storage.ignoredPlayers, "[^,]+") do
+        if ignoredName:lower():trim() == cleanedName then
+            return true
+        end
+    end
+    return false
+end
+local function definirModoAtaque(modo)
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end 
+    local idBotao = ""
+    if modo == "balanced" then
+        idBotao = "fightBalancedBox"
+    elseif modo == "offensive" then
+        idBotao = "fightOffensiveBox"
+    end
+    local targetButton = rootWidget:recursiveGetChildById(idBotao)
+    if targetButton then
+        pcall(function() targetButton:onClick() end)
+    end
+end
+local estadoAnteriorMacro = false
+enemy = macro(30, 'Enemy', "SHIFT+3", function()
+    if not estadoAnteriorMacro then
+        definirModoAtaque("balanced")
+        estadoAnteriorMacro = true
+        print("[Enemy] Macro Ligada! Modo Balanced Setado.")
+    end
+    local myPos = pos()
+    local actualTarget
+    local actualTargetHp = 101
+    local actualTargetDist = 10
+    for _, creature in ipairs(getSpectators(myPos)) do
+        local specHp = creature:getHealthPercent()
+        local specPos = creature:getPosition()
+        local specName = creature:getName()       
+        if (creature:isPlayer() and specHp and specHp > 0) then
+            local specSkull = creature:getSkull()
+            if (specSkull == 1 or specSkull == 4) then
+                if not isPlayerIgnored(specName) then
+                    if (creature:getEmblem() ~= 1 and creature:getShield() < 3 and creature ~= player) then
+                        if creature:canShoot() then
+                            local specDist = getDistanceBetween(myPos, specPos)
+                            if not actualTarget or specHp < actualTargetHp or (specHp == actualTargetHp and specDist < actualTargetDist) then
+                                actualTarget = creature
+                                actualTargetPos = specPos
+                                actualTargetHp = specHp
+                                actualTargetDist = specDist
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if actualTarget and g_game.getAttackingCreature() ~= actualTarget then
+        modules.game_interface.processMouseAction(nil, 2, myPos, nil, actualTarget, actualTarget)
+    end
+end)
+macro(250, function()
+    if enemy and not enemy.isOn() and estadoAnteriorMacro then
+        definirModoAtaque("offensive")
+        estadoAnteriorMacro = false
+        print("[Enemy] Macro Desligada! Modo Offensive Restaurado.")
+    end
+end)
+local ignoreInput = UI.TextEdit(storage.ignoredPlayers or "", function(widget, text)
+    storage.ignoredPlayers = text
+end)
+ignoreInput:setHeight(25)
 UI.Separator()
+--Smart Follow
 local Objects = {
     435, 1948, 432, 433, 412, 413, 421, 422, 423, 424, 425, 426, 476, 475, 479, 480, 
     369, 370, 411, 414, 434, 459, 469, 470, 8559, 8560, 1968, 7476, 482, 484, 485
@@ -367,10 +445,6 @@ if not storage.autoFollowConfig then
 end
 
 local toFollowPos = {}
-local followTE = UI.TextEdit(storage.autoFollowConfig.player, function(widget, newText)
-    storage.autoFollowConfig.player = newText
-end)
-followTE:setHeight(25)
 
 macro(30, "Smart Follow", function() 
     if not g_game.isOnline() then return end
@@ -451,83 +525,10 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
         toFollowPos[newPos.z] = newPos
     end
 end)
-UI.Separator()
---enemy
-if not storage.ignoredPlayers then
-    storage.ignoredPlayers = "ignore1,ignore2"
-end
-local function isPlayerIgnored(name)
-    local cleanedName = name:lower():trim()
-    for ignoredName in string.gmatch(storage.ignoredPlayers, "[^,]+") do
-        if ignoredName:lower():trim() == cleanedName then
-            return true
-        end
-    end
-    return false
-end
-local ignoreInput = UI.TextEdit(storage.ignoredPlayers or "", function(widget, text)
-    storage.ignoredPlayers = text
+local followTE = UI.TextEdit(storage.autoFollowConfig.player, function(widget, newText)
+    storage.autoFollowConfig.player = newText
 end)
-ignoreInput:setHeight(25)
-local function definirModoAtaque(modo)
-    local rootWidget = g_ui.getRootWidget()
-    if not rootWidget then return end 
-    local idBotao = ""
-    if modo == "balanced" then
-        idBotao = "fightBalancedBox"
-    elseif modo == "offensive" then
-        idBotao = "fightOffensiveBox"
-    end
-    local targetButton = rootWidget:recursiveGetChildById(idBotao)
-    if targetButton then
-        pcall(function() targetButton:onClick() end)
-    end
-end
-local estadoAnteriorMacro = false
-enemy = macro(30, 'Enemy', "SHIFT+3", function()
-    if not estadoAnteriorMacro then
-        definirModoAtaque("balanced")
-        estadoAnteriorMacro = true
-        print("[Enemy] Macro Ligada! Modo Balanced Setado.")
-    end
-    local myPos = pos()
-    local actualTarget
-    local actualTargetHp = 101
-    local actualTargetDist = 10
-    for _, creature in ipairs(getSpectators(myPos)) do
-        local specHp = creature:getHealthPercent()
-        local specPos = creature:getPosition()
-        local specName = creature:getName()       
-        if (creature:isPlayer() and specHp and specHp > 0) then
-            local specSkull = creature:getSkull()
-            if (specSkull == 1 or specSkull == 4) then
-                if not isPlayerIgnored(specName) then
-                    if (creature:getEmblem() ~= 1 and creature:getShield() < 3 and creature ~= player) then
-                        if creature:canShoot() then
-                            local specDist = getDistanceBetween(myPos, specPos)
-                            if not actualTarget or specHp < actualTargetHp or (specHp == actualTargetHp and specDist < actualTargetDist) then
-                                actualTarget = creature
-                                actualTargetPos = specPos
-                                actualTargetHp = specHp
-                                actualTargetDist = specDist
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    if actualTarget and g_game.getAttackingCreature() ~= actualTarget then
-        modules.game_interface.processMouseAction(nil, 2, myPos, nil, actualTarget, actualTarget)
-    end
-end)
-macro(250, function()
-    if enemy and not enemy.isOn() and estadoAnteriorMacro then
-        definirModoAtaque("offensive")
-        estadoAnteriorMacro = false
-        print("[Enemy] Macro Desligada! Modo Offensive Restaurado.")
-    end
-end)
+followTE:setHeight(25)
 UI.Separator()
 xsense = macro(30, "xSense", "SHIFT+4", function()
     local target = g_game.getAttackingCreature()
