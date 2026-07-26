@@ -232,7 +232,7 @@ macro(250, "Stack Itens", function()
                 if destino then
                     local posicaoAtual = container:getSlotPosition(slotIndex - 1)
                     if posicaoAtual.x ~= destino.posicao.x or posicaoAtual.y ~= destino.posicao.y or posicaoAtual.slot ~= destino.posicao.slot then
-                        local moverQuantidade = math.min(item:getCount(), 100 - destino.count)
+                        local moverQuantidade = math.min(item:getCount(), 1000 - destino.count)
                         if moverQuantidade > 0 then
                             g_game.move(item, destino.posicao, moverQuantidade)
                             return
