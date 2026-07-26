@@ -1009,15 +1009,20 @@ end)
 UI.TextEdit(storage.autobuff1 or "", function(widget, text)    
   storage.autobuff1 = text
 end)
-macro(100, "Buff Lv250", "CTRL+4", function()
+macro(100, "Buffs", "CTRL+4", function()
   local isPz = checkPz()
   if isPz then return end
   if not g_game.isAttacking() then return end
   say(storage.buffskill01)
-  delay(60100)
+  delay(100)
+  say(storage.buffskill02)
+  delay(65000)
 end)
 UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
   storage.buffskill01 = text
+end)
+UI.TextEdit(storage.buffskill02 or "", function(widget, text)    
+  storage.buffskill02 = text
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Spell at Target HP ~"):setColor('#EBDEF0')
