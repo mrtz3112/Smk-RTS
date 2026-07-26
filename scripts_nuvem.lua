@@ -812,159 +812,6 @@ onRemoveThing(function(tile, thing)
     tile:setTimer(0)
   end  
 end)
---anti-ks & monstros elite/boss
-local modoPerseguicaoAtivo = false
-local cavebotPausadoPorBoss = false
-local previousChaseMode = 0
-local monstrosEspeciais = {
-    "elite",
-    "boss",
-    "hollow capitan shinigami",
-    "complete espada",
-    "gotei 13 king",
-    "oversaturated hollowed shinigami"
-}
-local function isSpecialMob(creature)
-    if not creature or not creature:isMonster() then return false end
-    local name = creature:getName():lower()
-    for _, specialName in ipairs(monstrosEspeciais) do
-        if string.find(name, specialName) then
-            return true
-        end
-    end
-    return false
-end
-macro(100, function()
-    local localPlayer = g_game.getLocalPlayer()
-    if not localPlayer then return end
-    local targetAtualPreCheck = g_game.getAttackingCreature()
-    if targetAtualPreCheck and targetAtualPreCheck:isPlayer() then
-        return
-    end
-    local myPos = pos()
-    local spectators = getSpectators()
-    if not spectators then return end
-    local bossNaTela = nil
-    for _, spec in ipairs(spectators) do
-        if isSpecialMob(spec) then
-            local hasPath = findPath(myPos, spec:getPosition(), 7, {
-                ignoreLastCreature = true, 
-                ignoreNonPathable = true, 
-                ignoreCost = true, 
-                ignoreCreatures = true
-            })
-            if hasPath then
-                bossNaTela = spec
-                break
-            end
-        end
-    end
-    if bossNaTela then
-        if CaveBot and CaveBot.isOn() then
-            CaveBot.delay(500)
-            cavebotPausadoPorBoss = true
-        end
-        if not modoPerseguicaoAtivo then
-            previousChaseMode = g_game.getChaseMode()
-            if g_game.setChaseMode then pcall(function() g_game.setChaseMode(1) end) end
-            modoPerseguicaoAtivo = true
-        end
-        if g_game.getAttackingCreature() ~= bossNaTela then
-            if g_game.attack then
-                g_game.attack(bossNaTela)
-                print("[Hunter] MONSTRO ESPECIAL DETECTADO: " .. bossNaTela:getName() .. "! Focando com prioridade máxima.")
-            end
-        end
-        return
-    end
-    if cavebotPausadoPorBoss and not bossNaTela then
-        if CaveBot and CaveBot.delay then CaveBot.delay(0) end
-        if g_game.setChaseMode then pcall(function() g_game.setChaseMode(previousChaseMode) end) end
-        modoPerseguicaoAtivo = false
-        cavebotPausadoPorBoss = false
-        print("[Hunter] O monstro especial morreu. Cavebot despausado e modos restaurados.")
-    end
-    local meusMonstrosColados = 0
-    for _, spec in ipairs(spectators) do
-        if spec:isMonster() then
-            if getDistanceBetween(myPos, spec:getPosition()) <= 1 then
-                meusMonstrosColados = meusMonstrosColados + 1
-            end
-        end
-    end
-    local rivalPlayer = nil
-    local monstrosNoRival = 0
-    local listaMonstrosDoRival = {}
-
-    for _, spec in ipairs(spectators) do
-        if spec:isPlayer() and spec ~= localPlayer then
-            rivalPlayer = spec
-            local rivalPos = rivalPlayer:getPosition()
-            
-            for _, mob in ipairs(spectators) do
-                if mob:isMonster() then
-                    if getDistanceBetween(rivalPos, mob:getPosition()) <= 1 then
-                        monstrosNoRival = monstrosNoRival + 1
-                        table.insert(listaMonstrosDoRival, mob)
-                    end
-                end
-            end
-            break
-        end
-    end
-    if rivalPlayer and monstrosNoRival > meusMonstrosColados and #listaMonstrosDoRival > 0 then
-        local targetAtual = g_game.getAttackingCreature()
-        local jaEstaAtacandoMonstroDoRival = false
-        
-        if targetAtual then
-            for _, mobDoRival in ipairs(listaMonstrosDoRival) do
-                if targetAtual:getId() == mobDoRival:getId() then
-                    jaEstaAtacandoMonstroDoRival = true
-                    break
-                end
-            end
-        end
-        if not jaEstaAtacandoMonstroDoRival then
-            local monstroAlvo = listaMonstrosDoRival[1]
-            if monstroAlvo and g_game.attack then
-                if g_game.setChaseMode then pcall(function() g_game.setChaseMode(1) end) end
-                modoPerseguicaoAtivo = true
-                
-                g_game.attack(monstroAlvo)
-                print("[Smart Target] KS Detectado! Forçando Chase Mode e atacando alvo do rival.")
-                return
-            end
-        end
-    end
-    local target = g_game.getAttackingCreature()
-    if not target then
-        if modoPerseguicaoAtivo then
-            if g_game.setChaseMode then pcall(function() g_game.setChaseMode(0) end) end
-            modoPerseguicaoAtivo = false
-        end
-        return
-    end
-    local distanciaAteOAlvo = getDistanceBetween(myPos, target:getPosition())
-    local playerNaTela = (rivalPlayer ~= nil)
-    if playerNaTela then
-        if distanciaAteOAlvo > 1 then
-            if g_game.setChaseMode and not modoPerseguicaoAtivo then 
-                pcall(function() g_game.setChaseMode(1) end) 
-                modoPerseguicaoAtivo = true
-            end
-        else
-            if g_game.setChaseMode and modoPerseguicaoAtivo then
-                pcall(function() g_game.setChaseMode(0) end) 
-                modoPerseguicaoAtivo = false
-            end
-        end
-    else
-        if modoPerseguicaoAtivo then
-            if g_game.setChaseMode then pcall(function() g_game.setChaseMode(0) end) end
-            modoPerseguicaoAtivo = false
-        end
-    end
-end)
 --SafeFightSync
 local ultimoEstadoSeguro = nil
 macro(200, function()
@@ -990,6 +837,83 @@ macro(200, function()
             print("[PvP Protocol] Modo Offensive: SafeFight DESLIGADO.")
         end
     end
+end)
+--barra de target
+local lifeColors = {
+    { percent = 35, color = 'red' },
+    { percent = 75, color = 'yellow' },
+    { percent = 100, color = 'green' }
+}
+
+local widgetTarget = [[
+UIWidget
+  id: targetPanelFixed
+  background-color: #1a1a1aef
+  border: 1 #3a3a3a
+  border-radius: 4
+  size: 300 50
+  focusable: false
+  phantom: true
+  draggable: false
+
+  UILabel
+    id: targetTitle
+    anchors.top: parent.top
+    anchors.horizontalCenter: parent.horizontalCenter
+    margin-top: 5
+    color: #e8e8e8
+    font: verdana-11px-rounded
+    text-auto-resize: true
+
+  ProgressBar
+    id: progressBar
+    height: 14
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    margin: 6
+    background-color: #880000
+    text-align: center
+    text-color: white
+]]
+
+local panel = {}
+panel['targetWidget'] = setupUI(widgetTarget, g_ui.getRootWidget())
+panel['targetWidget']:setVisible(false)
+local function getColorByPercent(percent, colorList)
+    for i = 1, #colorList do
+        if percent <= colorList[i].percent then
+            return colorList[i].color
+        end
+    end
+    return colorList[#colorList].color
+end
+local function updateTargetWidget(targetNameText, percent, hasTarget)
+    local target = panel['targetWidget']
+    if not target then return end
+    target:setVisible(hasTarget)
+    if not hasTarget then return end
+    local rootWidth = g_ui.getRootWidget():getWidth()
+    local posX = (rootWidth / 2) - (target:getWidth() / 2) + 90
+    local posY = 60 
+    target:setPosition({ x = posX, y = posY })
+    target.targetTitle:setText(targetNameText)    
+    target.progressBar:setText(string.format("%d%%", percent))
+    target.progressBar:setPercent(percent)
+    target.progressBar:setBackgroundColor(getColorByPercent(percent, lifeColors))
+end
+macro(100, function()
+    local name, percent = "", 100
+    local hasTarget = false   
+    if g_game.isAttacking() then
+        local target = g_game.getAttackingCreature()
+        if target then
+            name = target:getName()
+            percent = target:getHealthPercent()
+            hasTarget = true
+        end
+    end 
+    updateTargetWidget(name, percent, hasTarget)
 end)
 setDefaultTab("Fight")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
