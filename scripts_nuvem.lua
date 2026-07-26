@@ -50,6 +50,7 @@ ButtonT = UI.Button("Reconect", function()
     updateButtonReconectText()
 end)
 updateButtonReconectText()
+UI.Separator()
 macro(100, "GrandFisher Mask", function()
     if not g_game.isAttacking() and not g_game.getAttackingCreature() then
         return
@@ -343,12 +344,6 @@ macro(100, 'Revide PK', function()
     end
 end)
 UI.Separator()
-if type(storage.moneyItems) ~= "table" then
-  storage.moneyItems = {}
-end
-if not storage.smartEatDelay then
-  storage.smartEatDelay = 10000
-end
 --Eat Food
 macro(100, "Eat Food", function()
   if isInPz() then return end
