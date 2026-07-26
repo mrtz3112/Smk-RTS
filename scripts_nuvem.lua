@@ -1077,7 +1077,7 @@ local function aplicarPenalidadeExhaust()
         else
             storage.smartCastData.calibrando = false
             storage.smartCastData.ajusteFino = false
-            storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + 10)
+            storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + 15)
             print("[Smart Cast] Calibração Concluída! Margem de +10ms adicionada. Valor SEGURO travado em: " .. math.floor(storage.smartCastData.menorCooldownSeguro) .. "ms")
         end
     end
@@ -1293,33 +1293,39 @@ MainWindow
 
     Button
       id: botaoRecalibrar
-      !text: tr('Recalculate')
+      !text: tr('Reset CD')
       size: 80 20
       anchors.top: labelCdAtual.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 4
 ]], modules.game_interface.getMapPanel())
-
-painelIconesUI.onMousePress = function(widget, mousePos, button)
-    return true
-end
-painelIconesUI.onMouseRelease = function(widget, mousePos, button)
-    return true
-end
+painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
+painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
 local function isMacroActive(macroRef, storageKey)
-    if macroRef and type(macroRef) == "table" and macroRef.isOn then
-        return macroRef.isOn()
+    if macroRef and type(macroRef) == "table" and macroRef.isOn and type(macroRef.isOn) == "function" then
+        local success, result = pcall(function() return macroRef.isOn() end)
+        if success then return result end
     end
-    return storage.painelSalvo[storageKey]
+    return storage.painelSalvo and storage.painelSalvo[storageKey] or false
 end
 local function alternarEstadoMacro(macroRef, storageKey)
+    if not storage.painelSalvo then storage.painelSalvo = {} end
     local novoEstado = not storage.painelSalvo[storageKey]
     storage.painelSalvo[storageKey] = novoEstado
+    
     if macroRef and type(macroRef) == "table" and macroRef.setOn then
-        macroRef.setOn(novoEstado)
+        pcall(function() macroRef.setOn(novoEstado) end)
     elseif macroRef and type(macroRef) == "function" then
-        macroRef()
+        pcall(macroRef)
     end
+end
+local function forcarRecalibracaoSmartCast(motivo)
+    if not storage.smartCastData then storage.smartCastData = {} end
+    storage.smartCastData.menorCooldownSeguro = 2000
+    storage.smartCastData.calibrando = true
+    storage.smartCastData.ajusteFino = false
+    storage.smartCastData.jaCalibrouAlgumaVez = false
+    print("[Smart Cast] Calibracao ATIVADA! Motivo: " .. tostring(motivo) .. ". Cooldown resetado para 2000ms.")
 end
 if painelIconesUI then
     local container = painelIconesUI:getChildById("containerIcones")
@@ -1334,20 +1340,51 @@ if painelIconesUI then
         if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
         if btnRecalibrar then
             btnRecalibrar.onClick = function()
-                storage.smartCastData.menorCooldownSeguro = 2000
-                storage.smartCastData.calibrando = true
-                storage.smartCastData.ajusteFino = false
-                storage.smartCastData.jaCalibrouAlgumaVez = false
-                print("[Smart Cast] Recalculate Clicado! Cooldown resetado para 2000ms. Iniciando nova calibração...")
+                forcarRecalibracaoSmartCast("Clique Manual (Reset CD)")
             end
         end
         local jaSincronizou = false
+        local hooksConfigurados = false
+        local ultimoEstadoBot = false
+        if TargetBot and TargetBot.isEnabled then ultimoEstadoBot = TargetBot.isEnabled() end
         macro(100, function()
+            if not g_game.isOnline() then return end
             if not jaSincronizou then
-                if lowhp and lowhp.setOn then lowhp.setOn(storage.painelSalvo.special) end
-                if combo and combo.setOn then combo.setOn(storage.painelSalvo.spells) end
-                if turnCombo and turnCombo.setOn then turnCombo.setOn(storage.painelSalvo.wave) end
+                if lowhp and type(lowhp) == "table" and lowhp.setOn then pcall(function() lowhp.setOn(storage.painelSalvo.special) end) end
+                if combo and type(combo) == "table" and combo.setOn then pcall(function() combo.setOn(storage.painelSalvo.spells) end) end
+                if turnCombo and type(turnCombo) == "table" and turnCombo.setOn then pcall(function() turnCombo.setOn(storage.painelSalvo.wave) end) end
                 jaSincronizou = true
+            end
+            if not hooksConfigurados then
+                local root = g_ui.getRootWidget()
+                if root then
+                    local boxBalanced = root:recursiveGetChildById('fightBalancedBox')
+                    local boxOffensive = root:recursiveGetChildById('fightOffensiveBox')
+                    if boxBalanced then
+                        local oldClickBalanced = boxBalanced.onClick
+                        boxBalanced.onClick = function(widget)
+                            forcarRecalibracaoSmartCast("Modo Balanced Selecionado")
+                            if oldClickBalanced then oldClickBalanced(widget) end
+                        end
+                    end
+                    if boxOffensive then
+                        local oldClickOffensive = boxOffensive.onClick
+                        boxOffensive.onClick = function(widget)
+                            forcarRecalibracaoSmartCast("Modo Offensive Selecionado")
+                            if oldClickOffensive then oldClickOffensive(widget) end
+                        end
+                    end
+                    hooksConfigurados = true
+                end
+            end
+            if TargetBot and TargetBot.isEnabled then
+                local estadoBotAtual = TargetBot.isEnabled()
+                if estadoBotAtual ~= ultimoEstadoBot then
+                    ultimoEstadoBot = estadoBotAtual
+                    if estadoBotAtual == true then
+                        forcarRecalibracaoSmartCast("TargetBot foi iniciado")
+                    end
+                end
             end
             if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp, "special") and "green" or "red") end
             if btnSpells then btnSpells:setColor(isMacroActive(combo, "spells") and "green" or "red") end
