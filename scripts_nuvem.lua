@@ -666,7 +666,7 @@ function lastSense.setup()
       end
     end
   ) 
-  local north, south, west, east = storage.sensePositions['norte'], storage.sensePositions['sul'], storage.sensePositions['esquerda'], storage.sensePositions['direita']
+  local north, south, west, east = storage.sensePositions['Norte'], storage.sensePositions['Sul'], storage.sensePositions['Esquerda'], storage.sensePositions['Direita']
   lastSense.savePos = {
     ['north'] = {x = north.x, y = north.y, rotation = 0},
     ['south'] = {x = south.x, y = south.y, rotation = 180},
