@@ -1148,7 +1148,7 @@ local function aplicarPenalidadeExhaust()
         else
             storage.smartCastData.calibrando = false
             storage.smartCastData.ajusteFino = false
-            storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + 10)
+            storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + 12)
             print("[Smart Cast] Calibração Concluída! Margem de +10ms adicionada. Valor SEGURO travado em: " .. math.floor(storage.smartCastData.menorCooldownSeguro) .. "ms")
         end
     end
