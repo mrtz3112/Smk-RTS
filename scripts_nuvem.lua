@@ -927,10 +927,13 @@ local function checkPz()
   return isPz
 end
 buffs = macro(100,"Haste", "CTRL+4", function()
+  if storage.smartCastData and storage.smartCastData.calibrando then 
+    return 
+  end
   local isPz = checkPz()
   if isPz then return end
   if hasHaste() then
-     delay(50100)
+     delay(55000)
   else
      saySpell(storage.autobuff1)
   end
@@ -939,6 +942,9 @@ UI.TextEdit(storage.autobuff1 or "", function(widget, text)
   storage.autobuff1 = text
 end)
 macro(100, "Buffs", "CTRL+4", function()
+  if storage.smartCastData and storage.smartCastData.calibrando then 
+    return 
+  end
   local isPz = checkPz()
   if isPz then return end
   if not g_game.isAttacking() then return end
@@ -960,13 +966,16 @@ local panelName = "hpbelowconfig"
 if not storage[panelName] then
   storage[panelName] = {
       setting = true,
-      hp = 80,
+      hp = 20,
       enabled = false
   }
 end
 local ultimoDisparoEspecial = 0
 local cooldownFixoEspecial = 50000 
 lowhp = macro(100, function()
+    if storage.smartCastData and storage.smartCastData.calibrando then 
+        return 
+    end
     if not g_game.isAttacking() then
         return
     end  
@@ -982,7 +991,7 @@ lowhp = macro(100, function()
     if target:getHealthPercent() <= storage[panelName].hp then
         if storage.hpspell and storage.hpspell ~= "" then
             say(storage.hpspell)
-            ultimoDisparoEspecial = agora
+            ultimoDisparoEspecial = agora -- Registra o momento exato do disparo
         end
     end
 end)
@@ -1008,7 +1017,6 @@ Panel
     maximum: 100
     step: 1
 ]], parent)
-
 ui:setId(panelName)
 ui.title:setOn(storage[panelName].enabled)
 ui.title.onClick = function(widget)
@@ -1020,7 +1028,6 @@ ui.title.onClick = function(widget)
   end
   if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
 end
-
 local updateHpText = function()
     if storage[panelName].setting then
         ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
@@ -1032,7 +1039,6 @@ ui.HP.onValueChange = function(scroll, value)
 end
 ui.HP:setValue(storage[panelName].hp)
 updateHpText()
-
 UI.TextEdit(storage.hpspell or "", function(widget, text) 
     storage.hpspell = text 
 end)
