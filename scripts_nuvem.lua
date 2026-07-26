@@ -60,6 +60,7 @@ macro(100, "GrandFisher Mask", function()
         delay(10000)
     end
 end)
+--Dodge Red SQM
 local effectIdToAvoid = 237
 local flags = { ignoreNonPathable = true }
 
@@ -71,6 +72,8 @@ function hasEffect(tile, effectId)
     end
     return false
 end
+
+-- Recorre en círculos concéntricos desde 1 sqm hasta maxRange
 function findNearestSafePosition(playerPos, maxRange)
     maxRange = maxRange or 7  -- menos rango = más rápido
     for r = 1, maxRange do
@@ -92,7 +95,7 @@ function findNearestSafePosition(playerPos, maxRange)
     end
     return nil
 end
-macro(30, "Dodge Red SQM Spells", function()
+macro(60, "Dodge", function()
     local playerPos = player:getPosition()
 
     if not hasEffect(g_map.getTile(playerPos), effectIdToAvoid) then
@@ -102,9 +105,10 @@ macro(30, "Dodge Red SQM Spells", function()
     local safePos = findNearestSafePosition(playerPos)
     if safePos then
         autoWalk(safePos, 15, flags)
-        delay(100)
+        delay(700)
     end
 end)
+--Enter Dungeons
 local window_name = "Dungeons"
 macro(2000, "Enter Dungeons", function()
     for _, rootW in pairs(g_ui.getRootWidget():getChildren()) do
