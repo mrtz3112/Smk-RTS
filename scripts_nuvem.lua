@@ -720,6 +720,7 @@ function lastSense.setup()
 end
 lastSense.init()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+--Target HP Percentage
 local showhp = macro(30, function() end)
 onCreatureHealthPercentChange(function(creature, healthPercent)
   if showhp:isOff() then return end
@@ -738,6 +739,7 @@ end)
 onCreatureDisappear(function(creature)
   creature:setText()
 end)
+--Ice Hud HP Percent
 macro(30, function()
 local hp = g_ui.getRootWidget():recursiveGetChildById("healthCircleFront")
 hp:setText("   ".. hppercent().. "             ") 
@@ -749,6 +751,7 @@ local hp = g_ui.getRootWidget():recursiveGetChildById("manaCircleFront")
 hp:setText("                   ".. manapercent().. "          ") 
 hp:setColor("white")
 end)
+--Auto Bless
 if player:getBlessings() == 0 then
   say("!bless")
   schedule(1000, function()
@@ -757,6 +760,7 @@ if player:getBlessings() == 0 then
     end
   end)
 end
+--CaveBot Creator Always Opened
 macro(100, function()
   local botWindow = modules.game_bot.botWindow
   if not botWindow then return end
@@ -769,12 +773,12 @@ macro(100, function()
     end
   end
 end)
+-- Magic wall & Wild growth timer
 local magicWallId = 10980
 local magicWallTime = 20000
 local wildGrowthId = 2130
 local wildGrowthTime = 45000
 local activeTimers = {}
-
 onAddThing(function(tile, thing)
   if not thing:isItem() then
     return
@@ -787,14 +791,12 @@ onAddThing(function(tile, thing)
   else
     return
   end
-  
   local pos = tile:getPosition().x .. "," .. tile:getPosition().y .. "," .. tile:getPosition().z
   if not activeTimers[pos] or activeTimers[pos] < now then    
     activeTimers[pos] = now + timer
   end
   tile:setTimer(activeTimers[pos] - now)
 end)
-
 onRemoveThing(function(tile, thing)
   if not thing:isItem() then
     return
@@ -805,7 +807,185 @@ onRemoveThing(function(tile, thing)
     tile:setTimer(0)
   end  
 end)
+--anti-ks & monstros elite/boss
+local modoPerseguicaoAtivo = false
+local cavebotPausadoPorBoss = false
+local previousChaseMode = 0
+local monstrosEspeciais = {
+    "elite",
+    "boss",
+    "hollow capitan shinigami",
+    "complete espada",
+    "gotei 13 king",
+    "oversaturated hollowed shinigami"
+}
+local function isSpecialMob(creature)
+    if not creature or not creature:isMonster() then return false end
+    local name = creature:getName():lower()
+    for _, specialName in ipairs(monstrosEspeciais) do
+        if string.find(name, specialName) then
+            return true
+        end
+    end
+    return false
+end
+macro(100, function()
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer then return end
+    local targetAtualPreCheck = g_game.getAttackingCreature()
+    if targetAtualPreCheck and targetAtualPreCheck:isPlayer() then
+        return
+    end
+    local myPos = pos()
+    local spectators = getSpectators()
+    if not spectators then return end
+    local bossNaTela = nil
+    for _, spec in ipairs(spectators) do
+        if isSpecialMob(spec) then
+            local hasPath = findPath(myPos, spec:getPosition(), 7, {
+                ignoreLastCreature = true, 
+                ignoreNonPathable = true, 
+                ignoreCost = true, 
+                ignoreCreatures = true
+            })
+            if hasPath then
+                bossNaTela = spec
+                break
+            end
+        end
+    end
+    if bossNaTela then
+        if CaveBot and CaveBot.isOn() then
+            CaveBot.delay(500)
+            cavebotPausadoPorBoss = true
+        end
+        if not modoPerseguicaoAtivo then
+            previousChaseMode = g_game.getChaseMode()
+            if g_game.setChaseMode then pcall(function() g_game.setChaseMode(1) end) end
+            modoPerseguicaoAtivo = true
+        end
+        if g_game.getAttackingCreature() ~= bossNaTela then
+            if g_game.attack then
+                g_game.attack(bossNaTela)
+                print("[Hunter] MONSTRO ESPECIAL DETECTADO: " .. bossNaTela:getName() .. "! Focando com prioridade máxima.")
+            end
+        end
+        return
+    end
+    if cavebotPausadoPorBoss and not bossNaTela then
+        if CaveBot and CaveBot.delay then CaveBot.delay(0) end
+        if g_game.setChaseMode then pcall(function() g_game.setChaseMode(previousChaseMode) end) end
+        modoPerseguicaoAtivo = false
+        cavebotPausadoPorBoss = false
+        print("[Hunter] O monstro especial morreu. Cavebot despausado e modos restaurados.")
+    end
+    local meusMonstrosColados = 0
+    for _, spec in ipairs(spectators) do
+        if spec:isMonster() then
+            if getDistanceBetween(myPos, spec:getPosition()) <= 1 then
+                meusMonstrosColados = meusMonstrosColados + 1
+            end
+        end
+    end
+    local rivalPlayer = nil
+    local monstrosNoRival = 0
+    local listaMonstrosDoRival = {}
 
+    for _, spec in ipairs(spectators) do
+        if spec:isPlayer() and spec ~= localPlayer then
+            rivalPlayer = spec
+            local rivalPos = rivalPlayer:getPosition()
+            
+            for _, mob in ipairs(spectators) do
+                if mob:isMonster() then
+                    if getDistanceBetween(rivalPos, mob:getPosition()) <= 1 then
+                        monstrosNoRival = monstrosNoRival + 1
+                        table.insert(listaMonstrosDoRival, mob)
+                    end
+                end
+            end
+            break
+        end
+    end
+    if rivalPlayer and monstrosNoRival > meusMonstrosColados and #listaMonstrosDoRival > 0 then
+        local targetAtual = g_game.getAttackingCreature()
+        local jaEstaAtacandoMonstroDoRival = false
+        
+        if targetAtual then
+            for _, mobDoRival in ipairs(listaMonstrosDoRival) do
+                if targetAtual:getId() == mobDoRival:getId() then
+                    jaEstaAtacandoMonstroDoRival = true
+                    break
+                end
+            end
+        end
+        if not jaEstaAtacandoMonstroDoRival then
+            local monstroAlvo = listaMonstrosDoRival[1]
+            if monstroAlvo and g_game.attack then
+                if g_game.setChaseMode then pcall(function() g_game.setChaseMode(1) end) end
+                modoPerseguicaoAtivo = true
+                
+                g_game.attack(monstroAlvo)
+                print("[Smart Target] KS Detectado! Forçando Chase Mode e atacando alvo do rival.")
+                return
+            end
+        end
+    end
+    local target = g_game.getAttackingCreature()
+    if not target then
+        if modoPerseguicaoAtivo then
+            if g_game.setChaseMode then pcall(function() g_game.setChaseMode(0) end) end
+            modoPerseguicaoAtivo = false
+        end
+        return
+    end
+    local distanciaAteOAlvo = getDistanceBetween(myPos, target:getPosition())
+    local playerNaTela = (rivalPlayer ~= nil)
+    if playerNaTela then
+        if distanciaAteOAlvo > 1 then
+            if g_game.setChaseMode and not modoPerseguicaoAtivo then 
+                pcall(function() g_game.setChaseMode(1) end) 
+                modoPerseguicaoAtivo = true
+            end
+        else
+            if g_game.setChaseMode and modoPerseguicaoAtivo then
+                pcall(function() g_game.setChaseMode(0) end) 
+                modoPerseguicaoAtivo = false
+            end
+        end
+    else
+        if modoPerseguicaoAtivo then
+            if g_game.setChaseMode then pcall(function() g_game.setChaseMode(0) end) end
+            modoPerseguicaoAtivo = false
+        end
+    end
+end)
+--SafeFightSync
+local ultimoEstadoSeguro = nil
+macro(200, function()
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end
+    local bBalanced = rootWidget:recursiveGetChildById("fightBalancedBox")
+    local estaNoBalanced = bBalanced and (bBalanced:isOn() or bBalanced:isChecked())
+
+    if estaNoBalanced then
+        if ultimoEstadoSeguro ~= true then
+            if g_game.setSafeFight then 
+                pcall(function() g_game.setSafeFight(false) end) 
+            end
+            ultimoEstadoSeguro = true
+            print("[PvP Protocol] Modo Balanced: SafeFight LIGADO.")
+        end
+    else
+        if ultimoEstadoSeguro ~= false then
+            if g_game.setSafeFight then 
+                pcall(function() g_game.setSafeFight(true) end) 
+            end
+            ultimoEstadoSeguro = false
+            print("[PvP Protocol] Modo Offensive: SafeFight DESLIGADO.")
+        end
+    end
+end)
 setDefaultTab("Fight")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Haste & Buff ~"):setColor('#EBDEF0')
