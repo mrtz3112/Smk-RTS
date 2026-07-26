@@ -345,40 +345,16 @@ end
 if not storage.smartEatDelay then
   storage.smartEatDelay = 10000
 end
-macro(100, "Smart Eat", function()
-  local player = g_game.getLocalPlayer()
-  if not player then return end
-
-  local pzFlag = bit.band(player:getStates(), 1) == 1 or bit.band(player:getStates(), 16384) == 16384
-  local isPz = pzFlag or (g_game.isInPz and g_game.isInPz())
-  if isPz then return end
-
-  local hasBattle = bit.band(player:getStates(), 128) == 128
-  if not hasBattle then return end
-  if #storage.moneyItems == 0 then return end 
-  
-  local containers = g_game.getContainers()
-  for _, container in pairs(containers) do
-    if not container.lootContainer then 
-      for _, item in ipairs(container:getItems()) do
-        for _, moneyId in ipairs(storage.moneyItems) do
-          local targetId = type(moneyId) == "table" and moneyId.id or moneyId
-          if item:getId() == targetId then
-            g_game.use(item)
-            return delay(storage.smartEatDelay) 
-          end
-        end
-      end
-    end
+macro(100, "Eat Food", function()
+  if isInPz() then return end
+  if storage.idcomida and storage.idcomida ~= "" then
+    use(tonumber(storage.idcomida))
+    delay(10000)
   end
 end)
-local moneyContainer = UI.Container(function(widget, items)
-  storage.moneyItems = items
-end, true)
-moneyContainer:setHeight(35)
-if #storage.moneyItems > 0 then
-  moneyContainer:setItems(storage.moneyItems)
-end
+UI.TextEdit(storage.idcomida or "id da food", function(widget, text)    
+  storage.idcomida = text
+end)
 UI.Separator()
 local Objects = {
     435, 1948, 432, 433, 412, 413, 421, 422, 423, 424, 425, 426, 476, 475, 479, 480, 
