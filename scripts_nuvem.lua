@@ -531,10 +531,12 @@ end)
 followTE:setHeight(25)
 UI.Separator()
 --X-Sense
+-- Inicializa a variável do alvo do Sense como String limpa (Anti-Bug JSON)
 if type(storage.Sense) ~= "string" then
     storage.Sense = ""
 end
 
+-- Macro que solta o comando de Sense no jogo
 xsense = macro(30, "xSense", "SHIFT+4", function()
     local target = g_game.getAttackingCreature()
     if target and target:isPlayer() then
@@ -546,6 +548,7 @@ xsense = macro(30, "xSense", "SHIFT+4", function()
     end
 end)
 
+-- Monitor do Chat para alterar o alvo do Sense por comando de texto (Ex: x NomeDoAlvo)
 onTalk(function(...)
     local args = {...}
     local text = nil
@@ -573,7 +576,9 @@ onTalk(function(...)
     end
 end)
 
+-- Estrutura visual do Indicador do Sense
 lastSense = {}
+
 UI.Button('Configurar xSense', function()
   if lastSense.senseBox then
     lastSense.senseBox:destroy()
@@ -592,16 +597,22 @@ UIWidget
   draggable: true
 ]]
 
+-- Cria o Widget da Seta na tela do jogo
 lastSense.pointerWidget = setupUI([[
 Panel
   image-source: /images/ui/panel_flat
   size: 40 40
 ]], g_ui.getRootWidget())
+lastSense.pointerWidget:hide() -- Começa escondida até achar o alvo
 
-HTTP.downloadImage("https://i.imgur.com/Nq5O8WV.png", function(image)
-    return lastSense.pointerWidget:setImageSource(image)
+-- Baixa a imagem da caveira vermelha diretamente do Imgur
+HTTP.downloadImage("https://imgur.com", function(image)
+    if image and lastSense.pointerWidget then
+        lastSense.pointerWidget:setImageSource(image)
+    end
 end)
 
+-- Inicializa o Mapeamento de posições na tela
 lastSense.init = function()
   if not storage.sensePositions or table.size(storage.sensePositions) < 4 then
     lastSense.startMapeation = true
@@ -642,6 +653,7 @@ lastSense.init = function()
       end
   
       lastSense.senseBox.onDragLeave = function(widget, pos)
+        -- Guarda as posições com chaves minúsculas (Padrão JSON Seguro)
         local chaveSalvar = tostring(lastSense.directions[lastSense.actualSense]):lower()
         storage.sensePositions[chaveSalvar] = {x = widget:getX(), y = widget:getY()}
         
@@ -668,9 +680,16 @@ lastSense.init = function()
   end
 end
 
+-- Ativa o Rastreador Visual e os ganchos de leitura de pacotes
 function lastSense.setup()
   macro(100, function()
+      if not lastSense.actualSense or lastSense.actualSense == "" then 
+          lastSense.pointerWidget:hide()
+          return 
+      end
+      
       local sensePlayer = getCreatureByName(tostring(lastSense.actualSense))
+      -- Oculta a seta se o player aparecer na sua tela (menos de 6 SQMs) ou se o tempo do sense expirar
       if (sensePlayer and getDistanceBetween(sensePlayer:getPosition(), pos()) < 6) or (not lastSense.elapsed or lastSense.elapsed < now) then
         lastSense.pointerWidget:hide()
       elseif lastSense.pointerWidget:isHidden() then
@@ -679,6 +698,7 @@ function lastSense.setup()
     end
   )
   
+  -- Fallback seguro de coordenadas caso o monitor mude ou storage resete
   local north = storage.sensePositions and storage.sensePositions['norte'] or {x = 1030, y = 230}
   local south = storage.sensePositions and storage.sensePositions['sul'] or {x = 1030, y = 500}
   local west = storage.sensePositions and storage.sensePositions['esquerda'] or {x = 830, y = 360}
@@ -700,27 +720,29 @@ function lastSense.setup()
   end
 
   lastSense.setPosition = function(position)
-    if position then
+    if position and lastSense.pointerWidget then
       lastSense.pointerWidget:setPosition({x = position.x, y = position.y})
       lastSense.pointerWidget:setRotation(position.rotation)
     end
   end
 
+  -- Monitora as mensagens verdes de sistema enviadas pelo servidor
   onTextMessage(
     function(mode, text)
       if mode == 20 then
         local regex = "([a-z A-Z]*) is ([a-z -A-Z]*)to the ([a-z -A-Z]*)."
-        -- CORREÇÃO CRÍTICA 1: Remove o [1] da declaração para processar a tabela corretamente
         local matchData = regexMatch(text, regex)
+        
+        -- CORREÇÃO DA SETA: A API do OTClient retorna arrays multidimensionais para RegExp
         if matchData and matchData[1] then
-          local lastSenseData = matchData[1]
-          -- CORREÇÃO CRÍTICA 2: Ajustados os índices de captura do Lua (começam em, [2], [3])
-          if lastSenseData[1] and lastSenseData[2] and lastSenseData[3] then
-            local direcaoChat = tostring(lastSenseData[3]):trim():lower()
+          local captura = matchData[1]
+          if captura[1] and captura[2] and captura[3] then
+            -- Força a direção capturada (Ex: "North-West") para minúsculo para bater com a tabela
+            local direcaoChat = tostring(captura[3]):trim():lower()
+            
             lastSense.setPosition(lastSense.actualPosition(direcaoChat))
-            lastSense.actualSense = lastSenseData[1]:trim()
-            lastSense.elapsed = now + 5000
-            lastSense.lastPosition = player:getPosition()
+            lastSense.actualSense = tostring(captura[1]):trim() -- Armazena o Nome correto do Player rastreado
+            lastSense.elapsed = now + 5000                     -- A seta fica visível por 5 segundos
           end
         end
       end
@@ -728,7 +750,7 @@ function lastSense.setup()
   )
 end
 
--- Inicializa as travas visuais se o mapa já estiver configurado
+-- Se o jogador já configurou os 4 cantos em sessões anteriores, pula direto para o rastreamento
 if storage.sensePositions and table.size(storage.sensePositions) >= 4 then
   lastSense.startMapeation = false
 end
