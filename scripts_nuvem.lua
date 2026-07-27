@@ -536,19 +536,23 @@ if type(storage.Sense) ~= "string" then
     storage.Sense = ""
 end
 
--- Macro que solta o comando de Sense no jogo
+-- Macro principal: Salva o alvo ao atacar e solta o Sense no jogo
 xsense = macro(30, "xSense", "SHIFT+4", function()
     local target = g_game.getAttackingCreature()
+    
+    -- Salva automaticamente o nome do player alvo se você o atacar
     if target and target:isPlayer() then
         storage.Sense = target:getName()
     end
-    if storage.Sense and storage.Sense ~= "" and (manapercent() <= 35) then
+    
+    -- Executa o comando de texto do Sense caso a sua Mana esteja abaixo de 35%
+    if storage.Sense and storage.Sense ~= "" and (manapercent() >= 35) then
         say('sense "' .. storage.Sense)
         delay(5000)
     end
 end)
 
--- Monitor do Chat para alterar o alvo do Sense por comando de texto
+-- Monitor de Chat: Altera ou limpa o alvo por comando (Ex: x Nome / x 0)
 onTalk(function(...)
     local args = {...}
     local text = nil
@@ -562,197 +566,23 @@ onTalk(function(...)
     end
     if not text then return end
     local msg = text:trim()
+    
+    -- Se a mensagem começar com a letra 'x'
     if string.sub(msg, 1, 1):lower() == 'x' then
         local checkMsg = string.sub(msg, 2, #msg):trim()
         
         if checkMsg == '0' then
+            -- Limpa o alvo salvando uma string vazia (Evita crash de JSON)
             storage.Sense = ""
             modules.game_textmessage.displayStatusMessage("[xSense] Alvo limpado com sucesso!")
         else
+            -- Define o nome digitado como o novo alvo do seu Sense
             storage.Sense = checkMsg
             say('sense "' .. storage.Sense)
         end
         return true
     end
 end)
-
--- Estrutura visual do Indicador do Sense
-lastSense = {}
-
-UI.Button('Configurar xSense', function()
-  if lastSense.senseBox then
-    lastSense.senseBox:destroy()
-  end
-  storage.sensePositions = nil
-  lastSense.init()
-end)
-
-lastSense.widget = [[
-UIWidget
-  background-color: black
-  opacity: 0.8
-  padding: 0 5
-  focusable: true
-  phantom: false
-  draggable: true
-]]
-
--- Cria o Widget da Seta na tela do jogo
-lastSense.pointerWidget = setupUI([[
-Panel
-  image-source: /images/ui/panel_flat
-  size: 40 40
-]], g_ui.getRootWidget())
-lastSense.pointerWidget:hide() -- Começa escondida até achar o alvo
-
--- CORREÇÃO CRÍTICA: Quebra as amarras estruturais para permitir movimento livre por pixel
-lastSense.pointerWidget:breakAnchors()
-
--- Baixa a imagem da caveira vermelha diretamente do Imgur
-HTTP.downloadImage("https://imgur.com", function(image)
-    if image and lastSense.pointerWidget then
-        lastSense.pointerWidget:setImageSource(image)
-    end
-end)
-
--- Inicializa o Mapeamento de posições na tela
-lastSense.init = function()
-  if not storage.sensePositions or table.size(storage.sensePositions) < 4 then
-    lastSense.startMapeation = true
-    storage.sensePositions = {}
-  end
-
-  if lastSense.startMapeation then
-    lastSense.directions, lastSense.actualSense = {
-      'Norte',
-      'Sul',
-      'Esquerda',
-      'Direita'
-    }, 1
-    modules.game_textmessage.displayGameMessage('Vamos configurar o sense!')
-    schedule(1500, function()
-      modules.game_textmessage.displayGameMessage('Arraste a caixinha para o Norte, segurando CTRL.')
-      lastSense.senseBox = setupUI(lastSense.widget, g_ui.getRootWidget())
-      lastSense.senseBox:setHeight(50)
-      lastSense.senseBox:setWidth(50)
-      lastSense.senseBox:setPosition({x = 1030, y = 380})
-      lastSense.senseBox:setText('AQUI')
-      
-      lastSense.senseBox.onDragEnter = function(widget, mousePos)
-        if not modules.corelib.g_keyboard.isCtrlPressed() then
-          return false
-        end
-        widget:breakAnchors()
-        widget.movingReference = { x = mousePos.x - widget:getX(), y = mousePos.y - widget:getY() }
-        return true
-      end
-  
-      lastSense.senseBox.onDragMove = function(widget, mousePos, moved)
-        local parentRect = widget:getParent():getRect()
-        local x = math.min(math.max(parentRect.x, mousePos.x - widget.movingReference.x), parentRect.x + parentRect.width - widget:getWidth())
-        local y = math.min(math.max(parentRect.y - widget:getParent():getMarginTop(), mousePos.y - widget.movingReference.y), parentRect.y + parentRect.height - widget:getHeight())        
-        widget:move(x, y)
-        return true
-      end
-  
-      lastSense.senseBox.onDragLeave = function(widget, pos)
-        local chaveSalvar = tostring(lastSense.directions[lastSense.actualSense]):lower()
-        storage.sensePositions[chaveSalvar] = {x = widget:getX(), y = widget:getY()}
-        
-        schedule(500, function()
-          lastSense.actualSense = lastSense.actualSense + 1
-          if lastSense.actualSense > 4 then
-            modules.game_textmessage.displayGameMessage('Configurado, pode aproveitar o seu Sense!')
-            lastSense.senseBox:destroy()
-            lastSense.setup()
-            return true
-          end
-          local actualDirection = lastSense.directions[lastSense.actualSense]
-          local showText = 'Arraste a caixinha para o ' .. actualDirection .. ', segurando CTRL.'
-          if string.sub(actualDirection, actualDirection:len(), actualDirection:len()) == 'a' then
-            showText = 'Arraste a caixinha para a ' .. actualDirection .. ', segurando CTRL.'
-          end
-          modules.game_textmessage.displayGameMessage(showText)
-        end)
-        return true
-      end
-    end)
-  else
-    lastSense.setup()
-  end
-end
-
--- Ativa o Rastreador Visual e os ganchos de leitura de pacotes
-function lastSense.setup()
-  macro(100, function()
-      if not lastSense.actualSense or lastSense.actualSense == "" then 
-          lastSense.pointerWidget:hide()
-          return 
-      end
-      
-      local sensePlayer = getCreatureByName(tostring(lastSense.actualSense))
-      if (sensePlayer and getDistanceBetween(sensePlayer:getPosition(), pos()) < 6) or (not lastSense.elapsed or lastSense.elapsed < now) then
-        lastSense.pointerWidget:hide()
-      elseif lastSense.pointerWidget:isHidden() then
-        lastSense.pointerWidget:show()
-      end
-    end
-  )
-  
-  local north = storage.sensePositions and storage.sensePositions['norte'] or {x = 1030, y = 230}
-  local south = storage.sensePositions and storage.sensePositions['sul'] or {x = 1030, y = 500}
-  local west = storage.sensePositions and storage.sensePositions['esquerda'] or {x = 830, y = 360}
-  local east = storage.sensePositions and storage.sensePositions['direita'] or {x = 1230, y = 360}
-  
-  lastSense.savePos = {
-    ['north'] = {x = north.x, y = north.y, rotation = 0},
-    ['south'] = {x = south.x, y = south.y, rotation = 180},
-    ['west'] = {x = west.x, y = west.y, rotation = 270},
-    ['east'] = {x = east.x, y = east.y, rotation = 90},
-    ['north-east'] = {x = east.x, y = north.y, rotation = 45},
-    ['south-east'] = {x = east.x, y = south.y, rotation = 135},
-    ['north-west'] = {x = west.x, y = north.y, rotation = 315},
-    ['south-west'] = {x = west.x, y = south.y, rotation = 225}
-  }
-  
-  lastSense.actualPosition = function(text)
-    return lastSense.savePos[text]
-  end
-
-  lastSense.setPosition = function(position)
-    if position and lastSense.pointerWidget then
-      -- Aplica o breakAnchors preventivo antes de mover o componente gráfico
-      lastSense.pointerWidget:breakAnchors()
-      lastSense.pointerWidget:setPosition({x = position.x, y = position.y})
-      lastSense.pointerWidget:setRotation(position.rotation)
-    end
-  end
-
-  onTextMessage(
-    function(mode, text)
-      if mode == 20 then
-        local regex = "([a-z A-Z]*) is ([a-z -A-Z]*)to the ([a-z -A-Z]*)."
-        local matchData = regexMatch(text, regex)
-        
-        if matchData and matchData[1] then
-          local captura = matchData[1]
-          if captura[2] and captura[3] and captura[4] then
-            local direcaoChat = tostring(captura[4]):trim():lower()
-            
-            lastSense.setPosition(lastSense.actualPosition(direcaoChat))
-            lastSense.actualSense = tostring(captura[2]):trim()
-            lastSense.elapsed = now + 5000
-          end
-        end
-      end
-    end
-  )
-end
-
-if storage.sensePositions and table.size(storage.sensePositions) >= 4 then
-  lastSense.startMapeation = false
-end
-lastSense.init()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 --Ice Hud HP Percent
 macro(100, function()
@@ -1068,7 +898,7 @@ UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 local distance = 2
 local amountOfMonsters = 2
-local COOLDOWN_MINIMO_ABSOLUTO = 1000 
+local COOLDOWN_MINIMO_ABSOLUTO = 100 
 local COOLDOWN_MAXIMO = 2000          
 if not storage.smartCastData then
     storage.smartCastData = {
