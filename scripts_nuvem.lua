@@ -210,7 +210,7 @@ macro(100, "Deposit Gold", function()
     delay(500)
   end
 end)
-macro(250, "Stack Itens", function()
+macro(500, "Stack Itens", function()
     local containers = g_game.getContainers()
     if not containers then return end
     local itensMapeados = {}
