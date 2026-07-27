@@ -1540,6 +1540,7 @@ end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Pet ~")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+--Pet on Hp
 local panelName = "selfpetconfig"
 local ui = setupUI([[
 Panel
@@ -1582,26 +1583,20 @@ Panel
     
 ]], parent)
 ui:setId(panelName)
-local allowedIds = {
-    [2993]  = 120000, -- 120 segundos
-    [10479] = 120000, -- 120 segundos
-    [10481] = 120000, -- 120 segundos
-    [10480] = 120000  -- 300 segundos
-}
+local COOLDOWN_PADRAO = 120000 
 if not storage.petItemCooldowns then storage.petItemCooldowns = {} end
 if not storage[panelName] then
   storage[panelName] = {
-      id = 10481, 
+      id = 10480, 
       enabled = false,
       setting = true,
-      hp = 95
+      hp = 70
   }
 else
   if not storage[panelName].id or storage[panelName].id == 0 then
-      storage[panelName].id = 10481
+      storage[panelName].id = 10480
   end
 end
-
 ui.title:setOn(storage[panelName].enabled)
 ui.title.onClick = function(widget)
   storage[panelName].enabled = not storage[panelName].enabled
@@ -1626,20 +1621,17 @@ ui.item.onItemChange = function(widget)
 end
 ui.HP:setValue(storage[panelName].hp)
 petMacro = macro(100, function()
-
     if ui and ui.title then
         ui.title:setOn(storage[panelName].enabled)
     end
     if not storage[panelName].enabled then return end
     if storage[panelName].setting then
         local currentId = storage[panelName].id
-        local itemCooldown = allowedIds[currentId]
-        
-        if itemCooldown then
+        if currentId and currentId > 0 then
             if hppercent() <= storage[panelName].hp then
                 local currentTime = now
                 local lastUsedTime = storage.petItemCooldowns[currentId] or 0
-                if currentTime - lastUsedTime >= itemCooldown then
+                if currentTime - lastUsedTime >= COOLDOWN_PADRAO then
                     use(currentId)
                     storage.petItemCooldowns[currentId] = currentTime 
                 end
