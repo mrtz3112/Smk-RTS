@@ -1470,6 +1470,7 @@ UI.Separator()
 local panelName = "AutoFood"
 storage[panelName] = storage[panelName] or {enabled = false}
 local config = storage[panelName]
+
 local ui = setupUI([[
 Panel
   height: 58
@@ -1482,26 +1483,18 @@ Panel
     text: Auto Food
 
   BotItem
-    id: item2
-    anchors.top: title.bottom
-    anchors.horizontalCenter: title.horizontalCenter
-    margin-top: 5
-    width: 34
-    height: 34
-
-  BotItem
     id: item1
     anchors.top: title.bottom
-    anchors.right: item2.left
+    anchors.right: title.horizontalCenter
     margin-top: 5
     margin-right: 2
     width: 34
     height: 34
 
   BotItem
-    id: item3
+    id: item2
     anchors.top: title.bottom
-    anchors.left: item2.right
+    anchors.left: title.horizontalCenter
     margin-top: 5
     margin-left: 2
     width: 34
@@ -1509,11 +1502,8 @@ Panel
 ]])
 storage.foodItem1 = storage.foodItem1 or 3577
 storage.foodItem2 = 0
-storage.foodItem3 = 0
-
 ui.item1:setItemId(storage.foodItem1)
 ui.item2:setItemId(storage.foodItem2)
-ui.item3:setItemId(storage.foodItem3)
 
 ui.item1.onItemChange = function(widget)
     storage.foodItem1 = widget:getItemId()
@@ -1521,19 +1511,18 @@ end
 ui.item2.onItemChange = function(widget)
     storage.foodItem2 = widget:getItemId()
 end
-ui.item3.onItemChange = function(widget)
-    storage.foodItem3 = widget:getItemId()
-end
 ui.title:setOn(config.enabled)
 ui.title.onClick = function(widget)
     config.enabled = not config.enabled
     widget:setOn(config.enabled)
 end
-local foodCooldowns = {0, 0, 0}
+local foodCooldowns = {0, 0}
+
 macro(100, function()
     if not config.enabled or isInPz() then return end
+    
     local currentTime = now
-    local foodIds = {storage.foodItem1, storage.foodItem2, storage.foodItem3}
+    local foodIds = {storage.foodItem1, storage.foodItem2}
     for index, id in ipairs(foodIds) do
         if id and id > 0 then
             if currentTime - foodCooldowns[index] >= 10000 then
