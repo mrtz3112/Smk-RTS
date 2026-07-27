@@ -494,7 +494,6 @@ macro(10000, function()
         g_game.use(food)
     end
 end)
-UI.Separator()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 --Ice Hud HP Percent
 macro(100, function()
