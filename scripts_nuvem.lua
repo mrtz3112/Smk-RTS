@@ -3,6 +3,7 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("      Smk Custom: v4.1      "):setColor('#C39BD3')
 UI.Label("        Since 2025       "):setColor('#C39BD3')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+--Macro Editor
 UI.Button("Macro Editor", function(newText)
     UI.MultilineEditorWindow(storage.combos or "", {title="Macro Editor", description="Aqui voce pode editar os seus combos."}, function(text)
       storage.combos = text
@@ -17,6 +18,7 @@ UI.Button("Macro Editor", function(newText)
     end
   end
 UI.Separator()
+--Auto Reconnect
 ModulesG = modules._G
 local reconectEvent = nil
 local ButtonT = nil
@@ -50,403 +52,6 @@ ButtonT = UI.Button("Reconect", function()
     updateButtonReconectText()
 end)
 updateButtonReconectText()
-UI.Separator()
---Deposit Gold & Stack Items
-macro(250, "DepositGold & StackItems", function()
-  if not g_game.isOnline() then return end
-  local coinIds = {3031, 3035, 3043, 10137} 
-  local minAmount = 1
-  local shouldDeposit = false
-  for _, id in ipairs(coinIds) do
-    local item = findItem(id)
-    if item and item:getCount() >= minAmount then
-      shouldDeposit = true
-      break
-    end
-  end
-  if shouldDeposit then
-    say("!deposit all")
-    delay(500)
-    return
-  end
-  local containers = g_game.getContainers()
-  local itensMapeados = {}
-  for _, container in pairs(containers) do
-    for slotIndex, item in ipairs(container:getItems()) do
-      if item:isStackable() and item:getCount() < 10000 then
-        local itemId = item:getId()
-        local count = item:getCount()
-        local posicaoAtual = container:getSlotPosition(slotIndex - 1)
-        if not itensMapeados[itemId] or count > itensMapeados[itemId].count then
-          itensMapeados[itemId] = {
-            posicao = posicaoAtual,
-            count = count
-          }
-        end
-      end
-    end
-  end
-  for _, container in pairs(containers) do
-    for slotIndex, item in ipairs(container:getItems()) do
-      if item:isStackable() and item:getCount() < 10000 then
-        local itemId = item:getId()
-        local destino = itensMapeados[itemId]
-        if destino then
-          local posicaoAtual = container:getSlotPosition(slotIndex - 1)
-          if posicaoAtual.x ~= destino.posicao.x or posicaoAtual.y ~= destino.posicao.y or posicaoAtual.slot ~= destino.posicao.slot then
-            g_game.move(item, destino.posicao, item:getCount())
-            delay(150)
-            return "retry"
-          end
-        end
-      end
-    end
-  end
-end)
---GrandFisher Mask
-macro(100, "GrandFisher Mask", function()
-    if not g_game.isAttacking() and not g_game.getAttackingCreature() then
-        return
-    end
-    local helmet = getSlot(1)
-    if helmet then
-        use(helmet)
-        delay(10000)
-    end
-end)
---Smart Follow
-local Objects = { 
-    -- Escadas de Madeira e Pranchas Tradicionais
-    1385, 1386, 1387, 1388, 369, 370, 434, 435, 1948, 5543, 7725, 19183, 19184,
-    -- Bueiros (Sewers), Grelhas, Tampas de Esgoto e Grades de Bueiro
-    411, 412, 413, 414, 432, 433, 459, 460, 475, 476, 479, 480, 2984, 2985, 5732,
-    -- Rampas (Pedra, Barro, Areia, Gelo, Montanha, Cristal, Earth, Sandstone)
-    1389, 1391, 1393, 1395, 1397, 1399, 1401, 1403, 1405, 3131, 3132, 3133, 3134,
-    4526, 4527, 4528, 4529, 4530, 4531, 4532, 4533, 4534, 4535, 4536, 4537, 4538,
-    4834, 4835, 4836, 4837, 6909, 6911, 6913, 6915, 8376, 8377, 8593, 8632, 15687,
-    -- Spots de Corda, Buracos com Corda Enroscada e Estacas (Rope Places)
-    384, 415, 416, 417, 418, 419, 420, 421, 422, 423, 424, 425, 426, 427, 428, 
-    482, 483, 484, 485, 1311, 1312, 1724, 1726, 2982, 5734, 8567, 10604, 10605,
-    -- Escadas de Pedra, Escadas em Caracol, Pirâmides e Ruínas de Cidades
-    361, 362, 363, 364, 365, 366, 367, 368, 471, 472, 473, 474, 1407, 1409, 1411, 
-    1728, 1730, 1731, 1754, 1755, 6085, 6086, 6087, 6088, 6896, 6897, 6898, 6900,
-    -- Escadas Metálicas, Andaimes, Corrimãos de Parede e Rungs
-    6263, 6265, 11442, 11443, 20114, 20115, 22285, 22286, 24197, 24198, 24323
-}
-local Doors = {7727, 8265, 1629, 1632, 5129, 5120, 8266, 7728, 5102, 5111}
-
-local toFollowPos = {}
-local activeLeaderName = ""
-macro(30, "Follow Party Leader", function() 
-    if not g_game.isOnline() then return end
-    
-    local myPlayer = g_game.getLocalPlayer()
-    if not myPlayer or myPlayer:isWalking() then return end
-
-    local myPos = pos()
-    local target = nil
-    for _, spec in ipairs(getSpectators(myPos)) do
-        if spec:isPlayer() and spec:isPartyLeader() then
-            target = spec
-            activeLeaderName = spec:getName()
-            break
-        end
-    end
-
-    if target then
-        local tpos = target:getPosition()
-        toFollowPos[tpos.z] = tpos
-        if getDistanceBetween(myPos, tpos) <= 1 then 
-            return 
-        end
-        if getDistanceBetween(myPos, tpos) > 2 then
-            for _, doorId in ipairs(Doors) do
-                for x = -1, 1 do
-                    for y = -1, 1 do
-                        local checkPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
-                        local tile = g_map.getTile(checkPos)
-                        if tile then
-                            for _, item in ipairs(tile:getItems()) do
-                                if item:getId() == doorId then
-                                    g_game.use(item)
-                                    return
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        autoWalk(tpos, 20, { ignoreNonPathable = true, precision = 1 })
-        return
-    end
-    local lastLeaderPosInMyFloor = toFollowPos[myPos.z]
-    if lastLeaderPosInMyFloor then
-        if getDistanceBetween(myPos, lastLeaderPosInMyFloor) > 0 then
-            autoWalk(lastLeaderPosInMyFloor, 20, { ignoreNonPathable = true, precision = 0 })
-            return
-        end
-        for _, objectId in ipairs(Objects) do
-            for x = -1, 1 do
-                for y = -1, 1 do
-                    local searchPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
-                    local tile = g_map.getTile(searchPos)
-                    if tile then
-                        for _, item in ipairs(tile:getItems()) do
-                            if item:getId() == objectId then
-                                g_game.use(item)
-                                return
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-
-onPlayerPositionChange(function(newPos, oldPos)
-    if g_game.isFollowing() then
-        local tfollow = g_game.getFollowingCreature()
-        if tfollow and tfollow:isPartyLeader() then
-            activeLeaderName = tfollow:getName()
-        end
-    end
-end)
-
-onCreaturePositionChange(function(creature, newPos, oldPos)
-    if not newPos then return end
-    if activeLeaderName ~= "" and creature:getName() == activeLeaderName then
-        toFollowPos[newPos.z] = newPos
-    end
-end)
---Dodge Red SQM
-local effectIdToAvoid = 237
-local flags = { ignoreNonPathable = true }
-
-function hasEffect(tile, effectId)
-    for _, effect in ipairs(tile:getEffects()) do
-        if effect:getId() == effectId then
-            return true
-        end
-    end
-    return false
-end
-function findNearestSafePosition(playerPos, maxRange)
-    maxRange = maxRange or 7  -- menos rango = más rápido
-    for r = 1, maxRange do
-        for dx = -r, r do
-            for dy = -r, r do
-                if math.abs(dx) == r or math.abs(dy) == r then
-                    local newPos = {x = playerPos.x + dx, y = playerPos.y + dy, z = playerPos.z}
-                    local tile = g_map.getTile(newPos)
-
-                    if tile and tile:isWalkable() and not hasEffect(tile, effectIdToAvoid) then
-                        -- Aquí recién verificamos path
-                        if findPath(playerPos, newPos, 10, flags) then
-                            return newPos
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return nil
-end
-macro(60, "Dodge Red SQMs Spells", function()
-    local playerPos = player:getPosition()
-
-    if not hasEffect(g_map.getTile(playerPos), effectIdToAvoid) then
-        return
-    end
-
-    local safePos = findNearestSafePosition(playerPos)
-    if safePos then
-        autoWalk(safePos, 15, flags)
-        delay(700)
-    end
-end)
---Enter Dungeons
-local window_name = "Dungeons"
-macro(2000, "Enter Dungeons", function()
-    for _, rootW in pairs(g_ui.getRootWidget():getChildren()) do
-        if rootW:getText() and string.find(rootW:getText():lower(), window_name:lower()) then
-            for _, child in pairs(rootW:getChildren()) do
-                if child:getText() == "Start" then
-                    child:onClick()
-                    break
-                end
-            end
-            break
-        end
-    end
-end)
-if not storage.trainerMacroPauseUntil then
-  storage.trainerMacroPauseUntil = 0
-end
-onWalk(function(direction)
-    storage.trainerMacroPauseUntil = os.time() + 1
-end)
-
-local trainerMacro = macro(100, "House Trainer", function(macroObj)
-  if os.time() < storage.trainerMacroPauseUntil then
-    return
-  end
-  if modules.game_npctrade and modules.game_npctrade.isOpen and modules.game_npctrade.isOpen() then
-    return
-  end
-  local myPos = player:getPosition()
-  if not myPos then return end
-  local hasTrainer = false
-  for _, creature in ipairs(getSpectators()) do
-    if creature:getName():lower() == "house trainer" then
-      hasTrainer = true
-      break
-    end
-  end
-  if not hasTrainer then 
-    return 
-  end
-  if g_game.isAttacking() then
-    local currentTarget = g_game.getAttackingCreature()
-    
-    if currentTarget and currentTarget:getName():lower() == "house trainer" then
-      local targetPos = currentTarget:getPosition()
-      if targetPos then
-        local currentDistance = math.max(math.abs(myPos.x - targetPos.x), math.abs(myPos.y - targetPos.y))
-        if currentDistance > 1 and currentDistance <= 2 then
-          g_game.setChaseMode(0) 
-          
-          local diffX = targetPos.x - myPos.x
-          local diffY = targetPos.y - myPos.y
-          
-          if diffX ~= 0 and math.abs(diffX) >= math.abs(diffY) then
-              if diffX > 0 then g_game.walk(1) else g_game.walk(3) end
-          elseif diffY ~= 0 then
-              if diffY > 0 then g_game.walk(2) else g_game.walk(0) end
-          end
-        elseif currentDistance > 2 then
-          g_game.cancelAttack()
-        end
-      end
-    end
-    return 
-  end
-  local closestTrainer = nil
-  local shortestDistance = 7
-  
-  for _, creature in ipairs(getSpectators()) do
-    if creature:getName():lower() == "house trainer" then
-      local trainerPos = creature:getPosition()
-      if trainerPos then
-        local distance = math.max(math.abs(myPos.x - trainerPos.x), math.abs(myPos.y - trainerPos.y))
-        if distance <= 2 and distance < shortestDistance then
-          shortestDistance = distance
-          closestTrainer = creature
-        end
-      end
-    end
-  end
-  if closestTrainer then
-    g_game.attack(closestTrainer)
-  end
-end)
---Revide PK
-local botsDesligadosPeloPVP = false
-local function definirSafeFightBox(deveAtivar)
-    local mapPanel = modules.game_interface and modules.game_interface.gameMapPanel
-    local root = mapPanel and mapPanel:getParent()
-    if root then
-        local pvpButton = root:recursiveGetChildById('safeFightBox')
-        if pvpButton then
-            local estaAtivo = pvpButton:isOn()
-            if (deveAtivar and not estaAtivo) or (not deveAtivar and estaAtivo) then
-                pcall(function() pvpButton:onClick() end)
-            end
-        end
-    end
-end
-local function definirModoAtaque(modo)
-    local rootWidget = g_ui.getRootWidget()
-    if not rootWidget then return end
-    
-    local idBotao = ""
-    if modo == "balanced" then
-        idBotao = "fightBalancedBox"
-    elseif modo == "offensive" then
-        idBotao = "fightOffensiveBox"
-    end
-    
-    local targetButton = rootWidget:recursiveGetChildById(idBotao)
-    if targetButton then
-        pcall(function() targetButton:onClick() end)
-    end
-end
-macro(100, 'Revide PK', function()
-    local myPos = pos()
-    local localPlayer = g_game.getLocalPlayer()
-    if not localPlayer then return end
-    local agressorTarget = nil
-    local agressorHp = 101
-    local agressorDist = 10
-    for _, creature in ipairs(getSpectators(myPos)) do
-        if creature:isPlayer() and creature ~= localPlayer then
-            
-            local estaMeAtacando = false
-            if creature.isAttacking then
-                estaMeAtacando = creature:isAttacking()
-            else
-                estaMeAtacando = (g_game.getAttackingCreature() == creature or creature:isTimedSquareVisible())
-            end
-            if estaMeAtacando then
-                local specHp = creature:getHealthPercent()
-                local specPos = creature:getPosition()
-                local specDist = getDistanceBetween(myPos, specPos)
-                
-                if specHp and specHp > 0 then
-                    if creature:canShoot() then
-                        if not agressorTarget or specHp < agressorHp or (specHp == agressorHp and specDist < agressorDist) then
-                            agressorTarget = creature
-                            agressorHp = specHp
-                            agressorDist = specDist
-                        end
-                    end
-                end
-            end
-        end
-    end
-    if agressorTarget then
-        if not botsDesligadosPeloPVP then
-            if CaveBot and CaveBot.setOff then CaveBot.setOff() end
-            if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
-            definirModoAtaque("balanced")
-            
-            definirSafeFightBox(true)       
-            if g_game.setChaseMode then pcall(function() g_game.setChaseMode(1) end) end
-
-            botsDesligadosPeloPVP = true
-        end
-        if g_game.getAttackingCreature() ~= agressorTarget then
-            pcall(function()
-                modules.game_interface.processMouseAction(nil, 2, myPos, nil, agressorTarget, agressorTarget)
-            end)
-        end
-    else
-        if botsDesligadosPeloPVP then
-            local alvoAtualJogo = g_game.getAttackingCreature()
-            if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
-                definirSafeFightBox(false)           
-                definirModoAtaque("offensive")
-                
-                if g_game.setChaseMode then pcall(function() g_game.setChaseMode(0) end) end
-                if CaveBot and CaveBot.setOn then CaveBot.setOn() end
-                if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
-                
-                botsDesligadosPeloPVP = false
-            end
-        end
-    end
-end)
 UI.Separator()
 --Auto Boost
 local panelName = "AutoBoost"
@@ -545,6 +150,433 @@ macro(100, function()
             end
         end
     end
+end)
+UI.Separator()
+--Deposit Gold & Stack Items
+macro(250, "DepositGold & StackItems", function()
+  if not g_game.isOnline() then return end
+  local coinIds = {3031, 3035, 3043, 10137} 
+  local minAmount = 1
+  local shouldDeposit = false
+  
+  for _, id in ipairs(coinIds) do
+    local item = findItem(id)
+    if item and item:getCount() >= minAmount then
+      shouldDeposit = true
+      break
+    end
+  end
+  if shouldDeposit then
+    say("!deposit all")
+    delay(500)
+    return
+  end
+  local containers = g_game.getContainers()
+  local itensMapeados = {}
+  for _, container in pairs(containers) do
+    for slotIndex, item in ipairs(container:getItems()) do
+      if item:isStackable() and item:getCount() < 10000 then
+        local itemId = item:getId()
+        local count = item:getCount()
+        local posicaoAtual = container:getSlotPosition(slotIndex - 1)
+
+        if not itensMapeados[itemId] or count > itensMapeados[itemId].count then
+          itensMapeados[itemId] = {
+            posicao = posicaoAtual,
+            count = count
+          }
+        end
+      end
+    end
+  end
+  for _, container in pairs(containers) do
+    for slotIndex, item in ipairs(container:getItems()) do
+      if item:isStackable() and item:getCount() < 10000 then
+        local itemId = item:getId()
+        local destino = itensMapeados[itemId]
+
+        if destino then
+          local posicaoAtual = container:getSlotPosition(slotIndex - 1)
+
+          if posicaoAtual.x ~= destino.posicao.x or posicaoAtual.y ~= destino.posicao.y or posicaoAtual.slot ~= destino.posicao.slot then
+            g_game.move(item, destino.posicao, item:getCount())
+            delay(150)
+            return "retry"
+          end
+        end
+      end
+    end
+  end
+end)
+--Auto Dodge
+local effectIdToAvoid = 237
+local flags = { ignoreNonPathable = true }
+function hasEffect(tile, effectId)
+    if not tile then return false end
+    for _, effect in ipairs(tile:getEffects()) do
+        if effect:getId() == effectId then
+            return true
+        end
+    end
+    return false
+end
+function findNearestSafePosition(playerPos, maxRange)
+    maxRange = maxRange or 7
+    for r = 1, maxRange do
+        for dx = -r, r do
+            for dy = -r, r do
+                if math.abs(dx) == r or math.abs(dy) == r then
+                    local newPos = {x = playerPos.x + dx, y = playerPos.y + dy, z = playerPos.z}
+                    local tile = g_map.getTile(newPos)
+
+                    if tile and tile:isWalkable() and not hasEffect(tile, effectIdToAvoid) then
+                        if findPath(playerPos, newPos, 10, flags) then
+                            return newPos
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+macro(30, "Dodge Red SQM Spells", function()
+    if player:isWalking() then return end
+
+    local playerPos = player:getPosition()
+    local currentTile = g_map.getTile(playerPos)
+
+    if not currentTile or not hasEffect(currentTile, effectIdToAvoid) then
+        return
+    end
+
+    local safePos = findNearestSafePosition(playerPos)
+    if safePos then
+        autoWalk(safePos, 3, flags) 
+        delay(200)
+    end
+end)
+--Auto GrandFisher Mask
+gfmask = macro(100, "GrandFisher Mask", function()
+    if not g_game.isAttacking() and not g_game.getAttackingCreature() then
+        return
+    end
+    local helmet = getSlot(1)
+    if helmet then
+        use(helmet)
+        delay(10000)
+    end
+end)
+--Auto Enter Dungeon
+local window_name = "Dungeons"
+macro(2000, "Enter Dungeons", function()
+    for _, rootW in pairs(g_ui.getRootWidget():getChildren()) do
+        if rootW:getText() and string.find(rootW:getText():lower(), window_name:lower()) then
+            for _, child in pairs(rootW:getChildren()) do
+                if child:getText() == "Start" then
+                    child:onClick()
+                    break
+                end
+            end
+            break
+        end
+    end
+end)
+--Auto Attack House Trainer
+if not storage.trainerMacroPauseUntil then
+  storage.trainerMacroPauseUntil = 0
+end
+onWalk(function(direction)
+    storage.trainerMacroPauseUntil = os.time() + 1
+end)
+
+local trainerMacro = macro(100, "House Trainer", function(macroObj)
+  if os.time() < storage.trainerMacroPauseUntil then
+    return
+  end
+  if modules.game_npctrade and modules.game_npctrade.isOpen and modules.game_npctrade.isOpen() then
+    return
+  end
+  local myPos = player:getPosition()
+  if not myPos then return end
+  local hasTrainer = false
+  for _, creature in ipairs(getSpectators()) do
+    if creature:getName():lower() == "house trainer" then
+      hasTrainer = true
+      break
+    end
+  end
+  if not hasTrainer then 
+    return 
+  end
+  if g_game.isAttacking() then
+    local currentTarget = g_game.getAttackingCreature()
+    
+    if currentTarget and currentTarget:getName():lower() == "house trainer" then
+      local targetPos = currentTarget:getPosition()
+      if targetPos then
+        local currentDistance = math.max(math.abs(myPos.x - targetPos.x), math.abs(myPos.y - targetPos.y))
+        if currentDistance > 1 and currentDistance <= 2 then
+          g_game.setChaseMode(0) 
+          
+          local diffX = targetPos.x - myPos.x
+          local diffY = targetPos.y - myPos.y
+          
+          if diffX ~= 0 and math.abs(diffX) >= math.abs(diffY) then
+              if diffX > 0 then g_game.walk(1) else g_game.walk(3) end
+          elseif diffY ~= 0 then
+              if diffY > 0 then g_game.walk(2) else g_game.walk(0) end
+          end
+        elseif currentDistance > 2 then
+          g_game.cancelAttack()
+        end
+      end
+    end
+    return 
+  end
+  local closestTrainer = nil
+  local shortestDistance = 7
+  
+  for _, creature in ipairs(getSpectators()) do
+    if creature:getName():lower() == "house trainer" then
+      local trainerPos = creature:getPosition()
+      if trainerPos then
+        local distance = math.max(math.abs(myPos.x - trainerPos.x), math.abs(myPos.y - trainerPos.y))
+        if distance <= 2 and distance < shortestDistance then
+          shortestDistance = distance
+          closestTrainer = creature
+        end
+      end
+    end
+  end
+  if closestTrainer then
+    g_game.attack(closestTrainer)
+  end
+end)
+-- Revide PK
+local botsDesligadosPeloPVP = false
+local function definirSafeFightBox(deveAtivar)
+    local mapPanel = modules.game_interface and modules.game_interface.gameMapPanel
+    local root = mapPanel and mapPanel:getParent()
+    if root then
+        local pvpButton = root:recursiveGetChildById('safeFightBox')
+        if pvpButton then
+            local estaAtivo = pvpButton:isOn()
+            if (deveAtivar and not estaAtivo) or (not deveAtivar and estaAtivo) then
+                pcall(function() pvpButton:onClick() end)
+            end
+        end
+    end
+end
+local function definirModoAtaque(modo)
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end
+    
+    local idBotao = ""
+    if modo == "balanced" then
+        idBotao = "fightBalancedBox"
+    elseif modo == "offensive" then
+        idBotao = "fightOffensiveBox"
+    end
+    
+    local targetButton = rootWidget:recursiveGetChildById(idBotao)
+    if targetButton then
+        pcall(function() targetButton:onClick() end)
+    end
+end
+macro(100, 'Revide PK', function()
+    local myPos = pos()
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer then return end
+    local agressorTarget = nil
+    local agressorHp = 101
+    local agressorDist = 100
+    for _, creature in ipairs(getSpectators(myPos)) do
+        if creature:isPlayer() and creature ~= localPlayer then
+            
+            local estaMeAtacando = false
+            if creature.isAttacking then
+                estaMeAtacando = creature:isAttacking()
+            else
+                estaMeAtacando = (g_game.getAttackingCreature() == creature or creature:isTimedSquareVisible())
+            end
+            if estaMeAtacando then
+                local specHp = creature:getHealthPercent()
+                local specPos = creature:getPosition()
+                local specDist = getDistanceBetween(myPos, specPos)
+                
+                if specHp and specHp > 0 then
+                    if creature:canShoot() then
+                        if not agressorTarget or specHp < agressorHp or (specHp == agressorHp and specDist < agressorDist) then
+                            agressorTarget = creature
+                            agressorHp = specHp
+                            agressorDist = specDist
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if agressorTarget then
+        if not botsDesligadosPeloPVP then
+            if CaveBot and CaveBot.setOff then CaveBot.setOff() end
+            if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
+            definirModoAtaque("balanced")
+            
+            definirSafeFightBox(true)       
+            if g_game.setChaseMode then pcall(function() g_game.setChaseMode(1) end) end
+
+            botsDesligadosPeloPVP = true
+        end
+        if g_game.getAttackingCreature() ~= agressorTarget then
+            pcall(function()
+                modules.game_interface.processMouseAction(nil, 2, myPos, nil, agressorTarget, agressorTarget)
+            end)
+        end
+    else
+        if botsDesligadosPeloPVP then
+            local alvoAtualJogo = g_game.getAttackingCreature()
+            if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
+                definirSafeFightBox(false)           
+                definirModoAtaque("offensive")
+                
+                if g_game.setChaseMode then pcall(function() g_game.setChaseMode(0) end) end
+                if CaveBot and CaveBot.setOn then CaveBot.setOn() end
+                if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
+                
+                botsDesligadosPeloPVP = false
+            end
+        end
+    end
+end)
+UI.Separator()
+--Smart Follow
+local Objects = { 
+    -- Escadas de Madeira e Pranchas Tradicionais
+    1385, 1386, 1387, 1388, 369, 370, 434, 435, 1948, 5543, 7725, 19183, 19184,
+    -- Bueiros (Sewers), Grelhas, Tampas de Esgoto e Grades de Bueiro
+    411, 412, 413, 414, 432, 433, 459, 460, 475, 476, 479, 480, 2984, 2985, 5732,
+    -- Rampas (Pedra, Barro, Areia, Gelo, Montanha, Cristal, Earth, Sandstone)
+    1389, 1391, 1393, 1395, 1397, 1399, 1401, 1403, 1405, 3131, 3132, 3133, 3134,
+    4526, 4527, 4528, 4529, 4530, 4531, 4532, 4533, 4534, 4535, 4536, 4537, 4538,
+    4834, 4835, 4836, 4837, 6909, 6911, 6913, 6915, 8376, 8377, 8593, 8632, 15687,
+    -- Spots de Corda, Buracos com Corda Enroscada e Estacas (Rope Places)
+    384, 415, 416, 417, 418, 419, 420, 421, 422, 423, 424, 425, 426, 427, 428, 
+    482, 483, 484, 485, 1311, 1312, 1724, 1726, 2982, 5734, 8567, 10604, 10605,
+    -- Escadas de Pedra, Escadas em Caracol, Pirâmides e Ruínas de Cidades
+    361, 362, 363, 364, 365, 366, 367, 368, 471, 472, 473, 474, 1407, 1409, 1411, 
+    1728, 1730, 1731, 1754, 1755, 6085, 6086, 6087, 6088, 6896, 6897, 6898, 6900,
+    -- Escadas Metálicas, Andaimes, Corrimãos de Parede e Rungs
+    6263, 6265, 11442, 11443, 20114, 20115, 22285, 22286, 24197, 24198, 24323
+}
+local Doors = {7727, 8265, 1629, 1632, 5129, 5120, 8266, 7728, 5102, 5111}
+
+local toFollowPos = {}
+local activeLeaderName = ""
+
+macro(30, "Follow Party Leader", function() 
+    if not g_game.isOnline() then return end
+    
+    local myPlayer = g_game.getLocalPlayer()
+    if not myPlayer or myPlayer:isWalking() then return end
+
+    local myPos = pos()
+    local target = nil
+
+    -- Procura automaticamente pelo Líder da Party na tela
+    for _, spec in ipairs(getSpectators(myPos)) do
+        if spec:isPlayer() and spec:isPartyLeader() then
+            target = spec
+            activeLeaderName = spec:getName() -- Armazena o nome para o rastreador de passos
+            break
+        end
+    end
+
+    if target then
+        local tpos = target:getPosition()
+        toFollowPos[tpos.z] = tpos
+        if getDistanceBetween(myPos, tpos) <= 1 then 
+            return 
+        end
+        if getDistanceBetween(myPos, tpos) > 2 then
+            for _, doorId in ipairs(Doors) do
+                for x = -1, 1 do
+                    for y = -1, 1 do
+                        local checkPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
+                        local tile = g_map.getTile(checkPos)
+                        if tile then
+                            for _, item in ipairs(tile:getItems()) do
+                                if item:getId() == doorId then
+                                    g_game.use(item)
+                                    return
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        autoWalk(tpos, 20, { ignoreNonPathable = true, precision = 1 })
+        return
+    end
+
+    -- Se o líder sumiu da tela ou mudou de andar, segue o rastro dele
+    local lastLeaderPosInMyFloor = toFollowPos[myPos.z]
+    if lastLeaderPosInMyFloor then
+        if getDistanceBetween(myPos, lastLeaderPosInMyFloor) > 0 then
+            autoWalk(lastLeaderPosInMyFloor, 20, { ignoreNonPathable = true, precision = 0 })
+            return
+        end
+        for _, objectId in ipairs(Objects) do
+            for x = -1, 1 do
+                for y = -1, 1 do
+                    local searchPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
+                    local tile = g_map.getTile(searchPos)
+                    if tile then
+                        for _, item in ipairs(tile:getItems()) do
+                            if item:getId() == objectId then
+                                g_game.use(item)
+                                return
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+onPlayerPositionChange(function(newPos, oldPos)
+    if g_game.isFollowing() then
+        local tfollow = g_game.getFollowingCreature()
+        if tfollow and tfollow:isPartyLeader() then
+            activeLeaderName = tfollow:getName()
+        end
+    end
+end)
+
+onCreaturePositionChange(function(creature, newPos, oldPos)
+    if not newPos then return end
+    if activeLeaderName ~= "" and creature:getName() == activeLeaderName then
+        toFollowPos[newPos.z] = newPos
+    end
+end)
+--auto invite pt from guild
+macro(100, "Auto Party Invite", function()
+for i,v in ipairs (getSpectators(posz())) do
+    if v ~= player and v:isPlayer() and v:getShield() == 0 and v:getEmblem() == 1 then
+        g_game.partyInvite(v:getId())
+    end
+end
+end)
+--auto accept pt from guild
+macro(100, "Auto Party Join", function()
+for i,v in ipairs (getSpectators(posz())) do
+    if v ~= player and v:isPlayer() and v:getShield() == 1 and v:getEmblem() == 1 then
+        g_game.partyJoin(v:getId())
+    end
+end
 end)
 UI.Separator()
 UI.Button("Screen: +  Zoom", function() zoomIn() end)
