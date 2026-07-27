@@ -346,15 +346,49 @@ macro(100, 'Revide PK', function()
 end)
 UI.Separator()
 --Eat Food
-macro(100, "Eat Food", function()
-  if isInPz() then return end
-  if storage.idcomida and storage.idcomida ~= "" then
-    use(tonumber(storage.idcomida))
-    delay(10000)
-  end
-end)
-UI.TextEdit(storage.idcomida or "id da food", function(widget, text)    
-  storage.idcomida = text
+local panelName = "AutoFood"
+storage[panelName] = storage[panelName] or {enabled = false}
+local config = storage[panelName]
+
+local ui = setupUI([[
+Panel
+  height: 58
+
+  BotSwitch
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: Auto Food
+
+  BotItem
+    id: item
+    anchors.top: prev.bottom
+    anchors.horizontalCenter: prev.horizontalCenter
+    margin-top: 5
+    width: 34
+    height: 34
+]])
+
+storage.foodItem = storage.foodItem or 3577
+ui.item:setItemId(storage.foodItem)
+
+ui.item.onItemChange = function(widget)
+    storage.foodItem = widget:getItemId()
+end
+ui.title:setOn(config.enabled)
+ui.title.onClick = function(widget)
+    config.enabled = not config.enabled
+    widget:setOn(config.enabled)
+end
+macro(10000, function()
+    -- Não faz nada se estiver desativado ou se o personagem estiver em PZ
+    if not config.enabled or isInPz() then return end
+
+    local food = findItem(storage.foodItem)
+    if food then
+        g_game.use(food)
+    end
 end)
 UI.Separator()
 --Enemy
