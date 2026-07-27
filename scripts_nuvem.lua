@@ -448,6 +448,105 @@ macro(100, 'Revide PK', function()
     end
 end)
 UI.Separator()
+--Auto Boost
+local panelName = "AutoBoost"
+storage[panelName] = storage[panelName] or {enabled = false}
+local config = storage[panelName]
+
+local ui = setupUI([[
+Panel
+  height: 58
+
+  BotSwitch
+    id: titleBoost
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: Auto Boost
+
+  BotItem
+    id: boostItem2
+    anchors.top: titleBoost.bottom
+    anchors.horizontalCenter: titleBoost.horizontalCenter
+    margin-top: 5
+    width: 34
+    height: 34
+
+  BotItem
+    id: boostItem1
+    anchors.top: titleBoost.bottom
+    anchors.right: boostItem2.left
+    margin-top: 5
+    margin-right: 2
+    width: 34
+    height: 34
+
+  BotItem
+    id: boostItem3
+    anchors.top: titleBoost.bottom
+    anchors.left: boostItem2.right
+    margin-top: 5
+    margin-left: 2
+    width: 34
+    height: 34
+]])
+
+-- Inicialização dos Storages específicos para os Boosts (Todos iniciam vazios em 0)
+storage.boostId1 = storage.boostId1 or 0
+storage.boostId2 = storage.boostId2 or 0
+storage.boostId3 = storage.boostId3 or 0
+
+ui.boostItem1:setItemId(storage.boostId1)
+ui.boostItem2:setItemId(storage.boostId2)
+ui.boostItem3:setItemId(storage.boostId3)
+
+-- Gerenciadores de mudança de item por clique/arraste
+ui.boostItem1.onItemChange = function(widget)
+    storage.boostId1 = widget:getItemId()
+end
+
+ui.boostItem2.onItemChange = function(widget)
+    storage.boostId2 = widget:getItemId()
+end
+
+ui.boostItem3.onItemChange = function(widget)
+    storage.boostId3 = widget:getItemId()
+end
+
+-- Botão de Ativar/Desativar
+ui.titleBoost:setOn(config.enabled)
+ui.titleBoost.onClick = function(widget)
+    config.enabled = not config.enabled
+    widget:setOn(config.enabled)
+end
+
+-- Tabela interna para controlar o tempo de reuso (1 hora e 10 segundos por slot)
+local boostCooldowns = {0, 0, 0}
+
+-- Execução da Macro rodando a cada 100ms para precisão de clique
+macro(100, function()
+    -- Não faz nada se estiver desativado ou se o personagem estiver em PZ
+    if not config.enabled or isInPz() then return end
+
+    local currentTime = now
+    local boostIds = {storage.boostId1, storage.boostId2, storage.boostId3}
+
+    for index, id in ipairs(boostIds) do
+        -- Apenas processa se o slot tiver um ID válido maior que 0
+        if id and id > 0 then
+            -- Cooldown: 1 hora (3600000ms) + 10 segundos (10000ms) = 3610000ms
+            if currentTime - boostCooldowns[index] >= 3610000 then
+                local boostItem = findItem(id)
+                if boostItem then
+                    g_game.use(boostItem)
+                    boostCooldowns[index] = currentTime -- Registra o milissegundo de uso do boost
+                    break -- Uso único por ciclo de 100ms para manter o intervalo solicitado entre itens distintos
+                end
+            end
+        end
+    end
+end)
+UI.Separator()
 UI.Button("Screen: +  Zoom", function() zoomIn() end)
 UI.Button("Screen: -  Zoom", function() zoomOut() end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
