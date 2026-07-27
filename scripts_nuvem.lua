@@ -61,6 +61,112 @@ macro(100, "GrandFisher Mask", function()
         delay(10000)
     end
 end)
+--Smart Follow
+local Objects = { 
+    -- Escadas de Madeira e Pranchas Tradicionais
+    1385, 1386, 1387, 1388, 369, 370, 434, 435, 1948, 5543, 7725, 19183, 19184,
+    -- Bueiros (Sewers), Grelhas, Tampas de Esgoto e Grades de Bueiro
+    411, 412, 413, 414, 432, 433, 459, 460, 475, 476, 479, 480, 2984, 2985, 5732,
+    -- Rampas (Pedra, Barro, Areia, Gelo, Montanha, Cristal, Earth, Sandstone)
+    1389, 1391, 1393, 1395, 1397, 1399, 1401, 1403, 1405, 3131, 3132, 3133, 3134,
+    4526, 4527, 4528, 4529, 4530, 4531, 4532, 4533, 4534, 4535, 4536, 4537, 4538,
+    4834, 4835, 4836, 4837, 6909, 6911, 6913, 6915, 8376, 8377, 8593, 8632, 15687,
+    -- Spots de Corda, Buracos com Corda Enroscada e Estacas (Rope Places)
+    384, 415, 416, 417, 418, 419, 420, 421, 422, 423, 424, 425, 426, 427, 428, 
+    482, 483, 484, 485, 1311, 1312, 1724, 1726, 2982, 5734, 8567, 10604, 10605,
+    -- Escadas de Pedra, Escadas em Caracol, Pirâmides e Ruínas de Cidades
+    361, 362, 363, 364, 365, 366, 367, 368, 471, 472, 473, 474, 1407, 1409, 1411, 
+    1728, 1730, 1731, 1754, 1755, 6085, 6086, 6087, 6088, 6896, 6897, 6898, 6900,
+    -- Escadas Metálicas, Andaimes, Corrimãos de Parede e Rungs
+    6263, 6265, 11442, 11443, 20114, 20115, 22285, 22286, 24197, 24198, 24323
+}
+local Doors = {7727, 8265, 1629, 1632, 5129, 5120, 8266, 7728, 5102, 5111}
+
+local toFollowPos = {}
+local activeLeaderName = ""
+macro(30, "Follow Party Leader", function() 
+    if not g_game.isOnline() then return end
+    
+    local myPlayer = g_game.getLocalPlayer()
+    if not myPlayer or myPlayer:isWalking() then return end
+
+    local myPos = pos()
+    local target = nil
+    for _, spec in ipairs(getSpectators(myPos)) do
+        if spec:isPlayer() and spec:isPartyLeader() then
+            target = spec
+            activeLeaderName = spec:getName()
+            break
+        end
+    end
+
+    if target then
+        local tpos = target:getPosition()
+        toFollowPos[tpos.z] = tpos
+        if getDistanceBetween(myPos, tpos) <= 1 then 
+            return 
+        end
+        if getDistanceBetween(myPos, tpos) > 2 then
+            for _, doorId in ipairs(Doors) do
+                for x = -1, 1 do
+                    for y = -1, 1 do
+                        local checkPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
+                        local tile = g_map.getTile(checkPos)
+                        if tile then
+                            for _, item in ipairs(tile:getItems()) do
+                                if item:getId() == doorId then
+                                    g_game.use(item)
+                                    return
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        autoWalk(tpos, 20, { ignoreNonPathable = true, precision = 1 })
+        return
+    end
+    local lastLeaderPosInMyFloor = toFollowPos[myPos.z]
+    if lastLeaderPosInMyFloor then
+        if getDistanceBetween(myPos, lastLeaderPosInMyFloor) > 0 then
+            autoWalk(lastLeaderPosInMyFloor, 20, { ignoreNonPathable = true, precision = 0 })
+            return
+        end
+        for _, objectId in ipairs(Objects) do
+            for x = -1, 1 do
+                for y = -1, 1 do
+                    local searchPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
+                    local tile = g_map.getTile(searchPos)
+                    if tile then
+                        for _, item in ipairs(tile:getItems()) do
+                            if item:getId() == objectId then
+                                g_game.use(item)
+                                return
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+onPlayerPositionChange(function(newPos, oldPos)
+    if g_game.isFollowing() then
+        local tfollow = g_game.getFollowingCreature()
+        if tfollow and tfollow:isPartyLeader() then
+            activeLeaderName = tfollow:getName()
+        end
+    end
+end)
+
+onCreaturePositionChange(function(creature, newPos, oldPos)
+    if not newPos then return end
+    if activeLeaderName ~= "" and creature:getName() == activeLeaderName then
+        toFollowPos[newPos.z] = newPos
+    end
+end)
 --Dodge Red SQM
 local effectIdToAvoid = 237
 local flags = { ignoreNonPathable = true }
@@ -73,8 +179,6 @@ function hasEffect(tile, effectId)
     end
     return false
 end
-
--- Recorre en círculos concéntricos desde 1 sqm hasta maxRange
 function findNearestSafePosition(playerPos, maxRange)
     maxRange = maxRange or 7  -- menos rango = más rápido
     for r = 1, maxRange do
@@ -391,179 +495,6 @@ macro(10000, function()
     end
 end)
 UI.Separator()
---Enemy
-if not storage.ignoredPlayers then
-    storage.ignoredPlayers = "ignore1,ignore2"
-end
-local function isPlayerIgnored(name)
-    local cleanedName = name:lower():trim()
-    for ignoredName in string.gmatch(storage.ignoredPlayers, "[^,]+") do
-        if ignoredName:lower():trim() == cleanedName then
-            return true
-        end
-    end
-    return false
-end
-local function definirModoAtaque(modo)
-    local rootWidget = g_ui.getRootWidget()
-    if not rootWidget then return end 
-    local idBotao = ""
-    if modo == "balanced" then
-        idBotao = "fightBalancedBox"
-    elseif modo == "offensive" then
-        idBotao = "fightOffensiveBox"
-    end
-    local targetButton = rootWidget:recursiveGetChildById(idBotao)
-    if targetButton then
-        pcall(function() targetButton:onClick() end)
-    end
-end
-local estadoAnteriorMacro = false
-enemy = macro(30, 'Enemy', "SHIFT+3", function()
-    if not estadoAnteriorMacro then
-        definirModoAtaque("balanced")
-        estadoAnteriorMacro = true
-        print("[Enemy] Macro Ligada! Modo Balanced Setado.")
-    end
-    local myPos = pos()
-    local actualTarget
-    local actualTargetHp = 101
-    local actualTargetDist = 10
-    for _, creature in ipairs(getSpectators(myPos)) do
-        local specHp = creature:getHealthPercent()
-        local specPos = creature:getPosition()
-        local specName = creature:getName()       
-        if (creature:isPlayer() and specHp and specHp > 0) then
-            local specSkull = creature:getSkull()
-            if (specSkull == 1 or specSkull == 4) then
-                if not isPlayerIgnored(specName) then
-                    if (creature:getEmblem() ~= 1 and creature:getShield() < 3 and creature ~= player) then
-                        if creature:canShoot() then
-                            local specDist = getDistanceBetween(myPos, specPos)
-                            if not actualTarget or specHp < actualTargetHp or (specHp == actualTargetHp and specDist < actualTargetDist) then
-                                actualTarget = creature
-                                actualTargetPos = specPos
-                                actualTargetHp = specHp
-                                actualTargetDist = specDist
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    if actualTarget and g_game.getAttackingCreature() ~= actualTarget then
-        modules.game_interface.processMouseAction(nil, 2, myPos, nil, actualTarget, actualTarget)
-    end
-end)
-macro(250, function()
-    if enemy and not enemy.isOn() and estadoAnteriorMacro then
-        definirModoAtaque("offensive")
-        estadoAnteriorMacro = false
-        print("[Enemy] Macro Desligada! Modo Offensive Restaurado.")
-    end
-end)
-local ignoreInput = UI.TextEdit(storage.ignoredPlayers or "", function(widget, text)
-    storage.ignoredPlayers = text
-end)
-ignoreInput:setHeight(25)
-UI.Separator()
---Smart Follow
-local Objects = {
-    435, 1948, 432, 433, 412, 413, 421, 422, 423, 424, 425, 426, 476, 475, 479, 480, 
-    369, 370, 411, 414, 434, 459, 469, 470, 8559, 8560, 1968, 7476, 482, 484, 485
-}
-local Doors = {7727, 8265, 1629, 1632, 5129, 5120, 8266, 7728, 5102, 5111}
-
-if not storage.autoFollowConfig then 
-    storage.autoFollowConfig = { player = "name" } 
-end
-
-local toFollowPos = {}
-
-macro(30, "Smart Follow", function() 
-    if not g_game.isOnline() then return end
-    
-    local myPlayer = g_game.getLocalPlayer()
-    if not myPlayer or myPlayer:isWalking() then return end
-
-    local leaderName = storage.autoFollowConfig.player
-    local target = getCreatureByName(leaderName)
-    local myPos = pos()
-    if target then
-        local tpos = target:getPosition()
-        toFollowPos[tpos.z] = tpos
-        if getDistanceBetween(myPos, tpos) <= 1 then 
-            return 
-        end
-        if getDistanceBetween(myPos, tpos) > 2 then
-            for _, doorId in ipairs(Doors) do
-                for x = -1, 1 do
-                    for y = -1, 1 do
-                        local checkPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
-                        local tile = g_map.getTile(checkPos)
-                        if tile then
-                            for _, item in ipairs(tile:getItems()) do
-                                if item:getId() == doorId then
-                                    g_game.use(item)
-                                    return
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        autoWalk(tpos, 20, { ignoreNonPathable = true, precision = 1 })
-        return
-    end
-    local lastLeaderPosInMyFloor = toFollowPos[myPos.z]
-    if lastLeaderPosInMyFloor then
-        if getDistanceBetween(myPos, lastLeaderPosInMyFloor) > 0 then
-            autoWalk(lastLeaderPosInMyFloor, 20, { ignoreNonPathable = true, precision = 0 })
-            return
-        end
-        for _, objectId in ipairs(Objects) do
-            for x = -1, 1 do
-                for y = -1, 1 do
-                    local searchPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
-                    local tile = g_map.getTile(searchPos)
-                    if tile then
-                        for _, item in ipairs(tile:getItems()) do
-                            if item:getId() == objectId then
-                                g_game.use(item)
-                                return
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-onPlayerPositionChange(function(newPos, oldPos)
-    if g_game.isFollowing() then
-        local tfollow = g_game.getFollowingCreature()
-        if tfollow then
-            local currentTargetName = tfollow:getName()
-            if currentTargetName ~= storage.autoFollowConfig.player then
-                followTE:setText(currentTargetName)
-                storage.autoFollowConfig.player = currentTargetName
-            end
-        end
-    end
-end)
-onCreaturePositionChange(function(creature, newPos, oldPos)
-    if not newPos then return end
-    if creature:getName() == storage.autoFollowConfig.player then
-        toFollowPos[newPos.z] = newPos
-    end
-end)
-local followTE = UI.TextEdit(storage.autoFollowConfig.player, function(widget, newText)
-    storage.autoFollowConfig.player = newText
-end)
-followTE:setHeight(25)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 --Ice Hud HP Percent
 macro(100, function()
@@ -2135,6 +2066,70 @@ end)
 if chaseatk and chaseatk.setOff then
     chaseatk.setOff()
 end
+--enemy
+local function definirModoAtaque(modo)
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end 
+    local idBotao = ""
+    if modo == "balanced" then
+        idBotao = "fightBalancedBox"
+    elseif modo == "offensive" then
+        idBotao = "fightOffensiveBox"
+    end
+    local targetButton = rootWidget:recursiveGetChildById(idBotao)
+    if targetButton then
+        pcall(function() targetButton:onClick() end)
+    end
+end
+local estadoAnteriorMacro = false
+enemy = macro(30, 'Enemy', "SHIFT+3", function()
+    if not estadoAnteriorMacro then
+        definirModoAtaque("balanced")
+        estadoAnteriorMacro = true
+        print("[Enemy] Macro Ligada! Modo Balanced Setado.")
+    end
+    local myPos = pos()
+    local localPlayer = g_game.getLocalPlayer()
+    local actualTarget
+    local actualTargetHp = 101
+    local actualTargetDist = 10
+    for _, creature in ipairs(getSpectators(myPos)) do
+        local specHp = creature:getHealthPercent()
+        local specPos = creature:getPosition()
+        
+        if (creature:isPlayer() and specHp and specHp > 0) then
+            local specSkull = creature:getSkull()
+            local specShield = creature:getShield() -- Detecta o escudo de Party
+            
+            -- Verifica se o player tem alguma skull de PK (1 = White, 4 = Red)
+            if (specSkull == 1 or specSkull == 4) then
+                -- REGRA DA PARTY: Só ataca se o jogador NÃO tiver escudo de party (specShield == 0)
+                if (specShield == 0 and creature:getEmblem() ~= 1 and creature ~= localPlayer) then
+                    if creature:canShoot() then
+                        local specDist = getDistanceBetween(myPos, specPos)
+                        if not actualTarget or specHp < actualTargetHp or (specHp == actualTargetHp and specDist < actualTargetDist) then
+                            actualTarget = creature
+                            actualTargetPos = specPos
+                            actualTargetHp = specHp
+                            actualTargetDist = specDist
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    if actualTarget and g_game.getAttackingCreature() ~= actualTarget then
+        modules.game_interface.processMouseAction(nil, 2, myPos, nil, actualTarget, actualTarget)
+    end
+end)
+macro(250, function()
+    if enemy and not enemy.isOn() and estadoAnteriorMacro then
+        definirModoAtaque("offensive")
+        estadoAnteriorMacro = false
+        print("[Enemy] Macro Desligada! Modo Offensive Restaurado.")
+    end
+end)
 --X-Sense
 if type(storage.Sense) ~= "string" then
     storage.Sense = ""
