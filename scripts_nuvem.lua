@@ -2647,36 +2647,76 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
---NewTargetSystem
+-- NewTargetSystem (Reestruturado com Pausa Limpa de Movimento)
 if hasSpecialMob == nil then hasSpecialMob = false end
-if previousChaseMode == nil then previousChaseMode = 0 end
 if lastWalkState == nil then lastWalkState = "normal" end
 
+-- 1. CONTROLE DE MOVIMENTAÇÃO (Apenas pausa a caminhada, mantém o CaveBot ligado)
 macro(50, function()
     if hasSpecialMob and CaveBot and CaveBot.isOn() then
         if lastWalkState ~= "delayed" then
-            if CaveBot.setWalking then CaveBot.setWalking(false) end
+            -- Pausa apenas a caminhada ativa dos waypoints, mantendo o CaveBot ON
+            if CaveBot.setWalking then CaveBot.setWalking(false) end 
             lastWalkState = "delayed"
         end
     else
         if CaveBot and CaveBot.isOn() then
             if lastWalkState == "delayed" then
                 if g_game.setWalkDelay then g_game.setWalkDelay(1) end
-                if CaveBot.setWalking then CaveBot.setWalking(true) end
+                -- Retoma a caminhada dos waypoints automaticamente
+                if CaveBot.setWalking then CaveBot.setWalking(true) end 
                 lastWalkState = "normal"
             end
         end
     end
 end)
 
+-- 2. CÁLCULO DE PRIORIDADE E COMPORTAMENTO DE ATAQUE
 TargetBot.Creature.calculatePriority = function(creature, config, path)
   local localPlayer = g_game.getLocalPlayer()
   if not localPlayer then return 0 end
   local myPos = localPlayer:getPosition()
   
-  -- VARIAVEL DE CONTROLE LOCAL: Reinicia apenas no começo de cada ciclo completo
-  local encontrouSpecialNesteCiclo = false
-  
+  local spectators = g_map.getSpectators(myPos, false)
+  local existeSpecialLivreNaTela = false
+
+  -- Varredura prévia para identificar se existe um SpecialMob livre na tela
+  if spectators then
+    for _, specCreature in ipairs(spectators) do
+      if specCreature:isMonster() then
+        local name = specCreature:getName():lower()
+        if name:find("elite") or name:find("boss") or name:find("hollow capitan shinigami") or 
+           name:find("complete espada") or name:find("gotei 13 king") or name:find("oversaturated hollowed shinigami") then
+           
+           local focadoEmOutro = false
+           for _, playerSpec in ipairs(spectators) do
+             if playerSpec:isPlayer() and playerSpec ~= localPlayer then
+               local rId = playerSpec:getId()
+               if (specCreature.getTarget and specCreature:getTarget() == rId) or
+                  (specCreature.getChasingCreature and specCreature:getChasingCreature() == playerSpec) or
+                  (specCreature.getFollowingCreature and specCreature:getFollowingCreature() == playerSpec) then
+                   focadoEmOutro = true
+               end
+               local rPos = playerSpec:getPosition()
+               local sPos = specCreature:getPosition()
+               if rPos and sPos and math.abs(sPos.x - rPos.x) <= 1 and math.abs(sPos.y - rPos.y) <= 1 then
+                 focadoEmOutro = true
+               end
+             end
+           end
+           
+           if not focadoEmOutro then
+             existeSpecialLivreNaTela = true
+           end
+        end
+      end
+    end
+  end
+
+  -- Sincroniza o sinalizador da macro baseando-se na existência de um Boss livre
+  hasSpecialMob = existeSpecialLivreNaTela
+
+  -- Avaliação do monstro atual pelo TargetBot
   if creature:isMonster() and path then
     local creatureName = creature:getName():lower()
     local isSpecial = false
@@ -2690,63 +2730,45 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
       isSpecial = true
     end
     
-    -- Checagem se o monstro está focado em outro jogador
-    local spectators = g_map.getSpectators(myPos, false)
+    -- CASO TENHAM MONSTROS FOCADOS EM OUTRO PLAYER -> IGNERA E PASSA DIRETO
     if spectators then
-      if isSpecial then
-        for _, spec in ipairs(spectators) do
-          if spec:isPlayer() and spec ~= localPlayer then
-            local rivalId = spec:getId()
-            local isTargetedByOther = false
-            
-            if creature.getTarget and creature:getTarget() == rivalId then
-              isTargetedByOther = true
-            elseif creature.getChasingCreature and creature:getChasingCreature() == spec then
-              isTargetedByOther = true
-            elseif creature.getFollowingCreature and creature:getFollowingCreature() == spec then
-              isTargetedByOther = true
-            end
-            
-            local rivalPos = spec:getPosition()
-            local bPos = creature:getPosition()
-            if rivalPos and bPos and math.abs(bPos.x - rivalPos.x) <= 1 and math.abs(bPos.y - rivalPos.y) <= 1 then
-              isTargetedByOther = true
-            end
+      for _, spec in ipairs(spectators) do
+        if spec:isPlayer() and spec ~= localPlayer then
+          local rivalId = spec:getId()
+          local isTargetedByOther = false
+          
+          if creature.getTarget and creature:getTarget() == rivalId then
+            isTargetedByOther = true
+          elseif creature.getChasingCreature and creature:getChasingCreature() == spec then
+            isTargetedByOther = true
+          elseif creature.getFollowingCreature and creature:getFollowingCreature() == spec then
+            isTargetedByOther = true
+          end
+          
+          local rivalPos = spec:getPosition()
+          local bPos = creature:getPosition()
+          if rivalPos and bPos and math.abs(bPos.x - rivalPos.x) <= 1 and math.abs(bPos.y - rivalPos.y) <= 1 then
+            isTargetedByOther = true
+          end
 
-            -- SE O MONSTRO ESTIVER COM OUTRO PLAYER: Ignora completamente e passa direto
-            if isTargetedByOther then
-              config.priority = -100000 
-              return -100000            
-            end
+          if isTargetedByOther then
+            config.priority = -100000 
+            return -100000 -- Ignora e continua andando pelos waypoints
           end
         end
       end
     end
 
-    -- SE FOR UM SPECIAL MOB LIVRE: Ativa o Chase Mode agressivo
+    -- SE FOR UM SPECIAL MOB LIVRE -> PRIORIDADE 1000 E MODO FOLLOW ATTACK
     if isSpecial then
-      encontrouSpecialNesteCiclo = true
-      hasSpecialMob = true 
-      
-      -- Força o modo de perseguição de todas as formas conhecidas da API do bot
-      config.chaseMode = 1
-      config.chase = true
-      config.strategy = "chase"
-      config.priority = 100000
-      
-      -- Injeta comando direto se o TargetBot global tiver suporte a alteração de chase em tempo real
-      if TargetBot.setChaseMode then TargetBot.setChaseMode(1) end
-      
-      return 100000 
+      config.priority = 1000
+      config.chaseMode = 1 -- Injeta o modo Follow / Chase diretamente na configuração
+      return 1000 
     end
   end
   
-  -- CORREÇÃO: Só desliga o sinalizador se NENHUM SpecialMob foi detectado na execução
-  if not encontrouSpecialNesteCiclo and hasSpecialMob then
-      -- Se o bot tinha mudado o chase global, devolve pro padrão (geralmente 0 ou stand)
-      if TargetBot.setChaseMode then TargetBot.setChaseMode(0) end
-      hasSpecialMob = false
-  end
-  
+  -- CASO SEJA MONSTRO COMUM OU O SPECIAL MORRA -> RETORNA COMPORTAMENTO AO PADRÃO
+  config.chaseMode = 0 -- Stand Attack para criaturas normais
   return 1 
 end
+
