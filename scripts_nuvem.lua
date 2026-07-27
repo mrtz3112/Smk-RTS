@@ -1387,6 +1387,7 @@ macro(1100, function()
     end
 end)
 UI.Separator()
+--Mana Shield
 local panelName = "manabarrier"
 local ui = setupUI([[
 Panel
@@ -1412,7 +1413,6 @@ Panel
     
 ]], parent)
 ui:setId(panelName)
-
 if not storage[panelName] then
   storage[panelName] = {
       title = enabled,
@@ -1421,35 +1421,32 @@ if not storage[panelName] then
       hp = 70
   }
 end
-
 ui.title:setOn(storage[panelName].enabled)
 ui.title.onClick = function(widget)
   storage[panelName].enabled = not storage[panelName].enabled
   widget:setOn(storage[panelName].enabled)
 end
-
 local updateHpText = function()
     if storage[panelName].setting then
     ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
     end
 end
 updateHpText()
-
 ui.HP.onValueChange = function(scroll, value)
   storage[panelName].hp = value
   updateHpText()
 end
 ui.HP:setValue(storage[panelName].hp)
-
 UI.TextEdit(storage.autobarrier or "reiatsu barrier", function(widget, text)    
   storage.autobarrier = text
 end)
-
 local ultimoUsoBarreira = 0
 local DELAY_SEGUNDOS = 46
-
 macro(100, function()
   if not storage[panelName].enabled then return end
+  if storage.smartCastData and storage.smartCastData.calibrando then 
+    return 
+  end
   if storage[panelName].setting then
     if hppercent() <= storage[panelName].hp then
         local tempoAgora = os.time()
