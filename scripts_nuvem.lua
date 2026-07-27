@@ -531,6 +531,9 @@ end)
 followTE:setHeight(25)
 UI.Separator()
 --X-Sense
+if type(storage.Sense) ~= "string" then
+    storage.Sense = ""
+end
 xsense = macro(30, "xSense", "SHIFT+4", function()
     local target = g_game.getAttackingCreature()
     if target and target:isPlayer() then
@@ -541,7 +544,6 @@ xsense = macro(30, "xSense", "SHIFT+4", function()
         delay(10000)
     end
 end)
-
 onTalk(function(...)
     local args = {...}
     local text = nil
@@ -555,12 +557,12 @@ onTalk(function(...)
     end
     if not text then return end
     local msg = text:trim()
- 
     if string.sub(msg, 1, 1):lower() == 'x' then
         local checkMsg = string.sub(msg, 2, #msg):trim()
         
         if checkMsg == '0' then
-            storage.Sense = false
+            storage.Sense = ""
+            modules.game_textmessage.displayStatusMessage("[xSense] Alvo limpado com sucesso!")
         else
             storage.Sense = checkMsg
             say('sense "' .. storage.Sense)
@@ -568,7 +570,6 @@ onTalk(function(...)
         return true
     end
 end)
-
 lastSense = {}
 UI.Button('Configurar xSense', function()
   if lastSense.senseBox then
