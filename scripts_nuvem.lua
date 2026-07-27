@@ -975,16 +975,6 @@ combo = macro(50, "Smart Cast - Activate", function()
         end
     end
 end)
--- Monitora quando você desmarca o botão no bot
-macro(200, function()
-    if combo then 
-        storage.comboEnabled = combo.isOn() 
-        if not combo.isOn() and estadoAnteriorMacro then
-            estadoAnteriorMacro = false
-            print("[Smart Cast] Macro Desligada! O próximo início forçará uma nova calibração a partir de 2000ms.")
-        end
-    end
-end)
 if storage.comboEnabled then combo.setOn() else combo.setOff() end
 UI.Separator()
 UI.Label("Area Spells (2+ Mobs)"):setColor('#FFEA99')
