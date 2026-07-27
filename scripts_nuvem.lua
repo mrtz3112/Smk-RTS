@@ -96,7 +96,7 @@ function findNearestSafePosition(playerPos, maxRange)
     end
     return nil
 end
-macro(60, "Dodge", function()
+macro(60, "Dodge Red SQMs Spells", function()
     local playerPos = player:getPosition()
 
     if not hasEffect(g_map.getTile(playerPos), effectIdToAvoid) then
@@ -529,60 +529,6 @@ local followTE = UI.TextEdit(storage.autoFollowConfig.player, function(widget, n
     storage.autoFollowConfig.player = newText
 end)
 followTE:setHeight(25)
-UI.Separator()
---X-Sense
--- Inicializa a variável do alvo do Sense como String limpa (Anti-Bug JSON)
-if type(storage.Sense) ~= "string" then
-    storage.Sense = ""
-end
-
--- Macro principal: Salva o alvo ao atacar e solta o Sense no jogo
-xsense = macro(30, "xSense", "SHIFT+4", function()
-    local target = g_game.getAttackingCreature()
-    
-    -- Salva automaticamente o nome do player alvo se você o atacar
-    if target and target:isPlayer() then
-        storage.Sense = target:getName()
-    end
-    
-    -- Executa o comando de texto do Sense caso a sua Mana esteja abaixo de 35%
-    if storage.Sense and storage.Sense ~= "" and (manapercent() >= 35) then
-        say('sense "' .. storage.Sense)
-        delay(5000)
-    end
-end)
-
--- Monitor de Chat: Altera ou limpa o alvo por comando (Ex: x Nome / x 0)
-onTalk(function(...)
-    local args = {...}
-    local text = nil
-    for i = 1, #args do
-        if type(args[i]) == "string" and #args[i] > 0 then
-            if not player or args[i] ~= player:getName() then
-                text = args[i]
-                break
-            end
-        end
-    end
-    if not text then return end
-    local msg = text:trim()
-    
-    -- Se a mensagem começar com a letra 'x'
-    if string.sub(msg, 1, 1):lower() == 'x' then
-        local checkMsg = string.sub(msg, 2, #msg):trim()
-        
-        if checkMsg == '0' then
-            -- Limpa o alvo salvando uma string vazia (Evita crash de JSON)
-            storage.Sense = ""
-            modules.game_textmessage.displayStatusMessage("[xSense] Alvo limpado com sucesso!")
-        else
-            -- Define o nome digitado como o novo alvo do seu Sense
-            storage.Sense = checkMsg
-            say('sense "' .. storage.Sense)
-        end
-        return true
-    end
-end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 --Ice Hud HP Percent
 macro(100, function()
@@ -2098,6 +2044,46 @@ end)
 if mwall and mwall.setOff then
     mwall.setOff()
 end
+--X-Sense
+if type(storage.Sense) ~= "string" then
+    storage.Sense = ""
+end
+xsense = macro(30, "xSense", "SHIFT+4", function()
+    local target = g_game.getAttackingCreature()
+    if target and target:isPlayer() then
+        storage.Sense = target:getName()
+    end
+    if storage.Sense and storage.Sense ~= "" and (manapercent() >= 35) then
+        say('sense "' .. storage.Sense)
+        delay(5000)
+    end
+end)
+onTalk(function(...)
+    local args = {...}
+    local text = nil
+    for i = 1, #args do
+        if type(args[i]) == "string" and #args[i] > 0 then
+            if not player or args[i] ~= player:getName() then
+                text = args[i]
+                break
+            end
+        end
+    end
+    if not text then return end
+    local msg = text:trim()
+    if string.sub(msg, 1, 1):lower() == 'x' then
+        local checkMsg = string.sub(msg, 2, #msg):trim()
+        
+        if checkMsg == '0' then
+            storage.Sense = ""
+            modules.game_textmessage.displayStatusMessage("[xSense] Alvo limpado com sucesso!")
+        else
+            storage.Sense = checkMsg
+            say('sense "' .. storage.Sense)
+        end
+        return true
+    end
+end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 
 local pvehud = setupUI([[
@@ -2391,10 +2377,10 @@ macro(100, function()
 
   if pvehud.xsense then
     if xsense.isOn() then
-      pvehud.xsense:setText("~ xSense: [Shift+4]")
+      pvehud.xsense:setText("~ Auto xSense: [Shift+4]")
       pvehud.xsense:setColor("#33ff99")
     else
-      pvehud.xsense:setText("~ xSense: [Shift+4]")
+      pvehud.xsense:setText("~ Auto xSense: [Shift+4]")
       pvehud.xsense:setColor("#ff6666")
     end
   end
@@ -2404,9 +2390,10 @@ macro(100, function()
   if pvehud.skills3 then pvehud.skills3:setText("~ Reiatsu: " .. player:getMagicLevel() .. " - (" .. player:getMagicLevelPercent() .. "%)") end
   if pvehud.skills8 then pvehud.skills8:setText("~ Weapon: " .. player:getSkillLevel(2) .. " - (" .. player:getSkillLevelPercent(2) .. "%)") end
 end)
+
+--CaveBotConfigs
 local cavebotTab = "Cave"
 local targetingTab = "Target"
-
 setDefaultTab(cavebotTab)
 CaveBot = {}
 CaveBot.Extensions = {}
@@ -2423,7 +2410,6 @@ dofile("/cavebot/walking.lua")
 dofile("/cavebot/depositer.lua")
 dofile("/cavebot/supply.lua")
 dofile("/cavebot/cavebot.lua")
-
 setDefaultTab(targetingTab)
 TargetBot = {} -- global namespace
 importStyle("/targetbot/target.otui")
