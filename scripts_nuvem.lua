@@ -534,6 +534,7 @@ UI.Separator()
 if type(storage.Sense) ~= "string" then
     storage.Sense = ""
 end
+
 xsense = macro(30, "xSense", "SHIFT+4", function()
     local target = g_game.getAttackingCreature()
     if target and target:isPlayer() then
@@ -544,6 +545,7 @@ xsense = macro(30, "xSense", "SHIFT+4", function()
         delay(5000)
     end
 end)
+
 onTalk(function(...)
     local args = {...}
     local text = nil
@@ -570,6 +572,7 @@ onTalk(function(...)
         return true
     end
 end)
+
 lastSense = {}
 UI.Button('Configurar xSense', function()
   if lastSense.senseBox then
@@ -606,7 +609,6 @@ lastSense.init = function()
   end
 
   if lastSense.startMapeation then
-    -- CORREÇÃO 1: Nomes na interface continuam bonitos, mas as chaves salvas serão forçadas para minúsculo
     lastSense.directions, lastSense.actualSense = {
       'Norte',
       'Sul',
@@ -640,7 +642,6 @@ lastSense.init = function()
       end
   
       lastSense.senseBox.onDragLeave = function(widget, pos)
-        -- CORREÇÃO 2: Força a gravação no storage em formato string minúscula pura (Padrão JSON Seguro)
         local chaveSalvar = tostring(lastSense.directions[lastSense.actualSense]):lower()
         storage.sensePositions[chaveSalvar] = {x = widget:getX(), y = widget:getY()}
         
@@ -666,6 +667,7 @@ lastSense.init = function()
     lastSense.setup()
   end
 end
+
 function lastSense.setup()
   macro(100, function()
       local sensePlayer = getCreatureByName(tostring(lastSense.actualSense))
@@ -676,12 +678,12 @@ function lastSense.setup()
       end
     end
   )
-  -- CORREÇÃO 3: Recupera os dados usando as novas chaves minúsculas seguras
-  -- Adicionado fallback seguro com valores padrão caso o storage seja resetado ou venha nulo
-  local north = storage.sensePositions['norte'] or {x = 1030, y = 230}
-  local south = storage.sensePositions['sul'] or {x = 1030, y = 500}
-  local west = storage.sensePositions['esquerda'] or {x = 830, y = 360}
-  local east = storage.sensePositions['direita'] or {x = 1230, y = 360}
+  
+  local north = storage.sensePositions and storage.sensePositions['norte'] or {x = 1030, y = 230}
+  local south = storage.sensePositions and storage.sensePositions['sul'] or {x = 1030, y = 500}
+  local west = storage.sensePositions and storage.sensePositions['esquerda'] or {x = 830, y = 360}
+  local east = storage.sensePositions and storage.sensePositions['direita'] or {x = 1230, y = 360}
+  
   lastSense.savePos = {
     ['north'] = {x = north.x, y = north.y, rotation = 0},
     ['south'] = {x = south.x, y = south.y, rotation = 180},
@@ -692,25 +694,31 @@ function lastSense.setup()
     ['north-west'] = {x = west.x, y = north.y, rotation = 315},
     ['south-west'] = {x = west.x, y = south.y, rotation = 225}
   }
+  
   lastSense.actualPosition = function(text)
     return lastSense.savePos[text]
   end
+
   lastSense.setPosition = function(position)
     if position then
       lastSense.pointerWidget:setPosition({x = position.x, y = position.y})
       lastSense.pointerWidget:setRotation(position.rotation)
     end
   end
+
   onTextMessage(
     function(mode, text)
       if mode == 20 then
         local regex = "([a-z A-Z]*) is ([a-z -A-Z]*)to the ([a-z -A-Z]*)."
-        local lastSenseData = regexMatch(text, regex)[1]
-        if lastSenseData then
-          if lastSenseData[2] and lastSenseData[3] and lastSenseData[4] then
-            lastSense.setPosition(lastSense.actualPosition(lastSenseData[4]:trim()))
-            lastSense.actualSense = lastSenseData[2]:trim()
-            lastSense['last'] = lastSense.actualSense:trim()
+        -- CORREÇÃO CRÍTICA 1: Remove o [1] da declaração para processar a tabela corretamente
+        local matchData = regexMatch(text, regex)
+        if matchData and matchData[1] then
+          local lastSenseData = matchData[1]
+          -- CORREÇÃO CRÍTICA 2: Ajustados os índices de captura do Lua (começam em, [2], [3])
+          if lastSenseData[1] and lastSenseData[2] and lastSenseData[3] then
+            local direcaoChat = tostring(lastSenseData[3]):trim():lower()
+            lastSense.setPosition(lastSense.actualPosition(direcaoChat))
+            lastSense.actualSense = lastSenseData[1]:trim()
             lastSense.elapsed = now + 5000
             lastSense.lastPosition = player:getPosition()
           end
@@ -718,6 +726,11 @@ function lastSense.setup()
       end
     end
   )
+end
+
+-- Inicializa as travas visuais se o mapa já estiver configurado
+if storage.sensePositions and table.size(storage.sensePositions) >= 4 then
+  lastSense.startMapeation = false
 end
 lastSense.init()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
