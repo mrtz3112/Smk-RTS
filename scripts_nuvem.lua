@@ -57,7 +57,6 @@ macro(100, "DepositGold & StackItems", function()
   local coinIds = {3031, 3035, 3043, 10137} 
   local minAmount = 1
   local shouldDeposit = false
-  
   for _, id in ipairs(coinIds) do
     local item = findItem(id)
     if item and item:getCount() >= minAmount then
@@ -78,7 +77,6 @@ macro(100, "DepositGold & StackItems", function()
         local itemId = item:getId()
         local count = item:getCount()
         local posicaoAtual = container:getSlotPosition(slotIndex - 1)
-
         if not itensMapeados[itemId] or count > itensMapeados[itemId].count then
           itensMapeados[itemId] = {
             posicao = posicaoAtual,
@@ -93,10 +91,8 @@ macro(100, "DepositGold & StackItems", function()
       if item:isStackable() and item:getCount() < 10000 then
         local itemId = item:getId()
         local destino = itensMapeados[itemId]
-
         if destino then
           local posicaoAtual = container:getSlotPosition(slotIndex - 1)
-
           if posicaoAtual.x ~= destino.posicao.x or posicaoAtual.y ~= destino.posicao.y or posicaoAtual.slot ~= destino.posicao.slot then
             g_game.move(item, destino.posicao, item:getCount())
             delay(150)
@@ -107,6 +103,7 @@ macro(100, "DepositGold & StackItems", function()
     end
   end
 end)
+--GrandFisher Mask
 macro(100, "GrandFisher Mask", function()
     if not g_game.isAttacking() and not g_game.getAttackingCreature() then
         return
