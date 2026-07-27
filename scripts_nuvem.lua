@@ -723,13 +723,13 @@ end
 lastSense.init()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 --Ice Hud HP Percent
-macro(30, function()
+macro(100, function()
 local hp = g_ui.getRootWidget():recursiveGetChildById("healthCircleFront")
 hp:setText("   ".. hppercent().. "             ") 
 hp:setColor("white")
 end)
 --Ice Hud MP Percent
-macro(30, function()
+macro(100, function()
 local hp = g_ui.getRootWidget():recursiveGetChildById("manaCircleFront")
 hp:setText("                   ".. manapercent().. "          ") 
 hp:setColor("white")
@@ -2178,7 +2178,7 @@ local function checkPos(x, y)
     end
     return false
 end
-dash = macro(30, "BugMap", ('CTRL+3'), function()
+dash = macro(100, "BugMap", ('CTRL+3'), function()
     local k = modules.corelib.g_keyboard.isKeyPressed
     if k('w') or k('Up') or k('numpad8') then checkPos(0, -2)
     elseif k('e') then checkPos(2, -2)
@@ -2621,7 +2621,7 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   end
   return priority
 end
-macro(30, function()
+macro(100, function()
   if not CaveBot or not CaveBot.isOn() then return end
   local pos = player:getPosition()
   local currentSpecs = g_map.getSpectatorsInRange(pos, false, 6, 6)
