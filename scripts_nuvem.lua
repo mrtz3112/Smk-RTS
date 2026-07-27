@@ -1240,7 +1240,7 @@ Panel
     anchors.right: parent.right
     anchors.bottom: parent.verticalCenter
     text-align: center
-    !text: tr('Regeneration')
+    !text: tr('Healing')
 
   HorizontalScrollBar
     id: HP
@@ -1303,7 +1303,7 @@ Panel
     anchors.right: parent.right
     anchors.bottom: parent.verticalCenter
     text-align: center
-    !text: tr('Reiatsu Barrier')
+    !text: tr('Mana Shield')
 
   HorizontalScrollBar
     id: HP
