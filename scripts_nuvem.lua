@@ -2653,14 +2653,12 @@ if previousChaseMode == nil then previousChaseMode = 0 end
 if lastWalkState == nil then lastWalkState = "normal" end
 
 macro(50, function()
-    -- Se tem SpecialMob, pausa o Cavebot de forma limpa para focar no Boss
     if hasSpecialMob and CaveBot and CaveBot.isOn() then
         if lastWalkState ~= "delayed" then
             if CaveBot.setWalking then CaveBot.setWalking(false) end
             lastWalkState = "delayed"
         end
     else
-        -- Quando o Boss morre, reativa a caminhada normal dos waypoints
         if CaveBot and CaveBot.isOn() then
             if lastWalkState == "delayed" then
                 if g_game.setWalkDelay then g_game.setWalkDelay(1) end
@@ -2680,7 +2678,6 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
     local creatureName = creature:getName():lower()
     local isSpecial = false
     
-    -- Identifica se é um SpecialMob
     if creatureName:find("elite") or 
        creatureName:find("boss") or 
        creatureName:find("hollow capitan shinigami") or 
@@ -2690,24 +2687,33 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
       isSpecial = true
     end
     
-    -- Verifica se outro jogador já está atacando o Boss
+    -- Checagem se o monstro está focado em outro jogador
     local spectators = g_map.getSpectators(myPos, false)
     if spectators then
       if isSpecial then
         for _, spec in ipairs(spectators) do
           if spec:isPlayer() and spec ~= localPlayer then
             local rivalId = spec:getId()
+            local isTargetedByOther = false
+            
             if creature.getTarget and creature:getTarget() == rivalId then
-              return 0
+              isTargetedByOther = true
             elseif creature.getChasingCreature and creature:getChasingCreature() == spec then
-              return 0
+              isTargetedByOther = true
             elseif creature.getFollowingCreature and creature:getFollowingCreature() == spec then
-              return 0
+              isTargetedByOther = true
             end
+            
             local rivalPos = spec:getPosition()
             local bPos = creature:getPosition()
             if rivalPos and bPos and math.abs(bPos.x - rivalPos.x) <= 1 and math.abs(bPos.y - rivalPos.y) <= 1 then
-              return 0
+              isTargetedByOther = true
+            end
+
+            -- SE O MONSTRO ESTIVER COM OUTRO PLAYER: Ignora completamente e passa direto
+            if isTargetedByOther then
+              config.priority = -100000 -- Força a prioridade interna do bot para o mínimo possível
+              return -100000            -- Retorna um valor negativo drástico para o cálculo
             end
           end
         end
@@ -2716,19 +2722,14 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
 
     -- SE FOR UM SPECIAL MOB LIVRE: Ativa o Chase Mode agressivo
     if isSpecial then
-      hasSpecialMob = true -- Sinaliza para a macro pausar o Cavebot
-      
-      -- Força o TargetBot a perseguir o monstro (Chase Mode = 1 ou Chase/Keep Distance dependendo do bot)
-      -- Geralmente 1 = Chase (Correr atrás), 0 = Stand (Ficar parado), 2 = Keep Distance
+      hasSpecialMob = true 
       config.chaseMode = 1 
-      
-      -- Dá uma prioridade altíssima para garantir que ele foque nesse monstro
+      config.priority = 100000
       return 100000 
     end
-
   end
   
-  -- Se não for SpecialMob e o script chegou aqui, reinicia o sinalizador
   hasSpecialMob = false
   return 1 
 end
+
