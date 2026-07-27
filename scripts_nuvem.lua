@@ -539,9 +539,9 @@ xsense = macro(30, "xSense", "SHIFT+4", function()
     if target and target:isPlayer() then
         storage.Sense = target:getName()
     end
-    if storage.Sense and storage.Sense ~= "" and (manapercent() <= 50) then
+    if storage.Sense and storage.Sense ~= "" and (manapercent() <= 35) then
         say('sense "' .. storage.Sense)
-        delay(10000)
+        delay(5000)
     end
 end)
 onTalk(function(...)
