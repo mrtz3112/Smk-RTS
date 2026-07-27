@@ -1998,9 +1998,6 @@ onTextMessage(function(mode, text)
         ui.title:setOn(false)
     end
 end)
-UI.Separator()
-UI.Button("+  Zoom", function() zoomIn() end)
-UI.Button("-  Zoom", function() zoomOut() end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ HUD Hotkeys ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
@@ -2178,6 +2175,9 @@ onTalk(function(...)
         return true
     end
 end)
+UI.Separator()
+UI.Button("Screen: +  Zoom", function() zoomIn() end)
+UI.Button("Screen: -  Zoom", function() zoomOut() end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 
 local pvehud = setupUI([[
