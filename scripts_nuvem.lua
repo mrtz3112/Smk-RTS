@@ -2518,10 +2518,19 @@ dofile("/targetbot/target.lua")
 --NewTargetSystem
 if hasSpecialMob == nil then hasSpecialMob = false end
 if previousChaseMode == nil then previousChaseMode = 0 end
+macro(50, function()
+    if CaveBot and CaveBot.isOn() then
+        if g_game.setWalkDelay then
+            g_game.setWalkDelay(1) 
+        end
+    end
+end)
 TargetBot.Creature.calculatePriority = function(creature, config, path)
+  local localPlayer = g_game.getLocalPlayer()
+  if not localPlayer then return 0 end
+  local myPos = localPlayer:getPosition()
   if creature:isMonster() and path then
     local creatureName = creature:getName():lower()
-    -- Lista de monstros especiais
     if creatureName:find("elite") or 
        creatureName:find("boss") or 
        creatureName:find("hollow capitan shinigami") or 
@@ -2529,6 +2538,41 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
        creatureName:find("gotei 13 king") or 
        creatureName:find("oversaturated hollowed shinigami") then
       return (config.priority or 0) + 1000
+    end
+    local spectators = g_map.getSpectators(myPos, false)
+    if spectators then
+      local meusMonstrosColados = 0
+      for _, spec in ipairs(spectators) do
+        if spec:isMonster() and not spec:isDead() then
+          local mPos = spec:getPosition()
+          if mPos and math.abs(mPos.x - myPos.x) <= 1 and math.abs(mPos.y - myPos.y) <= 1 then
+            meusMonstrosColados = meusMonstrosColados + 1
+          end
+        end
+      end
+      for _, spec in ipairs(spectators) do
+        if spec:isPlayer() and spec ~= localPlayer then
+          local rivalPos = spec:getPosition()
+          if rivalPos then
+            local monstrosNoRival = 0
+            local monstrosDoRivalList = {}
+            for _, mob in ipairs(spectators) do
+              if mob:isMonster() and not mob:isDead() then
+                local mobPos = mob:getPosition()
+                if mobPos and math.abs(mobPos.x - rivalPos.x) <= 1 and math.abs(mobPos.y - rivalPos.y) <= 1 then
+                  monstrosNoRival = monstrosNoRival + 1
+                  monstrosDoRivalList[mob:getId()] = true
+                end
+              end
+            end
+            
+            if monstrosNoRival > meusMonstrosColados and monstrosDoRivalList[creature:getId()] then
+              return 0 
+            end
+          end
+          break
+        end
+      end
     end
   end
   local priority = 0
@@ -2556,19 +2600,22 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   return priority
 end
 macro(100, function()
+  local player = g_game.getLocalPlayer()
+  if not player then return end
   if not CaveBot or not CaveBot.isOn() then return end
   local pos = player:getPosition()
-  local currentSpecs = g_map.getSpectatorsInRange(pos, false, 6, 6)
+  local currentSpecs = g_map.getSpectators(pos, false)
+  if not currentSpecs then return end
   local bossStillAlive = false
   for _, spec in ipairs(currentSpecs) do
-    if spec:isMonster() then
+    if spec:isMonster() and not spec:isDead() then
       local name = spec:getName():lower()
       if name:find("elite") or 
          name:find("boss") or 
          name:find("hollow capitan shinigami") or 
          name:find("complete espada") or 
          name:find("gotei 13 king") or 
-         name:find("oversaturated hollowed shinigami") then
+         name:find("oversaturated hollowed shinigami") then 
         local hasPath = findPath(pos, spec:getPosition(), 7, {
           ignoreLastCreature = true, 
           ignoreNonPathable = true, 
@@ -2583,14 +2630,15 @@ macro(100, function()
     end
   end
   if bossStillAlive then
-    CaveBot.delay(500)
-    
+    CaveBot.delay(100) 
     if not hasSpecialMob then
       hasSpecialMob = true
       previousChaseMode = g_game.getChaseMode()
       g_game.setChaseMode(1)
     end
-  elseif not bossStillAlive and hasSpecialMob then
+    return
+  end
+  if not bossStillAlive and hasSpecialMob then
     hasSpecialMob = false
     g_game.setChaseMode(previousChaseMode == 1 and 0 or previousChaseMode)
   end
