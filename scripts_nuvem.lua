@@ -1174,7 +1174,7 @@ storage.smartCastData.jaCalibrouAlgumaVez = false
 local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
-  !text: tr('Spells')
+  !text: tr('Fight')
   size: 98 200
   focusable: false
   draggable: true
@@ -1186,27 +1186,27 @@ MainWindow
     phantom: false
 
     Button
-      id: botaoSpecial
-      !text: tr('Especial')
+      id: botaoSpells
+      !text: tr('Area/Single')
       size: 80 40
       anchors.top: parent.top
       anchors.horizontalCenter: parent.horizontalCenter
       margin-left: 1
 
     Button
-      id: botaoSpells
-      !text: tr('Area/Single')
+      id: botaoSpecial
+      !text: tr('Target HP')
       size: 80 40
-      anchors.top: botaoSpecial.bottom
+      anchors.top: botaoSpells.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 8
       margin-left: 1
 
     Button
       id: botaoWave
-      !text: tr('Wave')
+      !text: tr('Wave (Reta)')
       size: 80 40
-      anchors.top: botaoSpells.bottom
+      anchors.top: botaoSpecial.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 8
       margin-left: 1
@@ -1319,7 +1319,6 @@ if painelIconesUI then
         end)
     end
 end
-
 setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Survival ~"):setColor('#EBDEF0')
