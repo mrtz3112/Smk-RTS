@@ -448,6 +448,9 @@ macro(100, 'Revide PK', function()
         end
     end
 end)
+UI.Separator()
+UI.Button("Screen: +  Zoom", function() zoomIn() end)
+UI.Button("Screen: -  Zoom", function() zoomOut() end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 --Ice Hud HP Percent
 macro(100, function()
@@ -1706,9 +1709,9 @@ petMacro = macro(100, function()
     end
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-setDefaultTab("Tools")
+setDefaultTab("Extra")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Extra ~"):setColor('#EBDEF0')
+UI.Label("~ Items Upgrader ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 --AutoRoll
 local panelName = "roll"
@@ -2206,9 +2209,6 @@ onTalk(function(...)
         return true
     end
 end)
-UI.Separator()
-UI.Button("Screen: +  Zoom", function() zoomIn() end)
-UI.Button("Screen: -  Zoom", function() zoomOut() end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 
 local pvehud = setupUI([[
