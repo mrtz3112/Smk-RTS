@@ -2674,6 +2674,9 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   if not localPlayer then return 0 end
   local myPos = localPlayer:getPosition()
   
+  -- VARIAVEL DE CONTROLE LOCAL: Reinicia apenas no começo de cada ciclo completo
+  local encontrouSpecialNesteCiclo = false
+  
   if creature:isMonster() and path then
     local creatureName = creature:getName():lower()
     local isSpecial = false
@@ -2712,8 +2715,8 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
 
             -- SE O MONSTRO ESTIVER COM OUTRO PLAYER: Ignora completamente e passa direto
             if isTargetedByOther then
-              config.priority = -100000 -- Força a prioridade interna do bot para o mínimo possível
-              return -100000            -- Retorna um valor negativo drástico para o cálculo
+              config.priority = -100000 
+              return -100000            
             end
           end
         end
@@ -2722,14 +2725,28 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
 
     -- SE FOR UM SPECIAL MOB LIVRE: Ativa o Chase Mode agressivo
     if isSpecial then
+      encontrouSpecialNesteCiclo = true
       hasSpecialMob = true 
-      config.chaseMode = 1 
+      
+      -- Força o modo de perseguição de todas as formas conhecidas da API do bot
+      config.chaseMode = 1
+      config.chase = true
+      config.strategy = "chase"
       config.priority = 100000
+      
+      -- Injeta comando direto se o TargetBot global tiver suporte a alteração de chase em tempo real
+      if TargetBot.setChaseMode then TargetBot.setChaseMode(1) end
+      
       return 100000 
     end
   end
   
-  hasSpecialMob = false
+  -- CORREÇÃO: Só desliga o sinalizador se NENHUM SpecialMob foi detectado na execução
+  if not encontrouSpecialNesteCiclo and hasSpecialMob then
+      -- Se o bot tinha mudado o chase global, devolve pro padrão (geralmente 0 ou stand)
+      if TargetBot.setChaseMode then TargetBot.setChaseMode(0) end
+      hasSpecialMob = false
+  end
+  
   return 1 
 end
-
