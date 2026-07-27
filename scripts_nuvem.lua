@@ -51,6 +51,54 @@ ButtonT = UI.Button("Reconect", function()
 end)
 updateButtonReconectText()
 UI.Separator()
+--Eat Food
+local panelName = "AutoFood"
+storage[panelName] = storage[panelName] or {enabled = false}
+local config = storage[panelName]
+
+local ui = setupUI([[
+Panel
+  height: 58
+
+  BotSwitch
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: Auto Food
+
+  BotItem
+    id: item
+    anchors.top: prev.bottom
+    anchors.horizontalCenter: prev.horizontalCenter
+    margin-top: 5
+    width: 34
+    height: 34
+]])
+
+storage.foodItem = storage.foodItem or 3577
+ui.item:setItemId(storage.foodItem)
+
+ui.item.onItemChange = function(widget)
+    storage.foodItem = widget:getItemId()
+end
+
+ui.title:setOn(config.enabled)
+ui.title.onClick = function(widget)
+    config.enabled = not config.enabled
+    widget:setOn(config.enabled)
+end
+
+macro(10000, function()
+    -- Não faz nada se estiver desativado ou se o personagem estiver em PZ
+    if not config.enabled or isInPz() then return end
+
+    local food = findItem(storage.foodItem)
+    if food then
+        g_game.use(food)
+    end
+end)
+UI.Separator()
 macro(100, "GrandFisher Mask", function()
     if not g_game.isAttacking() and not g_game.getAttackingCreature() then
         return
@@ -446,52 +494,6 @@ macro(100, 'Revide PK', function()
                 botsDesligadosPeloPVP = false
             end
         end
-    end
-end)
-UI.Separator()
---Eat Food
-local panelName = "AutoFood"
-storage[panelName] = storage[panelName] or {enabled = false}
-local config = storage[panelName]
-
-local ui = setupUI([[
-Panel
-  height: 58
-
-  BotSwitch
-    id: title
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    text: Auto Food
-
-  BotItem
-    id: item
-    anchors.top: prev.bottom
-    anchors.horizontalCenter: prev.horizontalCenter
-    margin-top: 5
-    width: 34
-    height: 34
-]])
-
-storage.foodItem = storage.foodItem or 3577
-ui.item:setItemId(storage.foodItem)
-
-ui.item.onItemChange = function(widget)
-    storage.foodItem = widget:getItemId()
-end
-ui.title:setOn(config.enabled)
-ui.title.onClick = function(widget)
-    config.enabled = not config.enabled
-    widget:setOn(config.enabled)
-end
-macro(10000, function()
-    -- Não faz nada se estiver desativado ou se o personagem estiver em PZ
-    if not config.enabled or isInPz() then return end
-
-    local food = findItem(storage.foodItem)
-    if food then
-        g_game.use(food)
     end
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
