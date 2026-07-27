@@ -966,7 +966,7 @@ UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Especiais ~"):setColor('#EBDEF0')
+UI.Label("~ Others ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 local panelName = "hpbelowconfig"
 if not storage[panelName] then
