@@ -804,18 +804,15 @@ local distance = 2
 local amountOfMonsters = 2
 local COOLDOWN_MINIMO_ABSOLUTO = 10 
 local COOLDOWN_MAXIMO = 2000          
-
--- 1. INICIALIZAÇÃO HISTÓRICA DO STORAGE
 if not storage.smartCastData then storage.smartCastData = {} end
 if not storage.smartCastData.cdPvE then storage.smartCastData.cdPvE = 2000 end 
 if not storage.smartCastData.cdPvP then storage.smartCastData.cdPvP = 2000 end 
--- Controladores internos da calibração por estágios (Fase 1 = Busca de 50ms | Fase 2 = Busca de 10ms)
 if storage.smartCastData.faseCalibracao == nil then
     storage.smartCastData.faseCalibracao = 1 
 end
 local modoAtaqueAtual = "balanced"
 local ultimoModoVerificado = "balanced"
-local estadoAnteriorMacro = false 
+if storage.smartCastData.estadoAnteriorMacro == nil then storage.smartCastData.estadoAnteriorMacro = false end
 local function obterModoAtaqueNativo()
     local root = g_ui.getRootWidget()
     if root then
@@ -830,13 +827,11 @@ local ultimoDisparoTime = 0
 if storage.comboEnabled == nil then
     storage.comboEnabled = false
 end
--- 2. SISTEMA DE PENALIDADE POR ESTÁGIOS 
 local function aplicarPenalidadeExhaust()
     if storage.smartCastData.calibrando then
         local isPvE = (modoAtaqueAtual == "offensive")
         local cdAtual = isPvE and storage.smartCastData.cdPvE or storage.smartCastData.cdPvP
         if storage.smartCastData.faseCalibracao == 1 then
-            -- [Fase 1] Primeiro Exaust: AJUSTADO para aumentar +200ms e migrar para a Fase 2
             local novoCd = math.min(COOLDOWN_MAXIMO, cdAtual + 200)
             storage.smartCastData.faseCalibracao = 2
             
@@ -845,17 +840,15 @@ local function aplicarPenalidadeExhaust()
             print("[Smart Cast] [" .. modoAtaqueAtual:upper() .. "] Primeiro Exaust! Aumentado +200ms. Iniciando Busca Fina (-10ms)...")
         
         elseif storage.smartCastData.faseCalibracao == 2 then
-            -- [Fase 2] Segundo Exaust (Parede Exata): Adiciona +30ms de segurança e encerra tudo
             local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 30)
             storage.smartCastData.calibrando = false
-            storage.smartCastData.faseCalibracao = 1 -- Reseta a fase para uma futura recalibração   
+            storage.smartCastData.faseCalibracao = 1 
             if isPvE then storage.smartCastData.cdPvE = valorFinal else storage.smartCastData.cdPvP = valorFinal end
             storage.smartCastData.menorCooldownSeguro = valorFinal
             print("[Smart Cast] [" .. modoAtaqueAtual:upper() .. "] Valor Exato Encontrado! Adicionado +20ms de segurança. Travado em: " .. math.floor(valorFinal) .. "ms")
         end
     end
 end
--- Ganchos de leitura de mensagens de exaust
 onTextMessage(function(mode, text)
     local msg = text:lower()
     if string.find(msg, "exha") or string.find(msg, "exhaust") then
@@ -875,28 +868,25 @@ if modules.game_textmessage and modules.game_textmessage.onReceive then
 end
 local indexArea = 1
 local indexSingle = 1
--- 3. MACRO PRINCIPAL DO COMBO COGNITIVO
 combo = macro(50, "Smart Cast - Activate", function()
     if not g_game.isOnline() then return end
-    
-    -- Detecta quando você clica para ligar o botão da macro
-    if not estadoAnteriorMacro then
+    if not storage.smartCastData.estadoAnteriorMacro then
         modoAtaqueAtual = obterModoAtaqueNativo()
         storage.smartCastData.faseCalibracao = 1
         storage.smartCastData.calibrando = true
-        -- Inicia em 2000ms apenas no set ativo
         if modoAtaqueAtual == "offensive" then
             storage.smartCastData.cdPvE = 2000
+            storage.smartCastData.menorCooldownSeguro = 2000
             print("[Smart Cast] Macro Ativada! Set PvE. Cooldown resetado para 2000ms [Calibrando Fase Rápida].")
         else
             storage.smartCastData.cdPvP = 2000
+            storage.smartCastData.menorCooldownSeguro = 2000
             print("[Smart Cast] Macro Ativada! Set PvP. Cooldown resetado para 2000ms [Calibrando Fase Rápida].")
         end
-        estadoAnteriorMacro = true
+        storage.smartCastData.estadoAnteriorMacro = true
     end
     if not g_game.isAttacking() then return end    
     modoAtaqueAtual = obterModoAtaqueNativo()
-    -- REGRA DE TRANSIÇÃO BILATERAL (AJUSTADO para +200ms ao trocar de set e força Fase 1 de busca rápida)
     if modoAtaqueAtual ~= ultimoModoVerificado then
         storage.smartCastData.faseCalibracao = 1
         if modoAtaqueAtual == "offensive" then
@@ -912,16 +902,13 @@ combo = macro(50, "Smart Cast - Activate", function()
     end
     local agora = os.clock() * 1000 
     local cdSeguroAtual = (modoAtaqueAtual == "offensive") and storage.smartCastData.cdPvE or storage.smartCastData.cdPvP
-    
     storage.smartCastData.menorCooldownSeguro = cdSeguroAtual
-    
     if (agora - ultimoDisparoTime) < cdSeguroAtual then
         return
     end
     local target = g_game.getAttackingCreature()
     local atacandoPlayer = target and target:isPlayer()
-    local specAmount = 0
-    
+    local specAmount = 0  
     if not atacandoPlayer then
         for i, mob in ipairs(getSpectators()) do
             if (getDistanceBetween(pos(), mob:getPosition()) <= distance and mob:isMonster()) then
@@ -952,10 +939,8 @@ combo = macro(50, "Smart Cast - Activate", function()
             enviouMagia = true
         end
     end
-    -- 4. DESCENTRALIZAÇÃO DE VELOCIDADES DE BUSCA
     if enviouMagia then
         ultimoDisparoTime = agora
-        
         if storage.smartCastData.calibrando then
             if cdSeguroAtual > COOLDOWN_MINIMO_ABSOLUTO then
                 local redutor = 5
@@ -973,6 +958,11 @@ combo = macro(50, "Smart Cast - Activate", function()
                 storage.smartCastData.menorCooldownSeguro = novoCd
             end
         end
+    end
+end)
+macro(250, function()
+    if combo and not combo.isOn() then
+        storage.smartCastData.estadoAnteriorMacro = false
     end
 end)
 if storage.comboEnabled then combo.setOn() else combo.setOff() end
