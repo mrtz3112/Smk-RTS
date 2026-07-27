@@ -1193,9 +1193,12 @@ if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
+
+-- OTIMIZAÇÃO: Estrutura inicializada sem estipular nenhum valor padrão de 2000ms
 if not storage.smartCastData then
-    storage.smartCastData = { menorCooldownSeguro = 2000 }
+    storage.smartCastData = {}
 end
+
 local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
@@ -1238,7 +1241,7 @@ MainWindow
 
     Label
       id: labelCdAtual
-      text: Cast: 2.00s
+      text: Cast: 0.00s
       size: 80 16
       font: verdana-11px-rounded
       color: #FFEA99
@@ -1247,8 +1250,10 @@ MainWindow
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 6
 ]], modules.game_interface.getMapPanel())
+
 painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
 painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
+
 local function isMacroActive(macroRef, storageKey)
     if macroRef and type(macroRef) == "table" and macroRef.isOn and type(macroRef.isOn) == "function" then
         local success, result = pcall(function() return macroRef.isOn() end)
@@ -1256,6 +1261,7 @@ local function isMacroActive(macroRef, storageKey)
     end
     return storage.painelSalvo and storage.painelSalvo[storageKey] or false
 end
+
 local function alternarEstadoMacro(macroRef, storageKey)
     if not storage.painelSalvo then storage.painelSalvo = {} end
     local novoEstado = not storage.painelSalvo[storageKey]
@@ -1267,6 +1273,7 @@ local function alternarEstadoMacro(macroRef, storageKey)
         pcall(macroRef)
     end
 end
+
 if painelIconesUI then
     local container = painelIconesUI:getChildById("containerIcones")
     if container then
@@ -1274,13 +1281,16 @@ if painelIconesUI then
         local btnSpells = container:getChildById("botaoSpells")
         local btnWave = container:getChildById("botaoWave")
         local lblCdAtual = container:getChildById("labelCdAtual")
+        
         if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
         if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
         if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
+        
         local jaSincronizou = false
         local hooksConfigurados = false
         local ultimoEstadoBot = false
         if TargetBot and TargetBot.isEnabled then ultimoEstadoBot = TargetBot.isEnabled() end     
+        
         macro(100, function()
             if not g_game.isOnline() then return end
             if not jaSincronizou then
@@ -1293,11 +1303,14 @@ if painelIconesUI then
             if not hooksConfigurados then
                 hooksConfigurados = true
             end
+            
             if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp, "special") and "green" or "red") end
             if btnSpells then btnSpells:setColor(isMacroActive(combo, "spells") and "green" or "red") end
             if btnWave then btnWave:setColor(isMacroActive(turnCombo, "wave") and "green" or "red") end
+            
             if lblCdAtual then
-                local cdSalvoMilissegundos = storage.smartCastData and storage.smartCastData.menorCooldownSeguro or 2000
+                -- CORREÇÃO: Pega o valor real gravado. Se não houver nada, exibe 0ms provisoriamente
+                local cdSalvoMilissegundos = storage.smartCastData and storage.smartCastData.menorCooldownSeguro or 0
                 local cdEmSegundos = cdSalvoMilissegundos / 1000
                 local sufixo = (storage.smartCastData and storage.smartCastData.calibrando) and "s [C]" or "s"
                 lblCdAtual:setText("Cast: " .. string.format("%.2f", cdEmSegundos) .. sufixo)
