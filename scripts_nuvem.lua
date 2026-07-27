@@ -813,8 +813,8 @@ local function aplicarPenalidadeExhaust()
             print("[Smart Cast] [" .. modoAtaqueAtual:upper() .. "] Primeiro Exaust! Aumentado +200ms. Iniciando Busca Fina (-10ms)...")
         
         elseif storage.smartCastData.faseCalibracao == 2 then
-            -- [Fase 2] Segundo Exaust (Parede Exata): Adiciona +20ms de segurança e encerra tudo
-            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 20)
+            -- [Fase 2] Segundo Exaust (Parede Exata): Adiciona +15ms de segurança e encerra tudo
+            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 15)
             storage.smartCastData.calibrando = false
             storage.smartCastData.faseCalibracao = 1 -- Reseta a fase para uma futura recalibração   
             if isPvE then storage.smartCastData.cdPvE = valorFinal else storage.smartCastData.cdPvP = valorFinal end
