@@ -937,9 +937,7 @@ combo = macro(50, "Smart Cast - Activate", function()
         end
         estadoAnteriorMacro = true
     end
-
     if not g_game.isAttacking() then return end    
-    
     modoAtaqueAtual = obterModoAtaqueNativo()
     -- REGRA DE TRANSIÇÃO BILATERAL (AJUSTADO para +200ms ao trocar de set e força Fase 1 de busca rápida)
     if modoAtaqueAtual ~= ultimoModoVerificado then
@@ -1160,7 +1158,7 @@ local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Spells')
-  size: 98 225
+  size: 98 200
   focusable: false
   draggable: true
   phantom: false
@@ -1206,14 +1204,6 @@ MainWindow
       anchors.top: botaoWave.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 6
-
-    Button
-      id: botaoRecalibrar
-      !text: tr('Reset CD')
-      size: 80 20
-      anchors.top: labelCdAtual.bottom
-      anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 4
 ]], modules.game_interface.getMapPanel())
 painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
 painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
@@ -1254,15 +1244,9 @@ if painelIconesUI then
         local btnSpells = container:getChildById("botaoSpells")
         local btnWave = container:getChildById("botaoWave")
         local lblCdAtual = container:getChildById("labelCdAtual")
-        local btnRecalibrar = container:getChildById("botaoRecalibrar")
         if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
         if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
         if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
-        if btnRecalibrar then
-            btnRecalibrar.onClick = function()
-                forcarRecalibracaoSmartCast("Clique Manual (Reset CD)")
-            end
-        end
         local jaSincronizou = false
         local hooksConfigurados = false
         local ultimoEstadoBot = false
