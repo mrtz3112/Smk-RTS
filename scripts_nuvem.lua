@@ -2520,7 +2520,7 @@ if hasSpecialMob == nil then hasSpecialMob = false end
 if previousChaseMode == nil then previousChaseMode = 0 end
 macro(50, function()
     if hasSpecialMob and CaveBot and CaveBot.isOn() then
-        if CaveBot.delay then CaveBot.delay(2000) end
+        if CaveBot.delay then CaveBot.delay(5000) end
         if CaveBot.setWalking then CaveBot.setWalking(false) end
     else
         if CaveBot and CaveBot.isOn() then
@@ -2532,12 +2532,9 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   local localPlayer = g_game.getLocalPlayer()
   if not localPlayer then return 0 end
   local myPos = localPlayer:getPosition()
-  
   if creature:isMonster() and path then
     local creatureName = creature:getName():lower()
     local isSpecial = false
-    
-    -- Verifica se o monstro atual pertence à lista de SpecialMobs
     if creatureName:find("elite") or 
        creatureName:find("boss") or 
        creatureName:find("hollow capitan shinigami") or 
@@ -2546,18 +2543,19 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
        creatureName:find("oversaturated hollowed shinigami") then
       isSpecial = true
     end
-
     local spectators = g_map.getSpectators(myPos, false)
     if spectators then
-      -- SISTEMA ANTI-KS PARA SPECIALMOBS: Se estiver focando outro jogador, prioridade vira 0
       if isSpecial then
         for _, spec in ipairs(spectators) do
           if spec:isPlayer() and spec ~= localPlayer then
-            -- Verifica se o boss está explicitamente atacando ou focado no outro jogador
-            if creature:getTarget() == spec:getId() then
+            local rivalId = spec:getId()
+            if creature.getTarget and creature:getTarget() == rivalId then
+              return 0
+            elseif creature.getChasingCreature and creature:getChasingCreature() == spec then
+              return 0
+            elseif creature.getFollowingCreature and creature:getFollowingCreature() == spec then
               return 0
             end
-            -- Redundância: Verifica se o boss está colado no outro jogador
             local rivalPos = spec:getPosition()
             local bPos = creature:getPosition()
             if rivalPos and bPos and math.abs(bPos.x - rivalPos.x) <= 1 and math.abs(bPos.y - rivalPos.y) <= 1 then
@@ -2565,11 +2563,8 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
             end
           end
         end
-        -- Se for SpecialMob e estiver livre/com você, recebe a prioridade máxima máxima
         return (config.priority or 0) + 1000
       end
-
-      -- SISTEMA ANTI-KS PARA MONSTROS JÁ EXISTENTE (Baseado em contagem de colados)
       local meusMonstrosColados = 0
       for _, spec in ipairs(spectators) do
         if spec:isMonster() and not spec:isDead() then
@@ -2603,7 +2598,6 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
       end
     end
   end
-  
   local priority = 0
   if g_game.getAttackingCreature() == creature then
     priority = priority + 1
@@ -2667,7 +2661,7 @@ macro(100, function()
       g_game.setChaseMode(1) 
       if CaveBot then
         if CaveBot.setWalking then CaveBot.setWalking(false) end
-        if CaveBot.delay then CaveBot.delay(2000) end
+        if CaveBot.delay then CaveBot.delay(5000) end
       end
     else
       if g_game.getChaseMode() ~= 1 then
