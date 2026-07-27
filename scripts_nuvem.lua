@@ -917,7 +917,7 @@ end
 local function aplicarPenalidadeExhaust()
     if storage.smartCastData.calibrando then
         if not storage.smartCastData.ajusteFino then
-            storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + 50)
+            storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + 30)
             storage.smartCastData.ajusteFino = true
             print("[Smart Cast] Primeiro Exhausted! Recuando +20ms e iniciando Ajuste Fino (-1ms)...")
         else
