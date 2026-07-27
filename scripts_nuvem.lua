@@ -893,13 +893,13 @@ combo = macro(50, "Smart Cast - Activate", function()
     if modoAtaqueAtual ~= ultimoModoVerificado then
         storage.smartCastData.faseCalibracao = 1
         if modoAtaqueAtual == "offensive" then
-            storage.smartCastData.cdPvE = math.min(COOLDOWN_MAXIMO, storage.smartCastData.cdPvE + 200)
+            storage.smartCastData.cdPvE = math.min(COOLDOWN_MAXIMO)
             storage.smartCastData.calibrando = true
-            print("[Smart Cast] Set PvE Carregado! Histórico antigo +200ms [Calibrando Fase Rápida]")
+            print("[Smart Cast] Set PvE Carregado!")
         else
-            storage.smartCastData.cdPvP = math.min(COOLDOWN_MAXIMO, storage.smartCastData.cdPvP + 200)
+            storage.smartCastData.cdPvP = math.min(COOLDOWN_MAXIMO)
             storage.smartCastData.calibrando = true
-            print("[Smart Cast] Set PvP Carregado! Histórico antigo +200ms [Calibrando Fase Rápida]")
+            print("[Smart Cast] Set PvP Carregado!")
         end
         ultimoModoVerificado = modoAtaqueAtual
     end 
