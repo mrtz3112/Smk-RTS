@@ -766,100 +766,6 @@ UI.TextEdit(storage.buffskill02 or "", function(widget, text)
   storage.buffskill02 = text
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Spell at Target HP ~"):setColor('#EBDEF0')
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-local panelName = "hpbelowconfig"
-if not storage[panelName] then
-  storage[panelName] = {
-      setting = true,
-      hp = 80,
-      enabled = false
-  }
-end
-local ultimoDisparoEspecial = 0
-local cooldownFixoEspecial = 50000 
-lowhp = macro(100, function()
-    if storage.smartCastData and storage.smartCastData.calibrando then 
-        return 
-    end
-    if not g_game.isAttacking() then
-        return
-    end  
-    local target = g_game.getAttackingCreature()
-    if not target then return end
-    if not target:isPlayer() then 
-        return 
-    end
-    local agora = os.clock() * 1000
-    if (agora - ultimoDisparoEspecial) < cooldownFixoEspecial then
-        return
-    end
-    if target:getHealthPercent() <= storage[panelName].hp then
-        if storage.hpspell and storage.hpspell ~= "" then
-            say(storage.hpspell)
-            ultimoDisparoEspecial = agora -- Registra o momento exato do disparo
-        end
-    end
-end)
-if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
-local ui = setupUI([[
-Panel
-  height: 35
-  BotSwitch
-    id: title
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.bottom: parent.verticalCenter
-    text-align: center
-    !text: tr('Especial - Activate')
-
-  HorizontalScrollBar
-    id: HP
-    anchors.bottom: parent.bottom
-    anchors.right: parent.right
-    anchors.left:parent.left
-    margin-top: 3
-    minimum: 1
-    maximum: 100
-    step: 1
-]], parent)
-ui:setId(panelName)
-ui.title:setOn(storage[panelName].enabled)
-ui.title.onClick = function(widget)
-  storage[panelName].enabled = not storage[panelName].enabled
-  widget:setOn(storage[panelName].enabled)
-  
-  if storage.painelSalvo then
-      storage.painelSalvo.special = storage[panelName].enabled
-  end
-  if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
-end
-local updateHpText = function()
-    if storage[panelName].setting then
-        ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
-    end
-end
-ui.HP.onValueChange = function(scroll, value)
-  storage[panelName].hp = value
-  updateHpText()
-end
-ui.HP:setValue(storage[panelName].hp)
-updateHpText()
-UI.TextEdit(storage.hpspell or "", function(widget, text) 
-    storage.hpspell = text 
-end)
-macro(200, function()
-    if lowhp and storage.painelSalvo and storage.painelSalvo.special ~= nil then
-        if storage[panelName].enabled ~= storage.painelSalvo.special then
-            storage[panelName].enabled = storage.painelSalvo.special
-            if ui and ui.title then
-                ui.title:setOn(storage[panelName].enabled)
-            end
-            if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
-        end
-    end
-end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 local distance = 2
@@ -907,8 +813,8 @@ local function aplicarPenalidadeExhaust()
             print("[Smart Cast] [" .. modoAtaqueAtual:upper() .. "] Primeiro Exaust! Aumentado +200ms. Iniciando Busca Fina (-10ms)...")
         
         elseif storage.smartCastData.faseCalibracao == 2 then
-            -- [Fase 2] Segundo Exaust (Parede Exata): Adiciona +20ms de segurança e encerra tudo
-            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 40)
+            -- [Fase 2] Segundo Exaust (Parede Exata): Adiciona +30ms de segurança e encerra tudo
+            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 30)
             storage.smartCastData.calibrando = false
             storage.smartCastData.faseCalibracao = 1 -- Reseta a fase para uma futura recalibração   
             if isPvE then storage.smartCastData.cdPvE = valorFinal else storage.smartCastData.cdPvP = valorFinal end
@@ -1060,8 +966,100 @@ UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Wave ~"):setColor('#EBDEF0')
+UI.Label("~ Especiais ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+local panelName = "hpbelowconfig"
+if not storage[panelName] then
+  storage[panelName] = {
+      setting = true,
+      hp = 80,
+      enabled = false
+  }
+end
+local ultimoDisparoEspecial = 0
+local cooldownFixoEspecial = 50000 
+lowhp = macro(100, function()
+    if storage.smartCastData and storage.smartCastData.calibrando then 
+        return 
+    end
+    if not g_game.isAttacking() then
+        return
+    end  
+    local target = g_game.getAttackingCreature()
+    if not target then return end
+    if not target:isPlayer() then 
+        return 
+    end
+    local agora = os.clock() * 1000
+    if (agora - ultimoDisparoEspecial) < cooldownFixoEspecial then
+        return
+    end
+    if target:getHealthPercent() <= storage[panelName].hp then
+        if storage.hpspell and storage.hpspell ~= "" then
+            say(storage.hpspell)
+            ultimoDisparoEspecial = agora -- Registra o momento exato do disparo
+        end
+    end
+end)
+if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
+local ui = setupUI([[
+Panel
+  height: 35
+  BotSwitch
+    id: title
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: parent.verticalCenter
+    text-align: center
+    !text: tr('Spell at Target HP')
+
+  HorizontalScrollBar
+    id: HP
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right
+    anchors.left:parent.left
+    margin-top: 3
+    minimum: 1
+    maximum: 100
+    step: 1
+]], parent)
+ui:setId(panelName)
+ui.title:setOn(storage[panelName].enabled)
+ui.title.onClick = function(widget)
+  storage[panelName].enabled = not storage[panelName].enabled
+  widget:setOn(storage[panelName].enabled)
+  
+  if storage.painelSalvo then
+      storage.painelSalvo.special = storage[panelName].enabled
+  end
+  if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
+end
+local updateHpText = function()
+    if storage[panelName].setting then
+        ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
+    end
+end
+ui.HP.onValueChange = function(scroll, value)
+  storage[panelName].hp = value
+  updateHpText()
+end
+ui.HP:setValue(storage[panelName].hp)
+updateHpText()
+UI.TextEdit(storage.hpspell or "", function(widget, text) 
+    storage.hpspell = text 
+end)
+macro(200, function()
+    if lowhp and storage.painelSalvo and storage.painelSalvo.special ~= nil then
+        if storage[panelName].enabled ~= storage.painelSalvo.special then
+            storage[panelName].enabled = storage.painelSalvo.special
+            if ui and ui.title then
+                ui.title:setOn(storage[panelName].enabled)
+            end
+            if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
+        end
+    end
+end)
+UI.Separator()
 if storage.turnComboEnabled == nil then
     storage.turnComboEnabled = false
 end
@@ -1105,7 +1103,7 @@ end
 local ultimoDisparoTurnWave = 0
 
 -- 2. MACRO PRINCIPAL DA WAVE COGNITIVA
-turnCombo = macro(50, "Wave - Activate", function()
+turnCombo = macro(50, "Spell Wave (Reta)", function()
     local target = g_game.getAttackingCreature()
     if not target then return end
     
