@@ -2650,23 +2650,21 @@ dofile("/targetbot/target.lua")
 --NewTargetSystem
 if hasSpecialMob == nil then hasSpecialMob = false end
 if previousChaseMode == nil then previousChaseMode = 0 end
-
--- Criamos uma variável de controle para evitar o spam de comandos
 if lastWalkState == nil then lastWalkState = "normal" end
 
 macro(50, function()
+    -- Se tem SpecialMob, pausa o Cavebot de forma limpa para focar no Boss
     if hasSpecialMob and CaveBot and CaveBot.isOn() then
         if lastWalkState ~= "delayed" then
-            if CaveBot.delay then CaveBot.delay(5000) end
             if CaveBot.setWalking then CaveBot.setWalking(false) end
             lastWalkState = "delayed"
         end
     else
+        -- Quando o Boss morre, reativa a caminhada normal dos waypoints
         if CaveBot and CaveBot.isOn() then
-            -- Só altera o delay se ele tiver saído do estado de lag
             if lastWalkState == "delayed" then
                 if g_game.setWalkDelay then g_game.setWalkDelay(1) end
-                if CaveBot.setWalking then CaveBot.setWalking(true) end -- Garante que o CaveBot volte a andar
+                if CaveBot.setWalking then CaveBot.setWalking(true) end
                 lastWalkState = "normal"
             end
         end
@@ -2677,9 +2675,12 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   local localPlayer = g_game.getLocalPlayer()
   if not localPlayer then return 0 end
   local myPos = localPlayer:getPosition()
+  
   if creature:isMonster() and path then
     local creatureName = creature:getName():lower()
     local isSpecial = false
+    
+    -- Identifica se é um SpecialMob
     if creatureName:find("elite") or 
        creatureName:find("boss") or 
        creatureName:find("hollow capitan shinigami") or 
@@ -2688,6 +2689,8 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
        creatureName:find("oversaturated hollowed shinigami") then
       isSpecial = true
     end
+    
+    -- Verifica se outro jogador já está atacando o Boss
     local spectators = g_map.getSpectators(myPos, false)
     if spectators then
       if isSpecial then
@@ -2710,7 +2713,22 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
         end
       end
     end
+
+    -- SE FOR UM SPECIAL MOB LIVRE: Ativa o Chase Mode agressivo
+    if isSpecial then
+      hasSpecialMob = true -- Sinaliza para a macro pausar o Cavebot
+      
+      -- Força o TargetBot a perseguir o monstro (Chase Mode = 1 ou Chase/Keep Distance dependendo do bot)
+      -- Geralmente 1 = Chase (Correr atrás), 0 = Stand (Ficar parado), 2 = Keep Distance
+      config.chaseMode = 1 
+      
+      -- Dá uma prioridade altíssima para garantir que ele foque nesse monstro
+      return 100000 
+    end
+
   end
-  -- Nota: O restante da sua lógica original de prioridade deve continuar aqui embaixo
-  return 1 -- Adicionado apenas para fechar a função sem erros de sintaxe
+  
+  -- Se não for SpecialMob e o script chegou aqui, reinicia o sinalizador
+  hasSpecialMob = false
+  return 1 
 end
