@@ -216,7 +216,7 @@ macro(500, "Stack Itens", function()
     local itensMapeados = {}
     for _, container in pairs(containers) do
         for slotIndex, item in ipairs(container:getItems()) do
-            if item:isStackable() and item:getCount() < 1000 then
+            if item:isStackable() and item:getCount() < 10000 then
                 local itemId = item:getId()
                 local count = item:getCount()
                 local posicaoAtual = container:getSlotPosition(slotIndex - 1)
@@ -231,13 +231,13 @@ macro(500, "Stack Itens", function()
     end
     for _, container in pairs(containers) do
         for slotIndex, item in ipairs(container:getItems()) do
-            if item:isStackable() and item:getCount() < 1000 then
+            if item:isStackable() and item:getCount() < 10000 then
                 local itemId = item:getId()
                 local destino = itensMapeados[itemId]
                 if destino then
                     local posicaoAtual = container:getSlotPosition(slotIndex - 1)
                     if posicaoAtual.x ~= destino.posicao.x or posicaoAtual.y ~= destino.posicao.y or posicaoAtual.slot ~= destino.posicao.slot then
-                        local moverQuantidade = math.min(item:getCount(), 1000 - destino.count)
+                        local moverQuantidade = math.min(item:getCount(), 10000 - destino.count)
                         if moverQuantidade > 0 then
                             g_game.move(item, destino.posicao, moverQuantidade)
                             return
@@ -248,6 +248,7 @@ macro(500, "Stack Itens", function()
         end
     end
 end)
+--Revide PK
 local botsDesligadosPeloPVP = false
 local function definirSafeFightBox(deveAtivar)
     local mapPanel = modules.game_interface and modules.game_interface.gameMapPanel
@@ -356,7 +357,7 @@ UI.TextEdit(storage.idcomida or "id da food", function(widget, text)
   storage.idcomida = text
 end)
 UI.Separator()
---enemy
+--Enemy
 if not storage.ignoredPlayers then
     storage.ignoredPlayers = "ignore1,ignore2"
 end
@@ -624,7 +625,7 @@ macro(200, function()
         end
     end
 end)
---barra de target
+--Target Health Bar
 local lifeColors = {
     { percent = 35, color = 'red' },
     { percent = 75, color = 'yellow' },
@@ -865,7 +866,7 @@ local function aplicarPenalidadeExhaust()
         if not storage.smartCastData.ajusteFino then
             storage.smartCastData.menorCooldownSeguro = math.min(COOLDOWN_MAXIMO, storage.smartCastData.menorCooldownSeguro + 30)
             storage.smartCastData.ajusteFino = true
-            print("[Smart Cast] Primeiro Exhausted! Recuando +20ms e iniciando Ajuste Fino (-1ms)...")
+            print("[Smart Cast] Primeiro Exhausted! Recuando +30ms e iniciando Ajuste Fino (-1ms)...")
         else
             storage.smartCastData.calibrando = false
             storage.smartCastData.ajusteFino = false
@@ -968,7 +969,7 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 if storage.turnComboEnabled == nil then
     storage.turnComboEnabled = false
 end
-local COOLDOWN_MINIMO_ABSOLUTO = 1000
+local COOLDOWN_MINIMO_ABSOLUTO = 100
 if not storage.smartCastData then
     storage.smartCastData = {
         menorCooldownSeguro = 2000,
@@ -1566,7 +1567,7 @@ uiFastPot.item.onItemChange = function(widget)
   if novaId and novaId > 0 then storage[panelNameFastPot].id = novaId end
 end
 uiFastPot.HP:setValue(storage[panelNameFastPot].hp)
-macro(1000, function()
+macro(500, function()
     if not storage[panelNameFastPot].enabled then return end
     if storage[panelNameFastPot].setting then
         if hppercent() <= storage[panelNameFastPot].hp then
