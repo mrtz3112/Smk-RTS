@@ -1999,45 +1999,6 @@ onTextMessage(function(mode, text)
     end
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Guild Only ~")
-UI.Label("-----------------------------------"):setColor('#C39BD3') 
-invpt = macro(500, "Auto Invite PT", function()
-    if not g_game.isOnline() then return end
-
-    local myPlayer = g_game.getLocalPlayer()
-    if not myPlayer then return end
-
-    local spectators = getSpectators(pos())
-    
-    for _, v in ipairs(spectators) do
-
-        if v and v:isPlayer() and v ~= myPlayer then
-
-            if v:getShield() == 0 and v:getEmblem() == 1 then
-
-                g_game.partyInvite(v:getId())
-            end
-        end
-    end
-end)
-
-accpt = macro(1000, "Auto Join PT", function()
-    if not g_game.isOnline() then return end
-
-    local myPlayer = g_game.getLocalPlayer()
-    if not myPlayer then return end
-
-    local spectators = getSpectators(pos())
-    
-    for _, v in ipairs(spectators) do
-        if v and v:isPlayer() and v ~= myPlayer then
-            if v:getShield() == 1 and v:getEmblem() == 1 then
-                g_game.partyAccept(v:getId())
-            end
-        end
-    end
-end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Screen ~")
 UI.Label("-----------------------------------"):setColor('#C39BD3') 
 UI.Button("+  Zoom", function() zoomIn() end)
