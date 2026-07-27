@@ -107,7 +107,6 @@ macro(100, "DepositGold & StackItems", function()
     end
   end
 end)
-UI.Separator()
 macro(100, "GrandFisher Mask", function()
     if not g_game.isAttacking() and not g_game.getAttackingCreature() then
         return
