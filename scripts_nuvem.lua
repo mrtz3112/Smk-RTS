@@ -2519,9 +2519,12 @@ dofile("/targetbot/target.lua")
 if hasSpecialMob == nil then hasSpecialMob = false end
 if previousChaseMode == nil then previousChaseMode = 0 end
 macro(50, function()
-    if CaveBot and CaveBot.isOn() then
-        if g_game.setWalkDelay then
-            g_game.setWalkDelay(1) 
+    if hasSpecialMob and CaveBot and CaveBot.isOn() then
+        if CaveBot.delay then CaveBot.delay(2000) end
+        if CaveBot.setWalking then CaveBot.setWalking(false) end
+    else
+        if CaveBot and CaveBot.isOn() then
+            if g_game.setWalkDelay then g_game.setWalkDelay(1) end
         end
     end
 end)
@@ -2529,18 +2532,44 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   local localPlayer = g_game.getLocalPlayer()
   if not localPlayer then return 0 end
   local myPos = localPlayer:getPosition()
+  
   if creature:isMonster() and path then
     local creatureName = creature:getName():lower()
+    local isSpecial = false
+    
+    -- Verifica se o monstro atual pertence à lista de SpecialMobs
     if creatureName:find("elite") or 
        creatureName:find("boss") or 
        creatureName:find("hollow capitan shinigami") or 
        creatureName:find("complete espada") or 
        creatureName:find("gotei 13 king") or 
        creatureName:find("oversaturated hollowed shinigami") then
-      return (config.priority or 0) + 1000
+      isSpecial = true
     end
+
     local spectators = g_map.getSpectators(myPos, false)
     if spectators then
+      -- SISTEMA ANTI-KS PARA SPECIALMOBS: Se estiver focando outro jogador, prioridade vira 0
+      if isSpecial then
+        for _, spec in ipairs(spectators) do
+          if spec:isPlayer() and spec ~= localPlayer then
+            -- Verifica se o boss está explicitamente atacando ou focado no outro jogador
+            if creature:getTarget() == spec:getId() then
+              return 0
+            end
+            -- Redundância: Verifica se o boss está colado no outro jogador
+            local rivalPos = spec:getPosition()
+            local bPos = creature:getPosition()
+            if rivalPos and bPos and math.abs(bPos.x - rivalPos.x) <= 1 and math.abs(bPos.y - rivalPos.y) <= 1 then
+              return 0
+            end
+          end
+        end
+        -- Se for SpecialMob e estiver livre/com você, recebe a prioridade máxima máxima
+        return (config.priority or 0) + 1000
+      end
+
+      -- SISTEMA ANTI-KS PARA MONSTROS JÁ EXISTENTE (Baseado em contagem de colados)
       local meusMonstrosColados = 0
       for _, spec in ipairs(spectators) do
         if spec:isMonster() and not spec:isDead() then
@@ -2565,7 +2594,6 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
                 end
               end
             end
-            
             if monstrosNoRival > meusMonstrosColados and monstrosDoRivalList[creature:getId()] then
               return 0 
             end
@@ -2575,6 +2603,7 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
       end
     end
   end
+  
   local priority = 0
   if g_game.getAttackingCreature() == creature then
     priority = priority + 1
@@ -2602,7 +2631,9 @@ end
 macro(100, function()
   local player = g_game.getLocalPlayer()
   if not player then return end
-  if not CaveBot or not CaveBot.isOn() then return end
+  
+  if (not CaveBot or not CaveBot.isOn()) and not hasSpecialMob then return end
+  
   local pos = player:getPosition()
   local currentSpecs = g_map.getSpectators(pos, false)
   if not currentSpecs then return end
@@ -2630,16 +2661,27 @@ macro(100, function()
     end
   end
   if bossStillAlive then
-    CaveBot.delay(100) 
     if not hasSpecialMob then
       hasSpecialMob = true
       previousChaseMode = g_game.getChaseMode()
-      g_game.setChaseMode(1)
+      g_game.setChaseMode(1) 
+      if CaveBot then
+        if CaveBot.setWalking then CaveBot.setWalking(false) end
+        if CaveBot.delay then CaveBot.delay(2000) end
+      end
+    else
+      if g_game.getChaseMode() ~= 1 then
+        g_game.setChaseMode(1)
+      end
     end
     return
   end
   if not bossStillAlive and hasSpecialMob then
     hasSpecialMob = false
     g_game.setChaseMode(previousChaseMode == 1 and 0 or previousChaseMode)
+    if CaveBot then
+      if CaveBot.setWalking then CaveBot.setWalking(true) end
+      if CaveBot.delay then CaveBot.delay(0) end
+    end
   end
 end)
