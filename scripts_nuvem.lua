@@ -2046,7 +2046,7 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ HUD Hotkeys ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 --Start/Stop CaveBot
-macro(1, "Start/Stop CaveBot", ("CTRL+1"), function(killcave)
+macro(1, "Start/Stop Cave", ("CTRL+1"), function(killcave)
 if CaveBot.isOn() then
  CaveBot.setOff()
  killcave.setOff()
@@ -2056,7 +2056,7 @@ else
 end
 end)
 --start/stop TargetBot
-macro(1, "Start/Stop TargetBot", ("CTRL+2"), function(killtarget)
+macro(1, "Start/Stop Target", ("CTRL+2"), function(killtarget)
 if TargetBot.isOn() then
  TargetBot.setOff()
  killtarget.setOff()
@@ -2113,7 +2113,7 @@ local function checkPos(x, y)
     end
     return false
 end
-dash = macro(100, "BugMap", ('CTRL+3'), function()
+dash = macro(30, "BugMap", ('CTRL+3'), function()
     local k = modules.corelib.g_keyboard.isKeyPressed
     if k('w') or k('Up') or k('numpad8') then checkPos(0, -2)
     elseif k('e') then checkPos(2, -2)
@@ -2126,26 +2126,6 @@ dash = macro(100, "BugMap", ('CTRL+3'), function()
     end
 end)
 if dash and dash.setOff then dash.setOff() end
---HoldAttack
-chaseatk = macro(100, "Hold Target", "SHIFT+2", function()
-  if g_game.isAttacking() 
-then
- oldTarget = g_game.getAttackingCreature()
-  end
-  if (oldTarget and oldTarget:getPosition()) 
-then
- if (not g_game.isAttacking() and getDistanceBetween(pos(), oldTarget:getPosition()) <= 8) then
-
-if (oldTarget:getPosition().z == posz()) then
-        g_game.attack(oldTarget)
-      end
-    end
-  end
-end)
-
-if chaseatk and chaseatk.setOff then
-    chaseatk.setOff()
-end
 --Auto MWall na Frente do Alvo
 local MW_ID = 10571
 local ultimoUso = 0
@@ -2178,6 +2158,26 @@ end)
 
 if mwall and mwall.setOff then
     mwall.setOff()
+end
+--HoldAttack
+chaseatk = macro(100, "Hold Target", "SHIFT+2", function()
+  if g_game.isAttacking() 
+then
+ oldTarget = g_game.getAttackingCreature()
+  end
+  if (oldTarget and oldTarget:getPosition()) 
+then
+ if (not g_game.isAttacking() and getDistanceBetween(pos(), oldTarget:getPosition()) <= 8) then
+
+if (oldTarget:getPosition().z == posz()) then
+        g_game.attack(oldTarget)
+      end
+    end
+  end
+end)
+
+if chaseatk and chaseatk.setOff then
+    chaseatk.setOff()
 end
 --X-Sense
 if type(storage.Sense) ~= "string" then
