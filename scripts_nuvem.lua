@@ -51,54 +51,6 @@ ButtonT = UI.Button("Reconect", function()
 end)
 updateButtonReconectText()
 UI.Separator()
---Eat Food
-local panelName = "AutoFood"
-storage[panelName] = storage[panelName] or {enabled = false}
-local config = storage[panelName]
-
-local ui = setupUI([[
-Panel
-  height: 58
-
-  BotSwitch
-    id: title
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    text: Auto Food
-
-  BotItem
-    id: item
-    anchors.top: prev.bottom
-    anchors.horizontalCenter: prev.horizontalCenter
-    margin-top: 5
-    width: 34
-    height: 34
-]])
-
-storage.foodItem = storage.foodItem or 3577
-ui.item:setItemId(storage.foodItem)
-
-ui.item.onItemChange = function(widget)
-    storage.foodItem = widget:getItemId()
-end
-
-ui.title:setOn(config.enabled)
-ui.title.onClick = function(widget)
-    config.enabled = not config.enabled
-    widget:setOn(config.enabled)
-end
-
-macro(10000, function()
-    -- Não faz nada se estiver desativado ou se o personagem estiver em PZ
-    if not config.enabled or isInPz() then return end
-
-    local food = findItem(storage.foodItem)
-    if food then
-        g_game.use(food)
-    end
-end)
-UI.Separator()
 macro(100, "GrandFisher Mask", function()
     if not g_game.isAttacking() and not g_game.getAttackingCreature() then
         return
@@ -1271,8 +1223,9 @@ end
 
 setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Healing Spell ~"):setColor('#EBDEF0')
+UI.Label("~ Survival ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+--fast regen
 local panelName = "selfregen"
 local ui = setupUI([[
 Panel
@@ -1284,7 +1237,7 @@ Panel
     anchors.right: parent.right
     anchors.bottom: parent.verticalCenter
     text-align: center
-    !text: tr('Activate')
+    !text: tr('Regeneration')
 
   HorizontalScrollBar
     id: HP
@@ -1301,7 +1254,7 @@ ui:setId(panelName)
 if not storage[panelName] then
   storage[panelName] = {
       title = enabled,
-      enabled = true,
+      enabled = false,
       setting = true,
       hp = 95
   }
@@ -1335,9 +1288,7 @@ macro(1100, function()
     end
     end
 end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Reiatsu Barrier ~"):setColor('#EBDEF0')
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Separator()
 local panelName = "manabarrier"
 local ui = setupUI([[
 Panel
@@ -1349,7 +1300,7 @@ Panel
     anchors.right: parent.right
     anchors.bottom: parent.verticalCenter
     text-align: center
-    !text: tr('Activate')
+    !text: tr('Reiatsu Barrier')
 
   HorizontalScrollBar
     id: HP
@@ -1367,7 +1318,7 @@ ui:setId(panelName)
 if not storage[panelName] then
   storage[panelName] = {
       title = enabled,
-      enabled = true,
+      enabled = false,
       setting = true,
       hp = 70
   }
@@ -1407,14 +1358,254 @@ macro(100, function()
         if (tempoAgora - ultimoUsoBarreira) >= DELAY_SEGUNDOS then
             say(storage.autobarrier)
             ultimoUsoBarreira = tempoAgora
+            
             print("[Auto Barrier] Magia conjurada! Aguardando " .. DELAY_SEGUNDOS .. " segundos de recarga.")
         end
     end
   end
 end)
+UI.Separator()
+--Eat Food
+local panelName = "AutoFood"
+storage[panelName] = storage[panelName] or {enabled = false}
+local config = storage[panelName]
+
+local ui = setupUI([[
+Panel
+  height: 58
+
+  BotSwitch
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: Auto Food
+
+  BotItem
+    id: item
+    anchors.top: prev.bottom
+    anchors.horizontalCenter: prev.horizontalCenter
+    margin-top: 5
+    width: 34
+    height: 34
+]])
+
+storage.foodItem = storage.foodItem or 3577
+ui.item:setItemId(storage.foodItem)
+
+ui.item.onItemChange = function(widget)
+    storage.foodItem = widget:getItemId()
+end
+
+ui.title:setOn(config.enabled)
+ui.title.onClick = function(widget)
+    config.enabled = not config.enabled
+    widget:setOn(config.enabled)
+end
+
+macro(10000, function()
+    -- Não faz nada se estiver desativado ou se o personagem estiver em PZ
+    if not config.enabled or isInPz() then return end
+
+    local food = findItem(storage.foodItem)
+    if food then
+        g_game.use(food)
+    end
+end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Pet ~")
+UI.Label("~ Potions & Pet ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+--fast potion
+local panelNameFastPot = "selffastpot" -- Alterado para não conflitar com "selfpet"
+local uiFastPot = setupUI([[
+Panel
+  height: 50
+  
+  BotItem
+    id: item
+    anchors.top: parent.top
+    anchors.left: parent.left
+    margin-top: 2
+    
+  BotSwitch
+    id: title
+    anchors.top: parent.top
+    anchors.left: item.right
+    anchors.bottom: item.verticalCenter
+    text-align: center
+    !text: tr('Activate')
+    margin-left: 10
+    width: 120
+  
+  BotLabel
+    id: help
+    anchors.top: item.verticalCenter
+    anchors.left: item.right
+    anchors.right: parent.right
+    anchors.bottom: item.bottom
+    text-align: center
+    margin-left: 2
+
+  HorizontalScrollBar
+    id: HP
+    anchors.top: item.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 3
+    minimum: 1
+    maximum: 100
+    step: 1
+    
+]], parent)
+uiFastPot:setId(panelNameFastPot)
+
+if not storage[panelNameFastPot] then
+  storage[panelNameFastPot] = {
+      id = 3600,
+      enabled = false,
+      setting = true,
+      hp = 70
+  }
+else
+  if not storage[panelNameFastPot].id or storage[panelNameFastPot].id == 0 then
+      storage[panelNameFastPot].id = 3600
+  end
+end
+
+uiFastPot.title:setOn(storage[panelNameFastPot].enabled)
+uiFastPot.title.onClick = function(widget)
+  storage[panelNameFastPot].enabled = not storage[panelNameFastPot].enabled
+  widget:setOn(storage[panelNameFastPot].enabled)
+end
+
+local updateHpText = function()
+    if storage[panelNameFastPot].setting then
+    uiFastPot.help:setText("Health: < " .. storage[panelNameFastPot].hp .. "%")
+	end
+end
+
+updateHpText()
+uiFastPot.HP.onValueChange = function(scroll, value)
+  storage[panelNameFastPot].hp = value
+  updateHpText()
+end
+
+uiFastPot.item:setItemId(storage[panelNameFastPot].id)
+uiFastPot.item.onItemChange = function(widget)
+  local novaId = widget:getItemId()
+  if novaId and novaId > 0 then
+      storage[panelNameFastPot].id = novaId
+  end
+end
+
+uiFastPot.HP:setValue(storage[panelNameFastPot].hp)
+
+macro(100, function()
+ if not storage[panelNameFastPot].enabled then return end
+
+ if storage[panelNameFastPot].setting then
+    if hppercent() <= storage[panelNameFastPot].hp then
+        use(storage[panelNameFastPot].id)
+		delay(1000)
+    end
+	end
+end)
+
+--fast mana potion
+local panelNameManaPot = "selfmppot"
+local uiManaPot = setupUI([[
+Panel
+  height: 50
+  
+  BotItem
+    id: item
+    anchors.top: parent.top
+    anchors.left: parent.left
+    margin-top: 2
+    
+  BotSwitch
+    id: title
+    anchors.top: parent.top
+    anchors.left: item.right
+    anchors.bottom: item.verticalCenter
+    text-align: center
+    !text: tr('Activate')
+    margin-left: 10
+    width: 120
+  
+  BotLabel
+    id: help
+    anchors.top: item.verticalCenter
+    anchors.left: item.right
+    anchors.right: parent.right
+    anchors.bottom: item.bottom
+    text-align: center
+    margin-left: 2
+
+  HorizontalScrollBar
+    id: HP
+    anchors.top: item.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 3
+    minimum: 1
+    maximum: 100
+    step: 1
+    
+]], parent)
+uiManaPot:setId(panelNameManaPot)
+
+if not storage[panelNameManaPot] then
+  storage[panelNameManaPot] = {
+      id = 11860,
+      enabled = false,
+      setting = true,
+      hp = 50
+  }
+else
+  if not storage[panelNameManaPot].id or storage[panelNameManaPot].id == 0 then
+      storage[panelNameManaPot].id = 11860
+  end
+end
+
+uiManaPot.title:setOn(storage[panelNameManaPot].enabled)
+uiManaPot.title.onClick = function(widget)
+  storage[panelNameManaPot].enabled = not storage[panelNameManaPot].enabled
+  widget:setOn(storage[panelNameManaPot].enabled)
+end
+
+local updateMpText = function()
+    if storage[panelNameManaPot].setting then
+    uiManaPot.help:setText("Mana: < " .. storage[panelNameManaPot].hp .. "%")
+	end
+end
+
+updateMpText()
+uiManaPot.HP.onValueChange = function(scroll, value)
+  storage[panelNameManaPot].hp = value
+  updateMpText()
+end
+
+uiManaPot.item:setItemId(storage[panelNameManaPot].id)
+uiManaPot.item.onItemChange = function(widget)
+  local novaId = widget:getItemId()
+  if novaId and novaId > 0 then
+      storage[panelNameManaPot].id = novaId
+  end
+end
+
+uiManaPot.HP:setValue(storage[panelNameManaPot].hp)
+
+macro(100, function()
+ if not storage[panelNameManaPot].enabled then return end
+
+ if storage[panelNameManaPot].setting then
+    if manapercent() <= storage[panelNameManaPot].hp then
+        use(storage[panelNameManaPot].id)
+		delay(1000)
+    end
+	end
+end)
 --Pet on Hp
 local panelName = "selfpetconfig"
 local ui = setupUI([[
@@ -1511,162 +1702,6 @@ petMacro = macro(100, function()
                     storage.petItemCooldowns[currentId] = currentTime 
                 end
             end
-        end
-    end
-end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Potions ~"):setColor('#EBDEF0')
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-local panelNameFastPot = "selffastpot"
-local panelNameManaPot = "selfmppot"
-if not storage[panelNameFastPot] then
-  storage[panelNameFastPot] = { id = 11211, enabled = false, setting = true, hp = 70 }
-end
-if not storage[panelNameManaPot] then
-  storage[panelNameManaPot] = { id = 10271, enabled = false, setting = true, hp = 50 }
-end
-local containerPotions = UI.createWidget("Panel")
-containerPotions:setHeight(110)
-
-local uiFastPot = setupUI([[
-Panel
-  height: 50
-  anchors.top: parent.top
-  anchors.left: parent.left
-  anchors.right: parent.right
-  
-  BotItem
-    id: item
-    anchors.top: parent.top
-    anchors.left: parent.left
-    margin-top: 2
-    
-  BotSwitch
-    id: title
-    anchors.top: parent.top
-    anchors.left: item.right
-    anchors.right: parent.right
-    text-align: center
-    !text: tr('Activate HP')
-    margin-left: 10
-  
-  BotLabel
-    id: help
-    anchors.top: title.bottom
-    anchors.left: item.right
-    anchors.right: parent.right
-    text-align: center
-    margin-top: 2
-
-  HorizontalScrollBar
-    id: HP
-    anchors.top: item.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    margin-top: 5
-    minimum: 1
-    maximum: 100
-    step: 1
-]], containerPotions)
-uiFastPot:setId(panelNameFastPot)
-
-local uiManaPot = setupUI([[
-Panel
-  height: 50
-  anchors.top: prev.bottom
-  anchors.left: parent.left
-  anchors.right: parent.right
-  margin-top: 10
-  
-  BotItem
-    id: item
-    anchors.top: parent.top
-    anchors.left: parent.left
-    margin-top: 2
-    
-  BotSwitch
-    id: title
-    anchors.top: parent.top
-    anchors.left: item.right
-    anchors.right: parent.right
-    text-align: center
-    !text: tr('Activate MP')
-    margin-left: 10
-  
-  BotLabel
-    id: help
-    anchors.top: title.bottom
-    anchors.left: item.right
-    anchors.right: parent.right
-    text-align: center
-    margin-top: 2
-
-  HorizontalScrollBar
-    id: HP
-    anchors.top: item.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    margin-top: 5
-    minimum: 1
-    maximum: 100
-    step: 1
-]], containerPotions)
-uiManaPot:setId(panelNameManaPot)
-uiFastPot.title:setOn(storage[panelNameFastPot].enabled)
-uiFastPot.title.onClick = function(widget)
-  storage[panelNameFastPot].enabled = not storage[panelNameFastPot].enabled
-  widget:setOn(storage[panelNameFastPot].enabled)
-end
-local updateHpText = function()
-    if storage[panelNameFastPot].setting then
-        uiFastPot.help:setText("Health: < " .. storage[panelNameFastPot].hp .. "%")
-    end
-end
-updateHpText()
-uiFastPot.HP.onValueChange = function(scroll, value)
-  storage[panelNameFastPot].hp = value
-  updateHpText()
-end
-uiFastPot.item:setItemId(storage[panelNameFastPot].id)
-uiFastPot.item.onItemChange = function(widget)
-  local novaId = widget:getItemId()
-  if novaId and novaId > 0 then storage[panelNameFastPot].id = novaId end
-end
-uiFastPot.HP:setValue(storage[panelNameFastPot].hp)
-macro(500, function()
-    if not storage[panelNameFastPot].enabled then return end
-    if storage[panelNameFastPot].setting then
-        if hppercent() <= storage[panelNameFastPot].hp then
-            use(storage[panelNameFastPot].id)
-        end
-    end
-end)
-uiManaPot.title:setOn(storage[panelNameManaPot].enabled)
-uiManaPot.title.onClick = function(widget)
-  storage[panelNameManaPot].enabled = not storage[panelNameManaPot].enabled
-  widget:setOn(storage[panelNameManaPot].enabled)
-end
-local updateMpText = function()
-    if storage[panelNameManaPot].setting then
-        uiManaPot.help:setText("Mana: < " .. storage[panelNameManaPot].hp .. "%")
-    end
-end
-updateMpText()
-uiManaPot.HP.onValueChange = function(scroll, value)
-  storage[panelNameManaPot].hp = value
-  updateMpText()
-end
-uiManaPot.item:setItemId(storage[panelNameManaPot].id)
-uiManaPot.item.onItemChange = function(widget)
-  local novaId = widget:getItemId()
-  if novaId and novaId > 0 then storage[panelNameManaPot].id = novaId end
-end
-uiManaPot.HP:setValue(storage[panelNameManaPot].hp)
-macro(1000, function()
-    if not storage[panelNameManaPot].enabled then return end
-    if storage[panelNameManaPot].setting then
-        if manapercent() <= storage[panelNameManaPot].hp then
-            use(storage[panelNameManaPot].id)
         end
     end
 end)
