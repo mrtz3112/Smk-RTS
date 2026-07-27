@@ -52,7 +52,7 @@ end)
 updateButtonReconectText()
 UI.Separator()
 --Deposit Gold & Stack Items
-macro(100, "DepositGold & StackItems", function()
+macro(250, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
   local coinIds = {3031, 3035, 3043, 10137} 
   local minAmount = 1
