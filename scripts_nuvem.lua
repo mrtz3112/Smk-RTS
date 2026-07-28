@@ -377,6 +377,62 @@ macro(100, function()
     end
 end)
 UI.Separator()
+--Deposit Gold & Stack Items
+macro(250, "DepositGold & StackItems", function()
+  if not g_game.isOnline() then return end
+  local coinIds = {3031, 3035, 3043, 10137} 
+  local minAmount = 1
+  local shouldDeposit = false
+  
+  for _, id in ipairs(coinIds) do
+    local item = findItem(id)
+    if item and item:getCount() >= minAmount then
+      shouldDeposit = true
+      break
+    end
+  end
+  if shouldDeposit then
+    say("!deposit all")
+    delay(500)
+    return
+  end
+  local containers = g_game.getContainers()
+  local itensMapeados = {}
+  for _, container in pairs(containers) do
+    for slotIndex, item in ipairs(container:getItems()) do
+      if item:isStackable() and item:getCount() < 10000 then
+        local itemId = item:getId()
+        local count = item:getCount()
+        local posicaoAtual = container:getSlotPosition(slotIndex - 1)
+
+        if not itensMapeados[itemId] or count > itensMapeados[itemId].count then
+          itensMapeados[itemId] = {
+            posicao = posicaoAtual,
+            count = count
+          }
+        end
+      end
+    end
+  end
+  for _, container in pairs(containers) do
+    for slotIndex, item in ipairs(container:getItems()) do
+      if item:isStackable() and item:getCount() < 10000 then
+        local itemId = item:getId()
+        local destino = itensMapeados[itemId]
+
+        if destino then
+          local posicaoAtual = container:getSlotPosition(slotIndex - 1)
+
+          if posicaoAtual.x ~= destino.posicao.x or posicaoAtual.y ~= destino.posicao.y or posicaoAtual.slot ~= destino.posicao.slot then
+            g_game.move(item, destino.posicao, item:getCount())
+            delay(150)
+            return "retry"
+          end
+        end
+      end
+    end
+  end
+end)
 --Auto Dodge
 local effectIdToAvoid = 237
 local flags = { ignoreNonPathable = true }
