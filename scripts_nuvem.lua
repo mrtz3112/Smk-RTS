@@ -2637,40 +2637,10 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
--- NewTargetSystem (Filtro por Proximidade e Direção do Outro Jogador)
+-- NewTargetSystem (Foco e Pausa Automática por Delay de 2000ms)
 if lastWalkState == nil then lastWalkState = "normal" end
 
--- Função auxiliar para verificar se o monstro pertence a outro jogador (Matemática Pura)
-local function verificarSePertenceAOutro(creature, spectators, localPlayer)
-    if not spectators or not creature then return false end
-    
-    local cPos = creature:getPosition()
-    if not cPos then return false end
-
-    for _, spec in ipairs(spectators) do
-        if spec:isPlayer() and spec ~= localPlayer then
-            local pPos = spec:getPosition()
-            if pPos then
-                -- 1. Se o monstro estiver colado (1 SQM) de outro jogador, assume que é dele
-                local distXZX = math.abs(cPos.x - pPos.x)
-                local distXZY = math.abs(cPos.y - pPos.y)
-                if distXZX <= 1 and distXZY <= 1 then
-                    return true
-                end
-
-                -- 2. Checagem por Direção de Olhar: Se o player estiver virado diretamente para o monstro
-                local dir = spec:getDirection()
-                if dir == 0 and pPos.x == cPos.x and pPos.y > cPos.y and (pPos.y - cPos.y) <= 4 then return true end -- Olhando Norte
-                if dir == 1 and pPos.y == cPos.y and pPos.x < cPos.x and (cPos.x - pPos.x) <= 4 then return true end -- Olhando Leste
-                if dir == 2 and pPos.x == cPos.x and pPos.y < cPos.y and (cPos.y - pPos.y) <= 4 then return true end -- Olhando Sul
-                if dir == 3 and pPos.y == cPos.y and pPos.x > cPos.x and (pPos.x - cPos.x) <= 4 then return true end -- Olhando Oeste
-            end
-        end
-    end
-    return false
-end
-
--- 1. MACRO DE ATRASO E VARREDURA COM FILTRO REESTRUTURADO (Roda a cada 50ms para máxima resposta)
+-- 1. MACRO DE MONITORAMENTO DE MOVIMENTO (Roda a cada 50ms no background)
 macro(50, function()
     if not g_game.isOnline() then return end
     
@@ -2679,39 +2649,37 @@ macro(50, function()
     local myPos = localPlayer:getPosition()
     
     local spectators = g_map.getSpectators(myPos, false)
-    local existeSpecialLivre = false
+    local existeSpecialVivo = false
     
+    -- Varre a tela inteira para ver se algum monstro da lista ainda está vivo
     if spectators then
         for _, specCreature in ipairs(spectators) do
-            if specCreature:isMonster() then
+            if specCreature:isMonster() and specCreature:getHealthPercent() > 0 then
                 local name = specCreature:getName():lower()
-                if name:find("elite") or name:find("boss") or name:find("hollow capitan shinigami") or 
-                   name:find("complete espada") or name:find("gotei 13 king") or name:find("dungeon") or
+                
+                if name:find("elite") or 
+                   name:find("boss") or 
+                   name:find("hollow capitan shinigami") or 
+                   name:find("complete espada") or 
+                   name:find("gotei 13 king") or 
+                   name:find("dungeon") or
                    name:find("oversaturated hollowed shinigami") then
                    
-                   local bossPos = specCreature:getPosition()
-                   local distanciaAteEle = getDistanceBetween(myPos, bossPos)
-                   
-                   if distanciaAteEle <= 3 then
-                       -- Executa a nova checagem física
-                       local focadoEmOutro = verificarSePertenceAOutro(specCreature, spectators, localPlayer)
-                       
-                       if not focadoEmOutro then
-                           existeSpecialLivre = true
-                           break 
-                       end
-                   end
+                   existeSpecialVivo = true
+                   break -- Encontrou um vivo, já pode travar o CaveBot
                 end
             end
         end
     end
     
-    if existeSpecialLivre then
+    -- Se o SpecialMob está na tela: Renova o delay continuamente para travar os passos
+    if existeSpecialVivo then
         if CaveBot and CaveBot.delay then 
             CaveBot.delay(2000) 
         end
         lastWalkState = "delayed"
     else
+        -- Se o monstro morreu ou sumiu: Zera o delay e devolve a velocidade máxima imediatamente
         if lastWalkState == "delayed" then
             if g_game.setWalkDelay then g_game.setWalkDelay(1) end
             if CaveBot and CaveBot.delay then CaveBot.delay(0) end 
@@ -2720,42 +2688,63 @@ macro(50, function()
     end
 end)
 
--- 2. FUNÇÃO PRINCIPAL: Ignora ou Ataca com base na Proximidade do Rival
+-- 2. FUNÇÃO DE PRIORIDADE CORRIGIDA (Baseada na sua lógica original)
 TargetBot.Creature.calculatePriority = function(creature, config, path)
-  local localPlayer = g_game.getLocalPlayer()
-  if not localPlayer then return 0 end
-  local myPos = localPlayer:getPosition()
-  
-  if creature:isMonster() and path then
+  local priority = 0
+
+  -- extra priority if it's current target
+  if g_game.getAttackingCreature() == creature then
+    priority = priority + 1
+  end
+
+  -- check if distance is fine, if not then attack only if already attacked
+  if #path > config.maxDistance then
+    return priority
+  end
+
+  -- MODIFICAÇÃO PRINCIPAL: Checa se o monstro atual pertence à sua lista de Specials
+  if creature:isMonster() then
     local creatureName = creature:getName():lower()
-    local isSpecial = false
     
     if creatureName:find("elite") or 
        creatureName:find("boss") or 
        creatureName:find("hollow capitan shinigami") or 
        creatureName:find("complete espada") or 
        creatureName:find("gotei 13 king") or 
-       creatureName:find("dungeon") or 
+       creatureName:find("dungeon") or
        creatureName:find("oversaturated hollowed shinigami") then
-      isSpecial = true
-    end
-    
-    local spectators = g_map.getSpectators(myPos, false)
-    if spectators and isSpecial then
-        -- Se a checagem física acusar outro player dono do monstro, joga a prioridade para o chão
-        if verificarSePertenceAOutro(creature, spectators, localPlayer) then
-            config.priority = -100000 
-            return -100000 -- Ignora completamente o alvo
-        end
-    end
-    
-    if isSpecial then
-      config.priority = 1000
-      return 1000 
+       
+       -- Aplica a prioridade fixa de 1000 requisitada e ignora os cálculos abaixo
+       config.priority = 1000
+       return 1000 
     end
   end
+
+  -- Lógica original para monstros comuns (Mantida intacta)
+  priority = priority + config.priority
   
-  return 1 
+  -- extra priority for close distance
+  local path_length = #path
+  if path_length == 1 then
+    priority = priority + 3
+  elseif path_length <= 3 then
+    priority = priority + 1
+  end
+
+  -- extra priority for low health
+  if config.chase and creature:getHealthPercent() < 30 then
+    priority = priority + 5
+  elseif creature:getHealthPercent() < 20 then
+    priority = priority + 2.5
+  elseif creature:getHealthPercent() < 40 then
+    priority = priority + 1.5
+  elseif creature:getHealthPercent() < 60 then
+    priority = priority + 0.5
+  elseif creature:getHealthPercent() < 80 then
+    priority = priority + 0.2
+  end
+
+  return priority
 end
 
 
