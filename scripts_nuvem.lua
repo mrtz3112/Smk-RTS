@@ -1,11 +1,6 @@
 -- ====================================================================
--- [3º SCRIPT - 1ª ABA] SISTEMA DE ALARMS COM AUTO-GERADOR DE ARQUIVO .OTUI
+-- [INÍCIO DA ABA] GERADOR DE ARQUIVO .OTUI AUTOMÁTICO (CORRIGIDO)
 -- ====================================================================
-
--- Definição dos caminhos físicos baseado no diretório atual do seu loader (Smk-RTS)
-local nomeDoArquivoOtui = "alarms.otui"
-local pastaDoLoader = g_modules.getCurrentModule():getDirectory() .. "/"
-local caminhoCompletoOtui = pastaDoLoader .. nomeDoArquivoOtui
 
 -- Conteúdo exato de texto puro que será gravado dentro do arquivo físico .otui
 local textoPuroDoLayoutOtui = [[
@@ -145,12 +140,23 @@ AlarmsWindow < MainWindow
     margin-right: 5
     @onClick: self:getParent():hide()
 ]]
--- INJETOR DO ARQUIVO FÍSICO (Coloque isso logo após o seu código acima)
-if not g_resources.fileExists(caminhoCompletoOtui) and not g_resources.fileExists(nomeDoArquivoOtui) then
-    pcall(function()
-        g_resources.writeFile(caminhoCompletoOtui, textoPuroDoLayoutOtui)
-    end)
-end
+
+-- [CORREÇÃO CRUCIAL]: Executa em background de forma assíncrona para não congelar o bot antes dele abrir
+schedule(10, function()
+    -- Puxa o nome do módulo dinâmico do CandyBot/SmkBot para usar a gravação virtual autorizada
+    local moduloBot = g_modules.getModule('game_bot') or g_modules.getCurrentModule()
+    if moduloBot then
+        -- Salva o arquivo usando a árvore de diretórios virtuais interna do jogo (Aceito pela Sandbox)
+        local caminhoSeguro = "/" .. moduloBot:getName() .. "/alarms.otui"
+        
+        if not g_resources.fileExists(caminhoSeguro) then
+            pcall(function()
+                g_resources.writeFile(caminhoSeguro, textoPuroDoLayoutOtui)
+            end)
+        end
+    end
+end)
+
 
 setDefaultTab("Main")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
