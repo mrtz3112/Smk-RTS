@@ -824,7 +824,7 @@ if player:getBlessings() == 0 then
   say("!bless")
   schedule(1000, function()
     if player:getBlessings() == 0 then
-      error("!! BLESS - ON !!")
+      print("[Loader] Bless: ON")
     end
   end)
 end
