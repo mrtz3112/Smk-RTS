@@ -2821,7 +2821,7 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
--- NewCreature_Priority [Foco na Lista Fixa + Anti-KS Absoluto por Colagem]
+-- NewCreature_Priority [Foco na Lista Fixa + Anti-KS Absoluto por Colagem com Exceção de Trainer]
 local specialMonsters = {
   "elite",
   "boss",
@@ -2835,13 +2835,18 @@ local function isInside8x8(myPos, creaturePos)
     if not myPos or not creaturePos then return false end
     return math.abs(myPos.x - creaturePos.x) <= 3 and math.abs(myPos.y - creaturePos.y) <= 3
 end
+local function isTrainerMonster(creatureName)
+    if not creatureName then return false end
+    local name = creatureName:lower()
+    return name:find("house trainer", 1, true) or name == "trainer"
+end
 local function isMonsterGluedToOtherPlayer(monster)
+    if isTrainerMonster(monster:getName()) then return false end
     local localPlayer = g_game.getLocalPlayer()
     if not localPlayer then return false end
     local myId = localPlayer:getId()
     local monsterPos = monster:getPosition()
     if not monsterPos then return false end
-
     local spectators = g_map.getSpectators(monsterPos, false)
     for _, spec in ipairs(spectators) do
         if spec:isPlayer() and spec:getId() ~= myId then
@@ -2876,19 +2881,25 @@ macro(150, function()
     local currentTarget = g_game.getAttackingCreature()
     if currentTarget and currentTarget:isMonster() then
         local mTargetId = currentTarget.getTargetId and currentTarget:getTargetId() or 0
-        if (mTargetId > 0 and mTargetId ~= myId) or isMonsterGluedToOtherPlayer(currentTarget) then
-            g_game.cancelAttack()
+        -- SÓ cancela o ataque por KS se não for o seu próprio foco E não for um trainer de treino
+        if not isTrainerMonster(currentTarget:getName()) then
+            if (mTargetId > 0 and mTargetId ~= myId) or isMonsterGluedToOtherPlayer(currentTarget) then
+                g_game.cancelAttack()
+            end
         end
-    end
-    
+    end 
     local spectators = g_map.getSpectators(myPos, false)
     local existeSpecialVivoNaArea = false
-    
     if spectators then
         for _, specCreature in ipairs(spectators) do
             if specCreature:isMonster() and specCreature:getHealthPercent() > 0 then
                 local mTargetId = specCreature.getTargetId and specCreature:getTargetId() or 0
                 local attackingOtherPlayer = mTargetId > 0 and mTargetId ~= myId
+                
+                -- Se for trainer, ignora as travas de ataque e passa direto
+                if isTrainerMonster(specCreature:getName()) then
+                    attackingOtherPlayer = false
+                end
                 if not attackingOtherPlayer and not isMonsterGluedToOtherPlayer(specCreature) then
                     if isInside8x8(myPos, specCreature:getPosition()) then
                         if isSpecialMonster(specCreature:getName()) then
@@ -2925,13 +2936,12 @@ schedule(400, function()
     local localPlayer = g_game.getLocalPlayer()
     if not localPlayer then return priority end
     local myId = localPlayer:getId() 
-    if creature:isMonster() then
+    if creature:isMonster() and not isTrainerMonster(creature:getName()) then
       local mTargetId = creature.getTargetId and creature:getTargetId() or 0
       if (mTargetId > 0 and mTargetId ~= myId) or isMonsterGluedToOtherPlayer(creature) then
         return -1000 
       end
     end 
-    
     if g_game.getAttackingCreature() == creature then
       priority = priority + 1
     end  
@@ -2963,11 +2973,11 @@ schedule(400, function()
   end
   macro(500, function()
       local target = g_game.getAttackingCreature()
-      if target and isMonsterGluedToOtherPlayer(target) then
+      if target and not isTrainerMonster(target:getName()) and isMonsterGluedToOtherPlayer(target) then
           g_game.cancelAttack() 
       end
   end)
-  print("[Loader] Sistema de prioridade e Anti-KS Absoluto injetados com sucesso!")
+  print("[Loader] Sistema de prioridade e Anti-KS Absoluto com exceção de Trainers injetados!")
 end)
 
 --New CreatureEditor
