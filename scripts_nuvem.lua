@@ -2634,3 +2634,148 @@ dofile("/targetbot/creature_editor.lua")
 dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
+
+--NewTarget
+local specialMonsters = {
+  ["elite"] = true,
+  ["boss"] = true,
+  ["hollow capitan shinigami"] = true,
+  ["complete espada"] = true,
+  ["gotei 13 king"] = true,
+  ["dungeon"] = true,
+  ["oversaturated hollowed shinigami"] = true
+}
+local function isInside8x8(myPos, creaturePos)
+    if not myPos or not creaturePos then return false end
+    return math.abs(myPos.x - creaturePos.x) <= 3 and math.abs(myPos.y - creaturePos.y) <= 3
+end
+local currentWalkState = "normal"
+macro(150, function()
+    if not g_game.isOnline() then return end
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer then return end
+    local myPos = localPlayer:getPosition()
+    local myId = localPlayer:getId()
+    local currentTarget = g_game.getAttackingCreature()
+    if currentTarget and currentTarget:isMonster() then
+        local mTargetId = currentTarget.getTargetId and currentTarget:getTargetId() or 0
+        if mTargetId > 0 and mTargetId ~= myId then
+            g_game.cancelAttack()
+        end
+    end
+    local spectators = g_map.getSpectators(myPos, false)
+    local existeSpecialVivoNaArea = false
+    if spectators then
+        for _, specCreature in ipairs(spectators) do
+            if specCreature:isMonster() and specCreature:getHealthPercent() > 0 then
+                local mTargetId = specCreature.getTargetId and specCreature:getTargetId() or 0
+                local attackingOtherPlayer = mTargetId > 0 and mTargetId ~= myId
+                if not attackingOtherPlayer and isInside8x8(myPos, specCreature:getPosition()) then
+                    local name = specCreature:getName():lower()
+                    if name:find("elite") or 
+                       name:find("boss") or 
+                       name:find("hollow capitan shinigami") or 
+                       name:find("complete espada") or 
+                       name:find("gotei 13 king") or 
+                       name:find("dungeon") or 
+                       name:find("oversaturated hollowed shinigami") then
+                       existeSpecialVivoNaArea = true
+                       break 
+                    end
+                end
+            end
+        end
+    end
+    if existeSpecialVivoNaArea then
+        if CaveBot and CaveBot.delay then 
+            CaveBot.delay(2000) 
+        end
+        currentWalkState = "delayed"
+    else
+        if currentWalkState == "delayed" then
+            if g_game.setWalkDelay then g_game.setWalkDelay(1) end
+            if CaveBot and CaveBot.delay then CaveBot.delay(0) end 
+            currentWalkState = "normal"
+        end
+    end
+end)
+TargetBot.Creature.calculatePriority = function(creature, config, path)
+  local priority = 0
+  local localPlayer = g_game.getLocalPlayer()
+  if not localPlayer then return priority end
+  local myId = localPlayer:getId()
+  if creature:isMonster() then
+    local mTargetId = creature.getTargetId and creature:getTargetId() or 0
+    if mTargetId > 0 and mTargetId ~= myId then
+      return -1000 
+    end
+  end
+  if g_game.getAttackingCreature() == creature then
+    priority = priority + 1
+  end
+  if #path > config.maxDistance then
+    return priority
+  end
+  local hasSpecialInArea = false
+  local myPos = localPlayer:getPosition()
+  local spectators = g_map.getSpectators(myPos, false)
+  for _, spec in ipairs(spectators) do
+    if spec:isMonster() then
+      local specTargetId = spec.getTargetId and spec:getTargetId() or 0
+      local behaviorOtherPlayer = specTargetId > 0 and specTargetId ~= myId
+      if not behaviorOtherPlayer and isInside8x8(myPos, spec:getPosition()) then
+        local specName = spec:getName():lower()
+        if specName:find("elite") or 
+           specName:find("boss") or 
+           specName:find("hollow capitan shinigami") or 
+           specName:find("complete espada") or 
+           specName:find("gotei 13 king") or 
+           specName:find("dungeon") or 
+           specName:find("oversaturated hollowed shinigami") then
+           hasSpecialInArea = true
+           break
+        end
+      end
+    end
+  end
+  if hasSpecialInArea then
+    if CaveBot and CaveBot.delay then
+      CaveBot.delay(2000)
+    end
+  else
+    if CaveBot and CaveBot.delay then
+      CaveBot.delay(0)
+    end
+  end
+  if creature:isMonster() then
+    local creatureName = creature:getName():lower()
+    if creatureName:find("elite") or 
+       creatureName:find("boss") or 
+       creatureName:find("hollow capitan shinigami") or 
+       creatureName:find("complete espada") or 
+       creatureName:find("gotei 13 king") or 
+       creatureName:find("dungeon") or 
+       creatureName:find("oversaturated hollowed shinigami") then
+       return 1000 
+    end
+  end
+  priority = priority + config.priority
+  local path_length = #path
+  if path_length == 1 then
+    priority = priority + 3
+  elseif path_length <= 3 then
+    priority = priority + 1
+  end
+  if config.chase and creature:getHealthPercent() < 30 then
+    priority = priority + 5
+  elseif creature:getHealthPercent() < 20 then
+    priority = priority + 2.5
+  elseif creature:getHealthPercent() < 40 then
+    priority = priority + 1.5
+  elseif creature:getHealthPercent() < 60 then
+    priority = priority + 0.5
+  elseif creature:getHealthPercent() < 80 then
+    priority = priority + 0.2
+  end
+  return priority
+end
