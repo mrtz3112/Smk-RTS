@@ -2649,7 +2649,7 @@ macro(150, function()
     end
     if existeSpecialVivoNaArea then
         if CaveBot and CaveBot.delay then 
-            CaveBot.delay(2000) 
+            CaveBot.delay(1000) -- [ATUALIZADO] Reduzido de 2000ms para 1000ms
         end
         currentWalkState = "delayed"
     else
@@ -2660,83 +2660,112 @@ macro(150, function()
         end
     end
 end)
-TargetBot.Creature.calculatePriority = function(creature, config, path)
-  local priority = 0
-  local localPlayer = g_game.getLocalPlayer()
-  if not localPlayer then return priority end
-  local myId = localPlayer:getId()
-  if creature:isMonster() then
-    local mTargetId = creature.getTargetId and creature:getTargetId() or 0
-    if mTargetId > 0 and mTargetId ~= myId then
-      return -1000 
+schedule(400, function()
+  if not TargetBot or not TargetBot.Creature then 
+      print("[Loader] Erro: TargetBot nao encontrado para injetar prioridades.")
+      return 
+  end
+  TargetBot.Creature.calculatePriority = function(creature, config, path)
+    local priority = 0
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer then return priority end
+    local myId = localPlayer:getId() 
+    if creature:isMonster() then
+      local mTargetId = creature.getTargetId and creature:getTargetId() or 0
+      if mTargetId > 0 and mTargetId ~= myId then
+        return -1000 
+      end
+    end 
+    if g_game.getAttackingCreature() == creature then
+      priority = priority + 1
+    end  
+    if #path > config.maxDistance then
+      return priority
     end
-  end
-  if g_game.getAttackingCreature() == creature then
-    priority = priority + 1
-  end
-  if #path > config.maxDistance then
-    return priority
-  end
-  local hasSpecialInArea = false
-  local myPos = localPlayer:getPosition()
-  local spectators = g_map.getSpectators(myPos, false)
-  for _, spec in ipairs(spectators) do
-    if spec:isMonster() then
-      local specTargetId = spec.getTargetId and spec:getTargetId() or 0
-      local behaviorOtherPlayer = specTargetId > 0 and specTargetId ~= myId
-      if not behaviorOtherPlayer and isInside8x8(myPos, spec:getPosition()) then
-        local specName = spec:getName():lower()
-        if specName:find("elite") or 
-           specName:find("boss") or 
-           specName:find("hollow capitan shinigami") or 
-           specName:find("complete espada") or 
-           specName:find("gotei 13 king") or 
-           specName:find("dungeon") or 
-           specName:find("oversaturated hollowed shinigami") then
-           hasSpecialInArea = true
-           break
+    local hasSpecialInArea = false
+    local myPos = localPlayer:getPosition()
+    local spectators = g_map.getSpectators(myPos, false)
+    for _, spec in ipairs(spectators) do
+      if spec:isMonster() then
+        local specTargetId = spec.getTargetId and spec:getTargetId() or 0
+        local behaviorOtherPlayer = specTargetId > 0 and specTargetId ~= myId
+        if not behaviorOtherPlayer and isInside8x8(myPos, spec:getPosition()) then
+          local specName = spec:getName():lower()
+          if specName:find("elite") or 
+             specName:find("boss") or 
+             specName:find("hollow capitan shinigami") or 
+             specName:find("complete espada") or 
+             specName:find("gotei 13 king") or 
+             specName:find("dungeon") or 
+             specName:find("oversaturated hollowed shinigami") then
+             hasSpecialInArea = true
+             break
+          end
         end
       end
+    end  
+    if hasSpecialInArea then
+      if CaveBot and CaveBot.delay then
+        CaveBot.delay(1000) -- [ATUALIZADO] Reduzido de 2000ms para 1000ms
+      end
+    else
+      if CaveBot and CaveBot.delay then
+        CaveBot.delay(0)
+      end
+    end 
+    if creature:isMonster() then
+      local creatureName = creature:getName():lower()
+      if creatureName:find("elite") or 
+         creatureName:find("boss") or 
+         creatureName:find("hollow capitan shinigami") or 
+         creatureName:find("complete espada") or 
+         creatureName:find("gotei 13 king") or 
+         creatureName:find("dungeon") or 
+         creatureName:find("oversaturated hollowed shinigami") then
+         return 1000 
+      end
     end
-  end
-  if hasSpecialInArea then
-    if CaveBot and CaveBot.delay then
-      CaveBot.delay(1000)
+    priority = priority + config.priority 
+    local path_length = #path
+    if path_length == 1 then
+      priority = priority + 3
+    elseif path_length <= 3 then
+      priority = priority + 1
     end
-  else
-    if CaveBot and CaveBot.delay then
-      CaveBot.delay(0)
+    if config.chase and creature:getHealthPercent() < 30 then
+      priority = priority + 5
+    elseif creature:getHealthPercent() < 20 then
+      priority = priority + 2.5
+    elseif creature:getHealthPercent() < 40 then
+      priority = priority + 1.5
+    elseif creature:getHealthPercent() < 60 then
+      priority = priority + 0.5
+    elseif creature:getHealthPercent() < 80 then
+      priority = priority + 0.2
     end
+    return priority
   end
-  if creature:isMonster() then
-    local creatureName = creature:getName():lower()
-    if creatureName:find("elite") or 
-       creatureName:find("boss") or 
-       creatureName:find("hollow capitan shinigami") or 
-       creatureName:find("complete espada") or 
-       creatureName:find("gotei 13 king") or 
-       creatureName:find("dungeon") or 
-       creatureName:find("oversaturated hollowed shinigami") then
-       return 1000 
+  print("[Loader] Sistema de prioridade estrutural e foco injetado com sucesso!")
+end)
+
+--New CaveBot
+if _G then _G.warn = function() end end
+local warn = function() end
+schedule(500, function()
+    local realCavebotMacro = nil
+    if CaveBot and CaveBot.actionList then
+        local oldDoWalking = CaveBot.doWalking
+        if oldDoWalking then
+            CaveBot.doWalking = function()
+                local isWalking = oldDoWalking()
+                if isWalking and cavebotMacro then
+                    cavebotMacro.delay = now + 40
+                end
+                return isWalking
+            end
+        end
+        print("[Loader] CaveBot otimizado e estabilizado com sucesso de forma nativa!")
+    else
+        print("[Loader] Erro: CaveBot original não foi encontrado para ser modificado.")
     end
-  end
-  priority = priority + config.priority
-  local path_length = #path
-  if path_length == 1 then
-    priority = priority + 3
-  elseif path_length <= 3 then
-    priority = priority + 1
-  end
-  if config.chase and creature:getHealthPercent() < 30 then
-    priority = priority + 5
-  elseif creature:getHealthPercent() < 20 then
-    priority = priority + 2.5
-  elseif creature:getHealthPercent() < 40 then
-    priority = priority + 1.5
-  elseif creature:getHealthPercent() < 60 then
-    priority = priority + 0.5
-  elseif creature:getHealthPercent() < 80 then
-    priority = priority + 0.2
-  end
-  return priority
-end
+end)
