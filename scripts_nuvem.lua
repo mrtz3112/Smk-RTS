@@ -2740,7 +2740,7 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   end
   if hasSpecialInArea then
     if CaveBot and CaveBot.delay then
-      CaveBot.delay(2000)
+      CaveBot.delay(1000)
     end
   else
     if CaveBot and CaveBot.delay then
