@@ -1,23 +1,22 @@
 -- ====================================================================
--- [INÍCIO DA ABA] GERADOR DE ARQUIVO .OTUI AUTOMÁTICO (SLIM LINE)
+-- [INÍCIO DA ABA] GERADOR DE ARQUIVO .OTUI AUTOMÁTICO (SLIM LINE - CORRIGIDO)
 -- ====================================================================
 
 -- Todo o conteúdo do alarms.otui compactado em uma linha linear para não travar o interpretador
 local textoPuroDoLayoutOtui = "AlarmCheckBox < Panel\n  height: 20\n  margin-top: 2\n  CheckBox\n    id: tick\n    anchors.fill: parent\n    margin-top: 4\n    font: verdana-11px-rounded\n    text: Player Attack\n    text-offset: 17 -3\n\nAlarmCheckBoxAndSpinBox < Panel\n  height: 20\n  margin-top: 2\n  CheckBox\n    id: tick\n    anchors.fill: parent\n    anchors.right: next.left\n    margin-top: 4\n    font: verdana-11px-rounded\n    text: Player Attack\n    text-offset: 17 -3\n  SpinBox\n    id: value\n    anchors.top: parent.top\n    margin-top: 1\n    margin-bottom: 1\n    anchors.bottom: parent.bottom\n    anchors.right: parent.right\n    width: 40\n    minimum: 0\n    maximum: 100\n    step: 1\n    editable: true\n    focusable: true\n\nAlarmCheckBoxAndTextEdit < Panel\n  height: 20\n  margin-top: 2\n  CheckBox\n    id: tick\n    anchors.fill: parent\n    anchors.right: next.left\n    margin-top: 4\n    font: verdana-11px-rounded\n    text: Creature Name\n    text-offset: 17 -3\n  BotTextEdit\n    id: text\n    anchors.right: parent.right\n    anchors.top: parent.top\n    anchors.bottom: parent.bottom\n    width: 150\n    font: terminus-10px\n    margin-top: 1\n    margin-bottom: 1\n\nAlarmsWindow < MainWindow\n  !text: tr('Alarms')\n  size: 330 400\n  padding: 15\n  @onEscape: self:hide()\n  FlatPanel\n    id: list\n    anchors.fill: parent\n    anchors.bottom: settingsList.top\n    margin-bottom: 20\n    margin-top: 10\n    layout: verticalBox\n    padding: 10\n    padding-top: 5\n  FlatPanel\n    id: settingsList\n    anchors.left: parent.left\n    anchors.right: parent.right\n    anchors.bottom: separator.top\n    margin-bottom: 5\n    margin-top: 10\n    padding: 5\n    padding-left: 10\n    layout:\n      type: verticalBox\n      fit-children: true\n  Label\n    anchors.verticalCenter: settingsList.top\n    anchors.left: settingsList.left\n    margin-left: 5\n    width: 200\n    text: Alarms Settings\n    font: verdana-11px-rounded\n    color: #9f5031\n  Label\n    anchors.verticalCenter: list.top\n    anchors.left: list.left\n    margin-left: 5\n    width: 200\n    text: Active Alarms\n    font: verdana-11px-rounded\n    color: #9f5031\n  HorizontalSeparator\n    id: separator\n    anchors.right: parent.right\n    anchors.left: parent.left\n    anchors.bottom: closeButton.top\n    margin-bottom: 8\n  ResizeBorder\n    id: bottomResizeBorder\n    anchors.fill: separator\n    height: 3\n    minimum: 260\n    maximum: 600\n    margin-left: 3\n    margin-right: 3\n    background: #ffffff88\n  Button\n    id: closeButton\n    !text: tr('Close')\n    font: cipsoftFont\n    anchors.right: parent.right\n    anchors.bottom: parent.bottom\n    size: 45 21\n    margin-right: 5\n    @onClick: self:getParent():hide()"
 
--- Escrita segura em background assíncrono usando a raiz virtual autorizada do client
+-- Escrita assíncrona segura contornando 'g_modules' de forma nativa e sem travar o bot
 schedule(10, function()
-    local targetMod = g_modules.getModule('game_bot') or g_modules.getCurrentModule()
-    if targetMod then
-        local targetPath = "/" .. targetMod:getName() .. "/alarms.otui"
-        
-        if not g_resources.fileExists(targetPath) then
-            pcall(function()
-                g_resources.writeFile(targetPath, textoPuroDoLayoutOtui)
-            end)
-        end
+    -- Usa caminhos de recursos resolvidos diretamente pela sandbox autorizada (game_bot)
+    local targetPath = resolve_path("/game_bot/alarms.otui") or "alarms.otui"
+    
+    if not g_resources.fileExists(targetPath) then
+        pcall(function()
+            g_resources.writeFile(targetPath, textoPuroDoLayoutOtui)
+        end)
     end
 end)
+
 
 
 
