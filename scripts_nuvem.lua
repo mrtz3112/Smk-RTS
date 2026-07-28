@@ -214,6 +214,13 @@ if uiAlarms then
             if frag then
               frag = frag:trim():lower()
               if name:find(frag) then return alarm("/sounds/alarm.ogg", "Special Creature Detected!") end
+								end
+							end
+						end
+					end
+				end
+			end)
+end
 UI.Separator()
 --Auto Boost
 local panelName = "AutoBoost"
