@@ -2597,7 +2597,7 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
--- NewTargetSystem (Foco e Pausa Automática por Delay de 2000ms)
+-- NewTargetSystem (Delay exclusivo para o monstro Elite)
 if lastWalkState == nil then lastWalkState = "normal" end
 
 -- 1. MACRO DE MONITORAMENTO DE MOVIMENTO (Roda a cada 50ms no background)
@@ -2609,37 +2609,31 @@ macro(50, function()
     local myPos = localPlayer:getPosition()
     
     local spectators = g_map.getSpectators(myPos, false)
-    local existeSpecialVivo = false
+    local existeEliteVivo = false
     
-    -- Varre a tela inteira para ver se algum monstro da lista ainda está vivo
+    -- Varre a tela inteira para verificar unicamente a presença do monstro Elite
     if spectators then
         for _, specCreature in ipairs(spectators) do
             if specCreature:isMonster() and specCreature:getHealthPercent() > 0 then
                 local name = specCreature:getName():lower()
                 
-                if name:find("elite") or 
-                   name:find("boss") or 
-                   name:find("hollow capitan shinigami") or 
-                   name:find("complete espada") or 
-                   name:find("gotei 13 king") or 
-                   name:find("dungeon") or
-                   name:find("oversaturated hollowed shinigami") then
-                   
-                   existeSpecialVivo = true
-                   break -- Encontrou um vivo, já pode travar o CaveBot
+                -- MODIFICAÇÃO PRINCIPAL: Aplica o delay apenas se o monstro conter "elite" no nome
+                if name:find("elite") then
+                   existeEliteVivo = true
+                   break -- Encontrou um elite vivo, já pode travar o CaveBot
                 end
             end
         end
     end
     
-    -- Se o SpecialMob está na tela: Renova o delay continuamente para travar os passos
-    if existeSpecialVivo then
+    -- Se o monstro Elite está na tela: Renova o delay continuamente para travar os passos
+    if existeEliteVivo then
         if CaveBot and CaveBot.delay then 
             CaveBot.delay(2000) 
         end
         lastWalkState = "delayed"
     else
-        -- Se o monstro morreu ou sumiu: Zera o delay e devolve a velocidade máxima imediatamente
+        -- Se o Elite morreu ou sumiu: Zera o delay e devolve a velocidade máxima imediatamente
         if lastWalkState == "delayed" then
             if g_game.setWalkDelay then g_game.setWalkDelay(1) end
             if CaveBot and CaveBot.delay then CaveBot.delay(0) end 
@@ -2648,7 +2642,7 @@ macro(50, function()
     end
 end)
 
--- 2. FUNÇÃO DE PRIORIDADE CORRIGIDA (Baseada na sua lógica original)
+-- 2. FUNÇÃO DE PRIORIDADE (Mantém o foco de ataque em todos os monstros especiais)
 TargetBot.Creature.calculatePriority = function(creature, config, path)
   local priority = 0
 
@@ -2662,7 +2656,7 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
     return priority
   end
 
-  -- MODIFICAÇÃO PRINCIPAL: Checa se o monstro atual pertence à sua lista de Specials
+  -- Mantém a prioridade de ataque alta para a sua lista completa de bosses e monstros
   if creature:isMonster() then
     local creatureName = creature:getName():lower()
     
@@ -2674,7 +2668,6 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
        creatureName:find("dungeon") or
        creatureName:find("oversaturated hollowed shinigami") then
        
-       -- Aplica a prioridade fixa de 1000 requisitada e ignora os cálculos abaixo
        config.priority = 1000
        return 1000 
     end
