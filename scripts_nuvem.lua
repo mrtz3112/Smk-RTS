@@ -63,17 +63,8 @@ updateButtonReconectText()
 UI.Separator()
 --Alarms
 local panelName = "alarms"
-
--- [CORREÇÃO ABSOLUTA]: Aguarda e verifica de forma segura se o arquivo .otui já foi criado antes de abrir
-local function carregarAlarmsSeguro()
-    if not g_resources.fileExists("alarms.otui") then
-        -- Se o arquivo ainda não foi escrito pelo início do loader, tenta novamente em 100ms
-        schedule(100, carregarAlarmsSeguro)
-        return
-    end
-
-    -- Se o arquivo já existe fisicamente na pasta, inicializa sem gerar erro de estilo indefinido
-    local ui = setupUI([[
+-- [CORREÇÃO]: Cria o botão visual IMEDIATAMENTE de forma linear para ele nunca sumir da aba
+local ui = setupUI([[
 Panel
   height: 19
 
@@ -93,26 +84,28 @@ Panel
     margin-left: 3
     height: 17
     text: Edit
-    ]], parent)
-    ui:setId(panelName)
+]], parent)
+ui:setId(panelName)
 
-    if not storage[panelName] then storage[panelName] = {} end
-    local config = storage[panelName]
+if not storage[panelName] then storage[panelName] = {} end
+local config = storage[panelName]
 
-    ui.title:setOn(config.enabled)
-    ui.title.onClick = function(widget)
-      config.enabled = not config.enabled
-      widget:setOn(config.enabled)
+ui.title:setOn(config.enabled)
+ui.title.onClick = function(widget)
+  config.enabled = not config.enabled
+  widget:setOn(config.enabled)
+end
+-- Variável local para segurar a referência da janela quando ela for criada
+local window = nil
+-- Função assíncrona que monta os componentes internos da janela assim que o .otui estiver pronto no disco
+local function carregarAlarmsSeguro()
+    if not g_resources.fileExists("alarms.otui") then
+        schedule(100, carregarAlarmsSeguro)
+        return
     end
-
-    local window = UI.createWindow("AlarmsWindow")
+    -- Cria e esconde a janela utilizando o arquivo físico gerado
+    window = UI.createWindow("AlarmsWindow")
     window:hide()
-
-    ui.alerts.onClick = function()
-      window:show()
-      window:raise()
-      window:focus()
-    end
 
     local widgets = { "AlarmCheckBox", "AlarmCheckBoxAndSpinBox", "AlarmCheckBoxAndTextEdit" }
     local parents = { window.list, window.settingsList }
@@ -226,9 +219,19 @@ Panel
         end
       end
     end)
-end -- [CORREGIDO]: Adicionado o fechamento correto para a função 'carregarAlarmsSeguro'
-
--- Dispara a checagem segura de carregamento
+end
+-- Ação de clique do botão "Edit" protegida contra lag de carregamento
+ui.alerts.onClick = function()
+  if window then
+    window:show()
+    window:raise()
+    window:focus()
+  else
+    -- Caso a janela ainda esteja carregando no milissegundo do clique, avisa o usuário de forma limpa
+    print("[Alarms] A interface ainda está inicializando as configurações, tente novamente em 1 segundo.")
+  end
+end
+-- Dispara a checagem segura de carregamento em background
 schedule(50, carregarAlarmsSeguro)
 UI.Separator()
 --Auto Boost
