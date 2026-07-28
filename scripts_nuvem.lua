@@ -765,7 +765,7 @@ local function checkPz()
   return isPz
 end
 -- MACRO 1: Haste (Não executa se estiver calibrando)
-buffs = macro(100, "SmartHaste - Auto", "CTRL+4", function()
+buffs = macro(100, "Haste", "CTRL+4", function()
   -- Bloqueia a execução se o Smart Cast estiver calibrando
   if storage.smartCastData hotel and storage.smartCastData.calibrando then 
     return 
@@ -783,7 +783,7 @@ UI.TextEdit(storage.autobuff1 or "", function(widget, text)
   storage.autobuff1 = text
 end)
 -- MACRO 2: Buffs (Não executa se estiver calibrando)
-macro(100, "SmartBuffs - Combat", function() -- Removido atalho duplicado CTRL+4 para evitar conflito
+macro(100, "Buffs", "CTRL+4",function() -- Removido atalho duplicado CTRL+4 para evitar conflito
   -- Bloqueia a execução se o Smart Cast estiver calibrando
   if storage.smartCastData and storage.smartCastData.calibrando then 
     return 
