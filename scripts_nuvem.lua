@@ -783,7 +783,7 @@ UI.TextEdit(storage.autobuff1 or "", function(widget, text)
   storage.autobuff1 = text
 end)
 -- MACRO 2: Buffs (Não executa se estiver calibrando)
-macro(100, "Buffs", "CTRL+4",function() -- Removido atalho duplicado CTRL+4 para evitar conflito
+macro(100, "Buffs", "CTRL+4", function() -- Removido atalho duplicado CTRL+4 para evitar conflito
   -- Bloqueia a execução se o Smart Cast estiver calibrando
   if storage.smartCastData and storage.smartCastData.calibrando then 
     return 
