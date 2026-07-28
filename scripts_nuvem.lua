@@ -764,12 +764,15 @@ local function checkPz()
   local isPz = pzFlag or (g_game.isInPz and g_game.isInPz())
   return isPz
 end
-buffs = macro(100,"Haste", "CTRL+4", function()
-  if storage.smartCastData and storage.smartCastData.calibrando then 
+-- MACRO 1: Haste (Não executa se estiver calibrando)
+buffs = macro(100, "SmartHaste - Auto", "CTRL+4", function()
+  -- Bloqueia a execução se o Smart Cast estiver calibrando
+  if storage.smartCastData hotel and storage.smartCastData.calibrando then 
     return 
   end
   local isPz = checkPz()
   if isPz then return end
+  
   if hasHaste() then
      delay(55000)
   else
@@ -779,7 +782,9 @@ end)
 UI.TextEdit(storage.autobuff1 or "", function(widget, text)    
   storage.autobuff1 = text
 end)
-macro(100, "Buffs", "CTRL+4", function()
+-- MACRO 2: Buffs (Não executa se estiver calibrando)
+macro(100, "SmartBuffs - Combat", function() -- Removido atalho duplicado CTRL+4 para evitar conflito
+  -- Bloqueia a execução se o Smart Cast estiver calibrando
   if storage.smartCastData and storage.smartCastData.calibrando then 
     return 
   end
@@ -791,6 +796,7 @@ macro(100, "Buffs", "CTRL+4", function()
   say(storage.buffskill02)
   delay(65000)
 end)
+
 UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
   storage.buffskill01 = text
 end)
