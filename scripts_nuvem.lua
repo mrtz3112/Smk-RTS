@@ -764,16 +764,21 @@ local function checkPz()
   local isPz = pzFlag or (g_game.isInPz and g_game.isInPz())
   return isPz
 end
-buffs = macro(100,"Haste", "CTRL+4", function()
+local proximoHasteTime = 0
+local proximoBuffTime = 0
+buffs = macro(100, "Haste", "CTRL+4", function()
   if storage.smartCastData and storage.smartCastData.calibrando then 
     return 
   end
+  local agora = os.clock() * 1000
+  if agora < proximoHasteTime then return end
   local isPz = checkPz()
   if isPz then return end
   if hasHaste() then
-     delay(55000)
+     proximoHasteTime = agora + 55000 
   else
      saySpell(storage.autobuff1)
+     proximoHasteTime = os.clock() * 1000 + 55000 
   end
 end) 
 UI.TextEdit(storage.autobuff1 or "", function(widget, text)    
@@ -783,13 +788,18 @@ macro(100, "Buffs", "CTRL+4", function()
   if storage.smartCastData and storage.smartCastData.calibrando then 
     return 
   end
+  local agora = os.clock() * 1000
+  if agora < proximoBuffTime then return end
   local isPz = checkPz()
   if isPz then return end
   if not g_game.isAttacking() then return end
   say(storage.buffskill01)
-  delay(100)
-  say(storage.buffskill02)
-  delay(65000)
+  schedule(100, function()
+    if storage.smartCastData and storage.smartCastData.calibrando then return end
+    if not g_game.isAttacking() then return end
+    say(storage.buffskill02)
+  end)
+  proximoBuffTime = os.clock() * 1000 + 65000 
 end)
 UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
   storage.buffskill01 = text
