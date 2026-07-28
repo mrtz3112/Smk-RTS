@@ -2643,76 +2643,85 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
--- NewTargetSystem (Reestruturado com Pausa Limpa de Movimento)
-if hasSpecialMob == nil then hasSpecialMob = false end
+-- NewTargetSystem (Ignora Completamente se Estiver com Outro Player)
 if lastWalkState == nil then lastWalkState = "normal" end
 
--- 1. CONTROLE DE MOVIMENTAÇÃO (Apenas pausa a caminhada, mantém o CaveBot ligado)
-macro(50, function()
-    if hasSpecialMob and CaveBot and CaveBot.isOn() then
-        if lastWalkState ~= "delayed" then
-            -- Pausa apenas a caminhada ativa dos waypoints, mantendo o CaveBot ON
-            if CaveBot.setWalking then CaveBot.setWalking(false) end 
-            lastWalkState = "delayed"
-        end
-    else
-        if CaveBot and CaveBot.isOn() then
-            if lastWalkState == "delayed" then
-                if g_game.setWalkDelay then g_game.setWalkDelay(1) end
-                -- Retoma a caminhada dos waypoints automaticamente
-                if CaveBot.setWalking then CaveBot.setWalking(true) end 
-                lastWalkState = "normal"
+-- 1. MACRO DE ATRASO E VARREDURA COM FILTRO DE RAIO E EXCLUSÃO DE RIVAL (Roda a cada 100ms)
+macro(100, function()
+    if not g_game.isOnline() then return end
+    
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer then return end
+    local myPos = localPlayer:getPosition()
+    
+    local spectators = g_map.getSpectators(myPos, false)
+    local existeSpecialLivre = false
+    
+    -- Varredura contínua na tela com validação de distância
+    if spectators then
+        for _, specCreature in ipairs(spectators) do
+            if specCreature:isMonster() then
+                local name = specCreature:getName():lower()
+                if name:find("elite") or name:find("boss") or name:find("hollow capitan shinigami") or 
+                   name:find("complete espada") or name:find("gotei 13 king") or name:find("dungeon") or
+                   name:find("oversaturated hollowed shinigami") then
+                   
+                   -- Checa se o monstro está a no máximo 3 SQMs de você
+                   local bossPos = specCreature:getPosition()
+                   local distanciaAteEle = getDistanceBetween(myPos, bossPos)
+                   
+                   if distanciaAteEle <= 3 then
+                       -- TRAVA DE EXCLUSÃO: Verifica se o monstro está focado em outro jogador
+                       local focadoEmOutro = false
+                       for _, playerSpec in ipairs(spectators) do
+                           if playerSpec:isPlayer() and playerSpec ~= localPlayer then
+                               local rId = playerSpec:getId()
+                               if (specCreature.getTarget and specCreature:getTarget() == rId) or
+                                  (specCreature.getChasingCreature and specCreature:getChasingCreature() == playerSpec) or
+                                  (specCreature.getFollowingCreature and specCreature:getFollowingCreature() == playerSpec) then
+                                   focadoEmOutro = true
+                               end
+                               local rPos = playerSpec:getPosition()
+                               if rPos and bossPos and math.abs(bossPos.x - rPos.x) <= 1 and math.abs(bossPos.y - rPos.y) <= 1 then
+                                   focadoEmOutro = true
+                               end
+                           end
+                       end
+                       
+                       -- Só valida se o monstro estiver totalmente livre
+                       if not focadoEmOutro then
+                           existeSpecialLivre = true
+                           break 
+                       end
+                   end
+                end
             end
+        end
+    end
+    
+    -- AÇÃO BASEADA NA PRESENÇA DO MONSTRO NO RAIO DE 3 SQMS
+    if existeSpecialLivre then
+        -- RENOVA O DELAY: Só desacelera os passos se o Boss estiver colado, vivo e LIVRE
+        if CaveBot and CaveBot.delay then 
+            CaveBot.delay(2000) 
+        end
+        lastWalkState = "delayed"
+    else
+        -- RESET: Se o monstro sumiu, morreu ou foi pego por outro player, devolve a velocidade máxima na hora
+        if lastWalkState == "delayed" then
+            if g_game.setWalkDelay then g_game.setWalkDelay(1) end
+            if CaveBot and CaveBot.delay then CaveBot.delay(0) end 
+            lastWalkState = "normal"
         end
     end
 end)
 
--- 2. CÁLCULO DE PRIORIDADE E COMPORTAMENTO DE ATAQUE
+-- 2. FUNÇÃO PRINCIPAL: Altera unicamente as Configurações de Prioridade de Alvo
 TargetBot.Creature.calculatePriority = function(creature, config, path)
   local localPlayer = g_game.getLocalPlayer()
   if not localPlayer then return 0 end
   local myPos = localPlayer:getPosition()
   
-  local spectators = g_map.getSpectators(myPos, false)
-  local existeSpecialLivreNaTela = false
-
-  -- Varredura prévia para identificar se existe um SpecialMob livre na tela
-  if spectators then
-    for _, specCreature in ipairs(spectators) do
-      if specCreature:isMonster() then
-        local name = specCreature:getName():lower()
-        if name:find("elite") or name:find("boss") or name:find("hollow capitan shinigami") or 
-           name:find("complete espada") or name:find("gotei 13 king") or name:find("oversaturated hollowed shinigami") then
-           
-           local focadoEmOutro = false
-           for _, playerSpec in ipairs(spectators) do
-             if playerSpec:isPlayer() and playerSpec ~= localPlayer then
-               local rId = playerSpec:getId()
-               if (specCreature.getTarget and specCreature:getTarget() == rId) or
-                  (specCreature.getChasingCreature and specCreature:getChasingCreature() == playerSpec) or
-                  (specCreature.getFollowingCreature and specCreature:getFollowingCreature() == playerSpec) then
-                   focadoEmOutro = true
-               end
-               local rPos = playerSpec:getPosition()
-               local sPos = specCreature:getPosition()
-               if rPos and sPos and math.abs(sPos.x - rPos.x) <= 1 and math.abs(sPos.y - rPos.y) <= 1 then
-                 focadoEmOutro = true
-               end
-             end
-           end
-           
-           if not focadoEmOutro then
-             existeSpecialLivreNaTela = true
-           end
-        end
-      end
-    end
-  end
-
-  -- Sincroniza o sinalizador da macro baseando-se na existência de um Boss livre
-  hasSpecialMob = existeSpecialLivreNaTela
-
-  -- Avaliação do monstro atual pelo TargetBot
   if creature:isMonster() and path then
     local creatureName = creature:getName():lower()
     local isSpecial = false
@@ -2722,12 +2731,14 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
        creatureName:find("hollow capitan shinigami") or 
        creatureName:find("complete espada") or 
        creatureName:find("gotei 13 king") or 
+       creatureName:find("dungeon") or
        creatureName:find("oversaturated hollowed shinigami") then
       isSpecial = true
     end
     
-    -- CASO TENHAM MONSTROS FOCADOS EM OUTRO PLAYER -> IGNERA E PASSA DIRETO
-    if spectators then
+    -- TRAVA DE EXCLUSÃO: Ignora monstros com outros players (Garante que passará direto)
+    local spectators = g_map.getSpectators(myPos, false)
+    if spectators and isSpecial then
       for _, spec in ipairs(spectators) do
         if spec:isPlayer() and spec ~= localPlayer then
           local rivalId = spec:getId()
@@ -2746,25 +2757,22 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
           if rivalPos and bPos and math.abs(bPos.x - rivalPos.x) <= 1 and math.abs(bPos.y - rivalPos.y) <= 1 then
             isTargetedByOther = true
           end
-
+          
           if isTargetedByOther then
             config.priority = -100000 
-            return -100000 -- Ignora e continua andando pelos waypoints
+            return -100000 -- Joga a prioridade pro mínimo e passa direto sem atacar
           end
         end
       end
     end
-
-    -- SE FOR UM SPECIAL MOB LIVRE -> PRIORIDADE 1000 E MODO FOLLOW ATTACK
+    
+    -- CONFIGURAÇÃO DO TARGET CASO ENCONTRE O SPECIAL MOB LIVRE
     if isSpecial then
       config.priority = 1000
-      config.chaseMode = 1 -- Injeta o modo Follow / Chase diretamente na configuração
       return 1000 
     end
   end
   
-  -- CASO SEJA MONSTRO COMUM OU O SPECIAL MORRA -> RETORNA COMPORTAMENTO AO PADRÃO
-  config.chaseMode = 0 -- Stand Attack para criaturas normais
   return 1 
 end
 
