@@ -2597,66 +2597,6 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
--- NewTargetSystem (Prioridade de Ataque Unificada)
-
-TargetBot.Creature.calculatePriority = function(creature, config, path)
-  local priority = 0
-
-  -- extra priority if it's current target
-  if g_game.getAttackingCreature() == creature then
-    priority = priority + 1
-  end
-
-  -- check if distance is fine, if not then attack only if already attacked
-  if #path > config.maxDistance then
-    return priority
-  end
-
-  -- MODIFICAÇÃO PRINCIPAL: Checa se o monstro atual pertence à sua lista de Specials
-  if creature:isMonster() then
-    local creatureName = creature:getName():lower()
-    
-    if creatureName:find("elite") or 
-       creatureName:find("boss") or 
-       creatureName:find("hollow capitan shinigami") or 
-       creatureName:find("complete espada") or 
-       creatureName:find("gotei 13 king") or 
-       creatureName:find("dungeon") or
-       creatureName:find("oversaturated hollowed shinigami") then
-       
-       -- Aplica a prioridade fixa de 1000 requisitada e ignora os cálculos abaixo
-       config.priority = 1000
-       return 1000 
-    end
-  end
-
-  -- Lógica original para monstros comuns (Mantida intacta)
-  priority = priority + config.priority
-  
-  -- extra priority for close distance
-  local path_length = #path
-  if path_length == 1 then
-    priority = priority + 3
-  elseif path_length <= 3 then
-    priority = priority + 1
-  end
-
-  -- extra priority for low health
-  if config.chase and creature:getHealthPercent() < 30 then
-    priority = priority + 5
-  elseif creature:getHealthPercent() < 20 then
-    priority = priority + 2.5
-  elseif creature:getHealthPercent() < 40 then
-    priority = priority + 1.5
-  elseif creature:getHealthPercent() < 60 then
-    priority = priority + 0.5
-  elseif creature:getHealthPercent() < 80 then
-    priority = priority + 0.2
-  end
-
-  return priority
-end
-
 
 
 
