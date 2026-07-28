@@ -3,6 +3,57 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("      Smk Custom: v4.1      "):setColor('#C39BD3')
 UI.Label("        Since 2025       "):setColor('#C39BD3')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+-- Hooker de IDs de Interface e Elementos (Universal Corrigido para Smk)
+macro(50, "Universal Hooker por Mouse", function()
+    if not g_game.isOnline() then return end
+
+    -- 1. Captura a coordenada exata em pixels do cursor na tela
+    local mousePos = g_window.getMousePosition()
+    if not mousePos then return end
+
+    -- 2. Localiza a raiz absoluta de todas as janelas e componentes da tela
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end
+
+    -- CORREÇÃO: Busca o componente visual bruto do cliente usando o método compatível do Smk
+    local widget = rootWidget:recursiveGetChildByPos(mousePos)
+    if not widget then return end
+
+    -- 4. Análise de componentes de Interface (Botões, Painéis, Inventário, Abas)
+    local idInterface = widget:getId()
+    local tipoWidget = widget:getStyleName() or "UIWidget"
+    
+    if idInterface and idInterface ~= "" and idInterface ~= "root" then
+        print(string.format("[INTERFACE-HOOK] Componente: '%s' | ID Visual: %s", tipoWidget, idInterface))
+    end
+
+    -- 5. MANTÉM A CAPTURA DO MAPA (Monstros/Itens do chão) se o mouse estiver sobre o jogo
+    local mapPanel = modules.game_interface.getMapPanel() or g_ui.getMapWidget()
+    if mapPanel and mapPanel:isVisible() then
+        local gamePos = mapPanel:getPosition(mousePos)
+        if gamePos then
+            local tile = g_map.getTile(gamePos)
+            if tile then
+                local things = tile:getThings()
+                if things then
+                    for _, thing in ipairs(things) do
+                        if thing and thing.getId and type(thing.getId) == "function" then
+                            local idBruto = thing:getId()
+                            if idBruto and idBruto > 0 then
+                                local tipoElemento = "Item / Piso / Cenário"
+                                if thing:isCreature() then 
+                                    tipoElemento = "Criatura (Monstro/Player)" 
+                                end
+                                print(string.format("[MAPA-HOOK] %s -> ID do Client: %d", tipoElemento, idBruto))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+UI.Separator()
 --Macro Editor
 UI.Button("Macro Editor", function(newText)
     UI.MultilineEditorWindow(storage.combos or "", {title="Macro Editor", description="Aqui voce pode editar os seus combos."}, function(text)
@@ -764,52 +815,33 @@ local function checkPz()
   local isPz = pzFlag or (g_game.isInPz and g_game.isInPz())
   return isPz
 end
-
--- MACRO 1: Haste (Não executa se estiver calibrando)
-buffs = macro(100, "SmartHaste - Auto", "CTRL+4", function()
-  -- Correção efetuada aqui: Removida a palavra 'hotel' que causava o crash
+buffs = macro(100,"Haste", "CTRL+4", function()
   if storage.smartCastData and storage.smartCastData.calibrando then 
     return 
   end
-
   local isPz = checkPz()
   if isPz then return end
-  
   if hasHaste() then
      delay(55000)
   else
      saySpell(storage.autobuff1)
   end
 end) 
-
 UI.TextEdit(storage.autobuff1 or "", function(widget, text)    
   storage.autobuff1 = text
 end)
-
--- MACRO 2: Buffs (Não executa se estiver calibrando)
-macro(100, "SmartBuffs - Combat", function()
+macro(100, "Buffs", "CTRL+4", function()
   if storage.smartCastData and storage.smartCastData.calibrando then 
     return 
   end
-
   local isPz = checkPz()
   if isPz then return end
   if not g_game.isAttacking() then return end
-  
   say(storage.buffskill01)
   delay(100)
   say(storage.buffskill02)
   delay(65000)
 end)
-
-UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
-  storage.buffskill01 = text
-end)
-UI.TextEdit(storage.buffskill02 or "", function(widget, text)    
-  storage.buffskill02 = text
-end)
-
-
 UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
   storage.buffskill01 = text
 end)
@@ -823,15 +855,16 @@ local distance = 2
 local amountOfMonsters = 2
 local COOLDOWN_MINIMO_ABSOLUTO = 10 
 local COOLDOWN_MAXIMO = 2000          
-
--- Inicialização segura do Storage
 if not storage.smartCastData then storage.smartCastData = {} end
 if not storage.smartCastData.menorCooldownSeguro then storage.smartCastData.menorCooldownSeguro = 2000 end 
-if storage.smartCastData.faseCalibracao == nil then storage.smartCastData.faseCalibracao = 1 end
+if storage.smartCastData.faseCalibracao == nil then
+    storage.smartCastData.faseCalibracao = 1 
+end
 if storage.smartCastData.estadoAnteriorMacro == nil then storage.smartCastData.estadoAnteriorMacro = false end
-if storage.smartCastData.ultimoDisparoTime == nil then storage.smartCastData.ultimoDisparoTime = 0 end
-if storage.comboEnabled == nil then storage.comboEnabled = false end
-
+local ultimoDisparoTime = 0
+if storage.comboEnabled == nil then
+    storage.comboEnabled = false
+end
 local function aplicarPenalidadeExhaust()
     if storage.smartCastData.calibrando then
         local cdAtual = storage.smartCastData.menorCooldownSeguro
@@ -840,10 +873,10 @@ local function aplicarPenalidadeExhaust()
             local novoCd = math.min(COOLDOWN_MAXIMO, cdAtual + 200)
             storage.smartCastData.faseCalibracao = 2
             storage.smartCastData.menorCooldownSeguro = novoCd
-            print("[Smart Cast] Primeiro Exhaust Real! Aumentado +200ms. Iniciando Busca Fina (-5ms)...")
+            print("[Smart Cast] Primeiro Exaust Real! Aumentado +200ms. Iniciando Busca Fina (-5ms)...")
         
         elseif storage.smartCastData.faseCalibracao == 2 then
-            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 40) -- Margem de erro ligeiramente maior para estabilizar
+            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 30)
             storage.smartCastData.calibrando = false
             storage.smartCastData.faseCalibracao = 1 
             storage.smartCastData.menorCooldownSeguro = valorFinal
@@ -851,8 +884,6 @@ local function aplicarPenalidadeExhaust()
         end
     end
 end
-
--- Captura o Exhaust de forma perfeitamente segura (Sem alterar arquivos base do Client)
 onTextMessage(function(mode, text)
     local msg = text:lower()
     if string.find(msg, "exha") or string.find(msg, "exhaust") then
@@ -860,38 +891,38 @@ onTextMessage(function(mode, text)
         return true 
     end
 end)
-
+if modules.game_textmessage and modules.game_textmessage.onReceive then
+    local oldOnReceive = modules.game_textmessage.onReceive
+    modules.game_textmessage.onReceive = function(mode, text)
+        if string.find(text:lower(), "exha") or string.find(text:lower(), "exhaust") then
+            aplicarPenalidadeExhaust()
+            return 
+        end
+        return oldOnReceive(mode, text)
+    end
+end
 local indexArea = 1
 local indexSingle = 1
-
-combo = macro(100, "Smart Cast - Activate", function() -- Baixado para 100ms para precisão de clique
+combo = macro(200, "Smart Cast - Activate", function()
     if not g_game.isOnline() then return end
-    
-    -- Inicialização ao ligar a macro
     if not storage.smartCastData.estadoAnteriorMacro then
         storage.smartCastData.faseCalibracao = 1
         storage.smartCastData.calibrando = true
-        storage.smartCastData.ultimoDisparoTime = os.clock() * 1000
+        ultimoDisparoTime = os.clock() * 1000
         storage.smartCastData.menorCooldownSeguro = 2000
         
         print("[Smart Cast] Macro Ligada! Cooldown unificado resetado para 2000ms [Calibrando Fase Rápida].")
         storage.smartCastData.estadoAnteriorMacro = true
     end
-    
     if not g_game.isAttacking() then return end    
-    
     local agora = os.clock() * 1000 
     local cdSeguroAtual = storage.smartCastData.menorCooldownSeguro
-    
-    -- Validação do tempo de recarga
-    if (agora - storage.smartCastData.ultimoDisparoTime) < cdSeguroAtual then
+    if (agora - ultimoDisparoTime) < cdSeguroAtual then
         return
     end
-    
     local target = g_game.getAttackingCreature()
     local atacandoPlayer = target and target:isPlayer()
     local specAmount = 0  
-    
     if not atacandoPlayer then
         for i, mob in ipairs(getSpectators()) do
             if (getDistanceBetween(pos(), mob:getPosition()) <= distance and mob:isMonster()) then
@@ -899,28 +930,22 @@ combo = macro(100, "Smart Cast - Activate", function() -- Baixado para 100ms par
             end
         end
     end
-    
     local enviouMagia = false
-    
-    -- Lógica de Spells de Área
     if (specAmount >= amountOfMonsters and not atacandoPlayer) then
         local areaSpells = {}
         if storage.areaspell01 and storage.areaspell01 ~= "" then table.insert(areaSpells, storage.areaspell01) end
         if storage.areaspell02 and storage.areaspell02 ~= "" then table.insert(areaSpells, storage.areaspell02) end
-        
         if #areaSpells > 0 then
             if indexArea > #areaSpells then indexArea = 1 end
             say(areaSpells[indexArea])
             indexArea = indexArea + 1
             enviouMagia = true
         end
-    -- Lógica de Spells Single Target
     else
         local singleSpells = {}
         if storage.spell01 and storage.spell01 ~= "" then table.insert(singleSpells, storage.spell01) end
         if storage.spell02 and storage.spell02 ~= "" then table.insert(singleSpells, storage.spell02) end
         if storage.spell03 and storage.spell03 ~= "" then table.insert(singleSpells, storage.spell03) end
-        
         if #singleSpells > 0 then
             if indexSingle > #singleSpells then indexSingle = 1 end
             say(singleSpells[indexSingle])
@@ -928,10 +953,8 @@ combo = macro(100, "Smart Cast - Activate", function() -- Baixado para 100ms par
             enviouMagia = true
         end
     end
-    
-    -- Se executou o comando de ataque, recalcula para o próximo ciclo
     if enviouMagia then
-        storage.smartCastData.ultimoDisparoTime = agora
+        ultimoDisparoTime = agora
         if storage.smartCastData.calibrando then
             if cdSeguroAtual > COOLDOWN_MINIMO_ABSOLUTO then
                 local redutor = 5
@@ -945,18 +968,12 @@ combo = macro(100, "Smart Cast - Activate", function() -- Baixado para 100ms par
         end
     end
 end)
-
--- Monitor de desligamento para resetar memória de ativação
 macro(250, function()
     if combo and not combo.isOn() then
         storage.smartCastData.estadoAnteriorMacro = false
-        storage.comboEnabled = false
-    elseif combo and combo.isOn() then
-        storage.comboEnabled = true
     end
 end)
-
--- Interface Visual (UI)
+if storage.comboEnabled then combo.setOn() else combo.setOff() end
 UI.Separator()
 UI.Label("Area Spells (2+ Mobs)"):setColor('#FFEA99')
 UI.Separator()
@@ -969,8 +986,6 @@ UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text end)
 
--- Força sincronia inicial
-if storage.comboEnabled then combo.setOn() else combo.setOff() end
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Others ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
@@ -1167,12 +1182,9 @@ if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
-
--- OTIMIZAÇÃO: Estrutura inicializada sem estipular nenhum valor padrão de 2000ms
 if not storage.smartCastData then
     storage.smartCastData = {}
 end
-
 local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
@@ -1224,10 +1236,8 @@ MainWindow
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 6
 ]], modules.game_interface.getMapPanel())
-
 painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
 painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
-
 local function isMacroActive(macroRef, storageKey)
     if macroRef and type(macroRef) == "table" and macroRef.isOn and type(macroRef.isOn) == "function" then
         local success, result = pcall(function() return macroRef.isOn() end)
@@ -1235,19 +1245,16 @@ local function isMacroActive(macroRef, storageKey)
     end
     return storage.painelSalvo and storage.painelSalvo[storageKey] or false
 end
-
 local function alternarEstadoMacro(macroRef, storageKey)
     if not storage.painelSalvo then storage.painelSalvo = {} end
     local novoEstado = not storage.painelSalvo[storageKey]
     storage.painelSalvo[storageKey] = novoEstado
-    
     if macroRef and type(macroRef) == "table" and macroRef.setOn then
         pcall(function() macroRef.setOn(novoEstado) end)
     elseif macroRef and type(macroRef) == "function" then
         pcall(macroRef)
     end
 end
-
 if painelIconesUI then
     local container = painelIconesUI:getChildById("containerIcones")
     if container then
@@ -1255,16 +1262,13 @@ if painelIconesUI then
         local btnSpells = container:getChildById("botaoSpells")
         local btnWave = container:getChildById("botaoWave")
         local lblCdAtual = container:getChildById("labelCdAtual")
-        
         if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
         if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
         if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
-        
         local jaSincronizou = false
         local hooksConfigurados = false
         local ultimoEstadoBot = false
         if TargetBot and TargetBot.isEnabled then ultimoEstadoBot = TargetBot.isEnabled() end     
-        
         macro(100, function()
             if not g_game.isOnline() then return end
             if not jaSincronizou then
@@ -1273,17 +1277,13 @@ if painelIconesUI then
                 if turnCombo and type(turnCombo) == "table" and turnCombo.setOn then pcall(function() turnCombo.setOn(storage.painelSalvo.wave) end) end
                 jaSincronizou = true
             end
-
             if not hooksConfigurados then
                 hooksConfigurados = true
-            end
-            
+            end       
             if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp, "special") and "green" or "red") end
             if btnSpells then btnSpells:setColor(isMacroActive(combo, "spells") and "green" or "red") end
             if btnWave then btnWave:setColor(isMacroActive(turnCombo, "wave") and "green" or "red") end
-            
             if lblCdAtual then
-                -- CORREÇÃO: Pega o valor real gravado. Se não houver nada, exibe 0ms provisoriamente
                 local cdSalvoMilissegundos = storage.smartCastData and storage.smartCastData.menorCooldownSeguro or 0
                 local cdEmSegundos = cdSalvoMilissegundos / 1000
                 local sufixo = (storage.smartCastData and storage.smartCastData.calibrando) and "s [C]" or "s"
@@ -2633,104 +2633,3 @@ dofile("/targetbot/creature_editor.lua")
 dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
-
--- Lista de nomes especiais (em letras minúsculas para evitar erros de digitação)
-local specialMonsters = {
-  ["boss"] = true,
-  ["elite"] = true,
-  ["hollow capitan shinigami"] = true,
-  ["complete espada"] = true,
-  ["unleashed coyote starrk"] = true,
-  ["gotei 13 king"] = true,
-  ["oversaturated"] = true,
-  ["true bankai"] = true
-}
-
-TargetBot.Creature.calculatePriority = function(creature, config, path)
-  -- config is based on creature_editor
-  local priority = 0
-
-  -- Pega o nome da criatura atual e deixa em letras minúsculas
-  local creatureName = creature:getName():lower()
-  local isSpecial = false
-
-  -- Verifica se o nome da criatura contém alguma das palavras-chave
-  for name, _ in pairs(specialMonsters) do
-    if string.find(creatureName, name, 1, true) then
-      isSpecial = true
-      break
-    end
-  end
-
-  -- Se for um monstro especial, ganha +10 de prioridade
-  if isSpecial then
-    priority = priority + 10
-    -- Ativa o modechasebox se não estiver ativo
-    if not modechasebox then
-      modechasebox = true
-    end
-  else
-    -- Se a criatura atual não for especial, verifica se ainda há algum monstro especial na tela
-    -- Isso garante que o modechasebox só desligue quando TODOS os especiais sumirem
-    local specialFound = false
-    local spectators = g_map.getSpectators(g_game.getLocalPlayer():getPosition(), false)
-    
-    for _, spec in ipairs(spectators) do
-      if spec:isMonster() then
-        local specName = spec:getName():lower()
-        for name, _ in pairs(specialMonsters) do
-          if string.find(specName, name, 1, true) then
-            specialFound = true
-            break
-          end
-        end
-      end
-      if specialFound then break end
-    end
-
-    -- Se nenhum monstro especial foi encontrado na tela, desativa o modechasebox
-    if not specialFound then
-      modechasebox = false
-    end
-  end
-
-  -- extra priority if it's current target
-  if g_game.getAttackingCreature() == creature then
-    priority = priority + 1
-  end
-
-  -- check if distance is fine, if not then attack only if already attacked
-  if #path > config.maxDistance then
-    return priority
-  end
-
-  -- add config priority
-  priority = priority + config.priority
-  
-  -- extra priority for close distance
-  local path_length = #path
-  if path_length == 1 then
-    priority = priority + 3
-  elseif path_length <= 3 then
-    priority = priority + 1
-  end
-
-  -- extra priority for low health
-  if config.chase and creature:getHealthPercent() < 30 then
-    priority = priority + 5
-  elseif creature:getHealthPercent() < 20 then
-    priority = priority + 2.5
-  elseif creature:getHealthPercent() < 40 then
-    priority = priority + 1.5
-  elseif creature:getHealthPercent() < 60 then
-    priority = priority + 0.5
-  elseif creature:getHealthPercent() < 80 then
-    priority = priority + 0.2
-  end
-
-  return priority
-end
-
-
-
-
