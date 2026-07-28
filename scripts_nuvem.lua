@@ -804,16 +804,15 @@ local distance = 2
 local amountOfMonsters = 2
 local COOLDOWN_MINIMO_ABSOLUTO = 10 
 local COOLDOWN_MAXIMO = 2000          
+
+-- Inicialização segura do Storage
 if not storage.smartCastData then storage.smartCastData = {} end
 if not storage.smartCastData.menorCooldownSeguro then storage.smartCastData.menorCooldownSeguro = 2000 end 
-if storage.smartCastData.faseCalibracao == nil then
-    storage.smartCastData.faseCalibracao = 1 
-end
+if storage.smartCastData.faseCalibracao == nil then storage.smartCastData.faseCalibracao = 1 end
 if storage.smartCastData.estadoAnteriorMacro == nil then storage.smartCastData.estadoAnteriorMacro = false end
-local ultimoDisparoTime = 0
-if storage.comboEnabled == nil then
-    storage.comboEnabled = false
-end
+if storage.smartCastData.ultimoDisparoTime == nil then storage.smartCastData.ultimoDisparoTime = 0 end
+if storage.comboEnabled == nil then storage.comboEnabled = false end
+
 local function aplicarPenalidadeExhaust()
     if storage.smartCastData.calibrando then
         local cdAtual = storage.smartCastData.menorCooldownSeguro
@@ -822,10 +821,10 @@ local function aplicarPenalidadeExhaust()
             local novoCd = math.min(COOLDOWN_MAXIMO, cdAtual + 200)
             storage.smartCastData.faseCalibracao = 2
             storage.smartCastData.menorCooldownSeguro = novoCd
-            print("[Smart Cast] Primeiro Exaust Real! Aumentado +200ms. Iniciando Busca Fina (-5ms)...")
+            print("[Smart Cast] Primeiro Exhaust Real! Aumentado +200ms. Iniciando Busca Fina (-5ms)...")
         
         elseif storage.smartCastData.faseCalibracao == 2 then
-            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 30)
+            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 40) -- Margem de erro ligeiramente maior para estabilizar
             storage.smartCastData.calibrando = false
             storage.smartCastData.faseCalibracao = 1 
             storage.smartCastData.menorCooldownSeguro = valorFinal
@@ -833,6 +832,8 @@ local function aplicarPenalidadeExhaust()
         end
     end
 end
+
+-- Captura o Exhaust de forma perfeitamente segura (Sem alterar arquivos base do Client)
 onTextMessage(function(mode, text)
     local msg = text:lower()
     if string.find(msg, "exha") or string.find(msg, "exhaust") then
@@ -840,38 +841,38 @@ onTextMessage(function(mode, text)
         return true 
     end
 end)
-if modules.game_textmessage and modules.game_textmessage.onReceive then
-    local oldOnReceive = modules.game_textmessage.onReceive
-    modules.game_textmessage.onReceive = function(mode, text)
-        if string.find(text:lower(), "exha") or string.find(text:lower(), "exhaust") then
-            aplicarPenalidadeExhaust()
-            return 
-        end
-        return oldOnReceive(mode, text)
-    end
-end
+
 local indexArea = 1
 local indexSingle = 1
-combo = macro(200, "Smart Cast - Activate", function()
+
+combo = macro(100, "Smart Cast - Activate", function() -- Baixado para 100ms para precisão de clique
     if not g_game.isOnline() then return end
+    
+    -- Inicialização ao ligar a macro
     if not storage.smartCastData.estadoAnteriorMacro then
         storage.smartCastData.faseCalibracao = 1
         storage.smartCastData.calibrando = true
-        ultimoDisparoTime = os.clock() * 1000
+        storage.smartCastData.ultimoDisparoTime = os.clock() * 1000
         storage.smartCastData.menorCooldownSeguro = 2000
         
         print("[Smart Cast] Macro Ligada! Cooldown unificado resetado para 2000ms [Calibrando Fase Rápida].")
         storage.smartCastData.estadoAnteriorMacro = true
     end
+    
     if not g_game.isAttacking() then return end    
+    
     local agora = os.clock() * 1000 
     local cdSeguroAtual = storage.smartCastData.menorCooldownSeguro
-    if (agora - ultimoDisparoTime) < cdSeguroAtual then
+    
+    -- Validação do tempo de recarga
+    if (agora - storage.smartCastData.ultimoDisparoTime) < cdSeguroAtual then
         return
     end
+    
     local target = g_game.getAttackingCreature()
     local atacandoPlayer = target and target:isPlayer()
     local specAmount = 0  
+    
     if not atacandoPlayer then
         for i, mob in ipairs(getSpectators()) do
             if (getDistanceBetween(pos(), mob:getPosition()) <= distance and mob:isMonster()) then
@@ -879,22 +880,28 @@ combo = macro(200, "Smart Cast - Activate", function()
             end
         end
     end
+    
     local enviouMagia = false
+    
+    -- Lógica de Spells de Área
     if (specAmount >= amountOfMonsters and not atacandoPlayer) then
         local areaSpells = {}
         if storage.areaspell01 and storage.areaspell01 ~= "" then table.insert(areaSpells, storage.areaspell01) end
         if storage.areaspell02 and storage.areaspell02 ~= "" then table.insert(areaSpells, storage.areaspell02) end
+        
         if #areaSpells > 0 then
             if indexArea > #areaSpells then indexArea = 1 end
             say(areaSpells[indexArea])
             indexArea = indexArea + 1
             enviouMagia = true
         end
+    -- Lógica de Spells Single Target
     else
         local singleSpells = {}
         if storage.spell01 and storage.spell01 ~= "" then table.insert(singleSpells, storage.spell01) end
         if storage.spell02 and storage.spell02 ~= "" then table.insert(singleSpells, storage.spell02) end
         if storage.spell03 and storage.spell03 ~= "" then table.insert(singleSpells, storage.spell03) end
+        
         if #singleSpells > 0 then
             if indexSingle > #singleSpells then indexSingle = 1 end
             say(singleSpells[indexSingle])
@@ -902,8 +909,10 @@ combo = macro(200, "Smart Cast - Activate", function()
             enviouMagia = true
         end
     end
+    
+    -- Se executou o comando de ataque, recalcula para o próximo ciclo
     if enviouMagia then
-        ultimoDisparoTime = agora
+        storage.smartCastData.ultimoDisparoTime = agora
         if storage.smartCastData.calibrando then
             if cdSeguroAtual > COOLDOWN_MINIMO_ABSOLUTO then
                 local redutor = 5
@@ -917,12 +926,18 @@ combo = macro(200, "Smart Cast - Activate", function()
         end
     end
 end)
+
+-- Monitor de desligamento para resetar memória de ativação
 macro(250, function()
     if combo and not combo.isOn() then
         storage.smartCastData.estadoAnteriorMacro = false
+        storage.comboEnabled = false
+    elseif combo and combo.isOn() then
+        storage.comboEnabled = true
     end
 end)
-if storage.comboEnabled then combo.setOn() else combo.setOff() end
+
+-- Interface Visual (UI)
 UI.Separator()
 UI.Label("Area Spells (2+ Mobs)"):setColor('#FFEA99')
 UI.Separator()
@@ -934,6 +949,9 @@ UI.Separator()
 UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text end)
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text end)
+
+-- Força sincronia inicial
+if storage.comboEnabled then combo.setOn() else combo.setOff() end
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Others ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
