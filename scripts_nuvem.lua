@@ -832,7 +832,7 @@ local function aplicarPenalidadeExhaust()
             print("[Smart Cast] Exhaust Detectado! Ajustando +150ms. Iniciando Calibração Fina (-10ms)...")
         
         elseif storage.smartCastData.faseCalibracao == 2 then
-            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 20) -- Margem de segurança de 40ms sobre o exaust real
+            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 25) -- Margem de segurança de 40ms sobre o exaust real
             storage.smartCastData.calibrando = false
             storage.smartCastData.faseCalibracao = 1 
             storage.smartCastData.menorCooldownSeguro = valorFinal
