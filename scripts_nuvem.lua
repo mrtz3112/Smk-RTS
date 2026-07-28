@@ -63,7 +63,15 @@ updateButtonReconectText()
 UI.Separator()
 --Alarms
 local panelName = "alarms"
-local ui = setupUI([[
+-- [CORREÇÃO ABSOLUTA]: Aguarda e verifica de forma segura se o arquivo .otui já foi criado pelo início do loader antes de abrir
+local function carregarAlarmsSeguro()
+    if not g_resources.fileExists("alarms.otui") then
+        -- Se o arquivo ainda não foi escrito pelo início do loader, tenta novamente em 100ms
+        schedule(100, carregarAlarmsSeguro)
+        return
+    end
+    -- Se o arquivo já existe fisicamente na pasta, inicializa sem gerar erro de estilo indefinido
+    local ui = setupUI([[
 Panel
   height: 19
 
