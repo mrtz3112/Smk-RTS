@@ -2597,6 +2597,103 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
+-- Lista de nomes especiais (em letras minúsculas para evitar erros de digitação)
+local specialMonsters = {
+  ["boss"] = true,
+  ["elite"] = true,
+  ["hollow capitan shinigami"] = true,
+  ["complete espada"] = true,
+  ["unleashed coyote starrk"] = true,
+  ["gotei 13 king"] = true,
+  ["oversaturated"] = true,
+  ["true bankai"] = true
+}
+
+TargetBot.Creature.calculatePriority = function(creature, config, path)
+  -- config is based on creature_editor
+  local priority = 0
+
+  -- Pega o nome da criatura atual e deixa em letras minúsculas
+  local creatureName = creature:getName():lower()
+  local isSpecial = false
+
+  -- Verifica se o nome da criatura contém alguma das palavras-chave
+  for name, _ in pairs(specialMonsters) do
+    if string.find(creatureName, name, 1, true) then
+      isSpecial = true
+      break
+    end
+  end
+
+  -- Se for um monstro especial, ganha +10 de prioridade
+  if isSpecial then
+    priority = priority + 10
+    -- Ativa o modechasebox se não estiver ativo
+    if not modechasebox then
+      modechasebox = true
+    end
+  else
+    -- Se a criatura atual não for especial, verifica se ainda há algum monstro especial na tela
+    -- Isso garante que o modechasebox só desligue quando TODOS os especiais sumirem
+    local specialFound = false
+    local spectators = g_map.getSpectators(g_game.getLocalPlayer():getPosition(), false)
+    
+    for _, spec in ipairs(spectators) do
+      if spec:isMonster() then
+        local specName = spec:getName():lower()
+        for name, _ in pairs(specialMonsters) do
+          if string.find(specName, name, 1, true) then
+            specialFound = true
+            break
+          end
+        end
+      end
+      if specialFound then break end
+    end
+
+    -- Se nenhum monstro especial foi encontrado na tela, desativa o modechasebox
+    if not specialFound then
+      modechasebox = false
+    end
+  end
+
+  -- extra priority if it's current target
+  if g_game.getAttackingCreature() == creature then
+    priority = priority + 1
+  end
+
+  -- check if distance is fine, if not then attack only if already attacked
+  if #path > config.maxDistance then
+    return priority
+  end
+
+  -- add config priority
+  priority = priority + config.priority
+  
+  -- extra priority for close distance
+  local path_length = #path
+  if path_length == 1 then
+    priority = priority + 3
+  elseif path_length <= 3 then
+    priority = priority + 1
+  end
+
+  -- extra priority for low health
+  if config.chase and creature:getHealthPercent() < 30 then
+    priority = priority + 5
+  elseif creature:getHealthPercent() < 20 then
+    priority = priority + 2.5
+  elseif creature:getHealthPercent() < 40 then
+    priority = priority + 1.5
+  elseif creature:getHealthPercent() < 60 then
+    priority = priority + 0.5
+  elseif creature:getHealthPercent() < 80 then
+    priority = priority + 0.2
+  end
+
+  return priority
+end
+
 
 
 
