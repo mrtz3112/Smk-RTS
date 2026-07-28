@@ -1,161 +1,24 @@
 -- ====================================================================
--- [INÍCIO DA ABA] GERADOR DE ARQUIVO .OTUI AUTOMÁTICO (CORRIGIDO)
+-- [INÍCIO DA ABA] GERADOR DE ARQUIVO .OTUI AUTOMÁTICO (SLIM LINE)
 -- ====================================================================
 
--- Conteúdo exato de texto puro que será gravado dentro do arquivo físico .otui
-local textoPuroDoLayoutOtui = [[
-AlarmCheckBox < Panel
-  height: 20
-  margin-top: 2
+-- Todo o conteúdo do alarms.otui compactado em uma linha linear para não travar o interpretador
+local textoPuroDoLayoutOtui = "AlarmCheckBox < Panel\n  height: 20\n  margin-top: 2\n  CheckBox\n    id: tick\n    anchors.fill: parent\n    margin-top: 4\n    font: verdana-11px-rounded\n    text: Player Attack\n    text-offset: 17 -3\n\nAlarmCheckBoxAndSpinBox < Panel\n  height: 20\n  margin-top: 2\n  CheckBox\n    id: tick\n    anchors.fill: parent\n    anchors.right: next.left\n    margin-top: 4\n    font: verdana-11px-rounded\n    text: Player Attack\n    text-offset: 17 -3\n  SpinBox\n    id: value\n    anchors.top: parent.top\n    margin-top: 1\n    margin-bottom: 1\n    anchors.bottom: parent.bottom\n    anchors.right: parent.right\n    width: 40\n    minimum: 0\n    maximum: 100\n    step: 1\n    editable: true\n    focusable: true\n\nAlarmCheckBoxAndTextEdit < Panel\n  height: 20\n  margin-top: 2\n  CheckBox\n    id: tick\n    anchors.fill: parent\n    anchors.right: next.left\n    margin-top: 4\n    font: verdana-11px-rounded\n    text: Creature Name\n    text-offset: 17 -3\n  BotTextEdit\n    id: text\n    anchors.right: parent.right\n    anchors.top: parent.top\n    anchors.bottom: parent.bottom\n    width: 150\n    font: terminus-10px\n    margin-top: 1\n    margin-bottom: 1\n\nAlarmsWindow < MainWindow\n  !text: tr('Alarms')\n  size: 330 400\n  padding: 15\n  @onEscape: self:hide()\n  FlatPanel\n    id: list\n    anchors.fill: parent\n    anchors.bottom: settingsList.top\n    margin-bottom: 20\n    margin-top: 10\n    layout: verticalBox\n    padding: 10\n    padding-top: 5\n  FlatPanel\n    id: settingsList\n    anchors.left: parent.left\n    anchors.right: parent.right\n    anchors.bottom: separator.top\n    margin-bottom: 5\n    margin-top: 10\n    padding: 5\n    padding-left: 10\n    layout:\n      type: verticalBox\n      fit-children: true\n  Label\n    anchors.verticalCenter: settingsList.top\n    anchors.left: settingsList.left\n    margin-left: 5\n    width: 200\n    text: Alarms Settings\n    font: verdana-11px-rounded\n    color: #9f5031\n  Label\n    anchors.verticalCenter: list.top\n    anchors.left: list.left\n    margin-left: 5\n    width: 200\n    text: Active Alarms\n    font: verdana-11px-rounded\n    color: #9f5031\n  HorizontalSeparator\n    id: separator\n    anchors.right: parent.right\n    anchors.left: parent.left\n    anchors.bottom: closeButton.top\n    margin-bottom: 8\n  ResizeBorder\n    id: bottomResizeBorder\n    anchors.fill: separator\n    height: 3\n    minimum: 260\n    maximum: 600\n    margin-left: 3\n    margin-right: 3\n    background: #ffffff88\n  Button\n    id: closeButton\n    !text: tr('Close')\n    font: cipsoftFont\n    anchors.right: parent.right\n    anchors.bottom: parent.bottom\n    size: 45 21\n    margin-right: 5\n    @onClick: self:getParent():hide()"
 
-  CheckBox
-    id: tick
-    anchors.fill: parent
-    margin-top: 4
-    font: verdana-11px-rounded
-    text: Player Attack
-    text-offset: 17 -3
-
-AlarmCheckBoxAndSpinBox < Panel
-  height: 20
-  margin-top: 2
-
-  CheckBox
-    id: tick
-    anchors.fill: parent
-    anchors.right: next.left
-    margin-top: 4
-    font: verdana-11px-rounded
-    text: Player Attack
-    text-offset: 17 -3
-
-  SpinBox
-    id: value
-    anchors.top: parent.top
-    margin-top: 1
-    margin-bottom: 1
-    anchors.bottom: parent.bottom
-    anchors.right: parent.right
-    width: 40
-    minimum: 0
-    maximum: 100
-    step: 1
-    editable: true
-    focusable: true
-
-AlarmCheckBoxAndTextEdit < Panel
-  height: 20
-  margin-top: 2
-
-  CheckBox
-    id: tick
-    anchors.fill: parent
-    anchors.right: next.left
-    margin-top: 4
-    font: verdana-11px-rounded
-    text: Creature Name
-    text-offset: 17 -3
-
-  BotTextEdit
-    id: text
-    anchors.right: parent.right
-    anchors.top: parent.top
-    anchors.bottom: parent.bottom
-    width: 150
-    font: terminus-10px
-    margin-top: 1
-    margin-bottom: 1
-
-AlarmsWindow < MainWindow
-  !text: tr('Alarms')
-  size: 330 400
-  padding: 15
-  @onEscape: self:hide()
-
-  FlatPanel
-    id: list
-    anchors.fill: parent
-    anchors.bottom: settingsList.top
-    margin-bottom: 20
-    margin-top: 10
-    layout: verticalBox
-    padding: 10
-    padding-top: 5
-
-  FlatPanel
-    id: settingsList
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.bottom: separator.top
-    margin-bottom: 5
-    margin-top: 10
-    padding: 5
-    padding-left: 10
-    layout: 
-      type: verticalBox
-      fit-children: true
-
-  Label
-    anchors.verticalCenter: settingsList.top
-    anchors.left: settingsList.left
-    margin-left: 5
-    width: 200
-    text: Alarms Settings
-    font: verdana-11px-rounded
-    color: #9f5031
-
-  Label
-    anchors.verticalCenter: list.top
-    anchors.left: list.left
-    margin-left: 5
-    width: 200
-    text: Active Alarms
-    font: verdana-11px-rounded
-    color: #9f5031
-
-  HorizontalSeparator
-    id: separator
-    anchors.right: parent.right
-    anchors.left: parent.left
-    anchors.bottom: closeButton.top
-    margin-bottom: 8
-
-  ResizeBorder
-    id: bottomResizeBorder
-    anchors.fill: separator
-    height: 3
-    minimum: 260
-    maximum: 600
-    margin-left: 3
-    margin-right: 3
-    background: #ffffff88  
-
-  Button
-    id: closeButton
-    !text: tr('Close')
-    font: cipsoftFont
-    anchors.right: parent.right
-    anchors.bottom: parent.bottom
-    size: 45 21
-    margin-right: 5
-    @onClick: self:getParent():hide()
-]]
-
--- [CORREÇÃO CRUCIAL]: Executa em background de forma assíncrona para não congelar o bot antes dele abrir
+-- Escrita segura em background assíncrono usando a raiz virtual autorizada do client
 schedule(10, function()
-    -- Puxa o nome do módulo dinâmico do CandyBot/SmkBot para usar a gravação virtual autorizada
-    local moduloBot = g_modules.getModule('game_bot') or g_modules.getCurrentModule()
-    if moduloBot then
-        -- Salva o arquivo usando a árvore de diretórios virtuais interna do jogo (Aceito pela Sandbox)
-        local caminhoSeguro = "/" .. moduloBot:getName() .. "/alarms.otui"
+    local targetMod = g_modules.getModule('game_bot') or g_modules.getCurrentModule()
+    if targetMod then
+        local targetPath = "/" .. targetMod:getName() .. "/alarms.otui"
         
-        if not g_resources.fileExists(caminhoSeguro) then
+        if not g_resources.fileExists(targetPath) then
             pcall(function()
-                g_resources.writeFile(caminhoSeguro, textoPuroDoLayoutOtui)
+                g_resources.writeFile(targetPath, textoPuroDoLayoutOtui)
             end)
         end
     end
 end)
+
 
 
 setDefaultTab("Main")
