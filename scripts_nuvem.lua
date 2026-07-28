@@ -805,45 +805,31 @@ local amountOfMonsters = 2
 local COOLDOWN_MINIMO_ABSOLUTO = 10 
 local COOLDOWN_MAXIMO = 2000          
 if not storage.smartCastData then storage.smartCastData = {} end
-if not storage.smartCastData.cdPvE then storage.smartCastData.cdPvE = 2000 end 
-if not storage.smartCastData.cdPvP then storage.smartCastData.cdPvP = 2000 end 
+if not storage.smartCastData.menorCooldownSeguro then storage.smartCastData.menorCooldownSeguro = 2000 end 
 if storage.smartCastData.faseCalibracao == nil then
     storage.smartCastData.faseCalibracao = 1 
 end
-local modoAtaqueAtual = "balanced"
-local ultimoModoVerificado = "balanced"
 if storage.smartCastData.estadoAnteriorMacro == nil then storage.smartCastData.estadoAnteriorMacro = false end
-local function obterModoAtaqueNativo()
-    local root = g_ui.getRootWidget()
-    if root then
-        local boxOffensive = root:recursiveGetChildById('fightOffensiveBox')
-        if boxOffensive and boxOffensive:isChecked() then
-            return "offensive"
-        end
-    end
-    return "balanced"
-end
 local ultimoDisparoTime = 0
 if storage.comboEnabled == nil then
     storage.comboEnabled = false
 end
 local function aplicarPenalidadeExhaust()
     if storage.smartCastData.calibrando then
-        local isPvE = (modoAtaqueAtual == "offensive")
-        local cdAtual = isPvE and storage.smartCastData.cdPvE or storage.smartCastData.cdPvP
+        local cdAtual = storage.smartCastData.menorCooldownSeguro
+        
         if storage.smartCastData.faseCalibracao == 1 then
             local novoCd = math.min(COOLDOWN_MAXIMO, cdAtual + 200)
             storage.smartCastData.faseCalibracao = 2
-            if isPvE then storage.smartCastData.cdPvE = novoCd else storage.smartCastData.cdPvP = novoCd end
             storage.smartCastData.menorCooldownSeguro = novoCd
-            print("[Smart Cast] [" .. modoAtaqueAtual:upper() .. "] Primeiro Exaust Real! Aumentado +200ms. Iniciando Busca Fina (-5ms)...")
+            print("[Smart Cast] Primeiro Exaust Real! Aumentado +200ms. Iniciando Busca Fina (-5ms)...")
+        
         elseif storage.smartCastData.faseCalibracao == 2 then
             local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 30)
             storage.smartCastData.calibrando = false
             storage.smartCastData.faseCalibracao = 1 
-            if isPvE then storage.smartCastData.cdPvE = valorFinal else storage.smartCastData.cdPvP = valorFinal end
             storage.smartCastData.menorCooldownSeguro = valorFinal
-            print("[Smart Cast] [" .. modoAtaqueAtual:upper() .. "] Valor Exato Encontrado! Travado de forma segura em: " .. math.floor(valorFinal) .. "ms")
+            print("[Smart Cast] Valor Exato Encontrado! Travado de forma segura em: " .. math.floor(valorFinal) .. "ms")
         end
     end
 end
@@ -868,38 +854,18 @@ local indexArea = 1
 local indexSingle = 1
 combo = macro(200, "Smart Cast - Activate", function()
     if not g_game.isOnline() then return end
-    -- MODIFICAÇÃO PRINCIPAL: Reseta obrigatoriamente AMBOS os storages (PvE e PvP) para 2000ms ao ligar a macro
     if not storage.smartCastData.estadoAnteriorMacro then
-        modoAtaqueAtual = obterModoAtaqueNativo()
         storage.smartCastData.faseCalibracao = 1
         storage.smartCastData.calibrando = true
         ultimoDisparoTime = os.clock() * 1000
-        -- Garante o reset geral e simultâneo dos bancos de dados
-        storage.smartCastData.cdPvE = 2000
-        storage.smartCastData.cdPvP = 2000
         storage.smartCastData.menorCooldownSeguro = 2000
-        print("[Smart Cast] Macro Ligada! Ambos os Storages (PvE e PvP) resetados para 2000ms [Calibrando Fase Rápida].")
+        
+        print("[Smart Cast] Macro Ligada! Cooldown unificado resetado para 2000ms [Calibrando Fase Rápida].")
         storage.smartCastData.estadoAnteriorMacro = true
     end
     if not g_game.isAttacking() then return end    
-    modoAtaqueAtual = obterModoAtaqueNativo()
-    -- Se alterar o modo de combate nativo durante a caça, força a recalibração daquele modo específico
-    if modoAtaqueAtual ~= ultimoModoVerificado then
-        storage.smartCastData.faseCalibracao = 1
-        storage.smartCastData.calibrando = true
-        if modoAtaqueAtual == "offensive" then
-            storage.smartCastData.cdPvE = 2000 -- CORREÇÃO: Removido math.min inválido que quebrava o script
-            print("[Smart Cast] Troca detectada! Modo PvE (Offensive) resetado para 2000ms.")
-        else
-            storage.smartCastData.cdPvP = 2000 -- CORREÇÃO: Removido math.min inválido que quebrava o script
-            print("[Smart Cast] Troca detectada! Modo PvP (Balanced) resetado para 2000ms.")
-        end
-        ultimoModoVerificado = modoAtaqueAtual
-    end 
     local agora = os.clock() * 1000 
-    local cdSeguroAtual = (modoAtaqueAtual == "offensive") and storage.smartCastData.cdPvE or storage.smartCastData.cdPvP
-    storage.smartCastData.menorCooldownSeguro = cdSeguroAtual  
-    
+    local cdSeguroAtual = storage.smartCastData.menorCooldownSeguro
     if (agora - ultimoDisparoTime) < cdSeguroAtual then
         return
     end
@@ -946,12 +912,6 @@ combo = macro(200, "Smart Cast - Activate", function()
                 end
                 
                 local novoCd = math.max(COOLDOWN_MINIMO_ABSOLUTO, cdSeguroAtual - redutor)
-                
-                if modoAtaqueAtual == "offensive" then
-                    storage.smartCastData.cdPvE = novoCd
-                else
-                    storage.smartCastData.cdPvP = novoCd
-                end
                 storage.smartCastData.menorCooldownSeguro = novoCd
             end
         end
