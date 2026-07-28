@@ -1,11 +1,3 @@
-local textoPuroDoLayoutOtui = "AlarmCheckBox < Panel\n  height: 20\n  margin-top: 2\n  CheckBox\n    id: tick\n    anchors.fill: parent\n    margin-top: 4\n    font: verdana-11px-rounded\n    text: Player Attack\n    text-offset: 17 -3\n\nAlarmCheckBoxAndSpinBox < Panel\n  height: 20\n  margin-top: 2\n  CheckBox\n    id: tick\n    anchors.fill: parent\n    anchors.right: next.left\n    margin-top: 4\n    font: verdana-11px-rounded\n    text: Player Attack\n    text-offset: 17 -3\n  SpinBox\n    id: value\n    anchors.top: parent.top\n    margin-top: 1\n    margin-bottom: 1\n    anchors.bottom: parent.bottom\n    anchors.right: parent.right\n    width: 40\n    minimum: 0\n    maximum: 100\n    step: 1\n    editable: true\n    focusable: true\n\nAlarmCheckBoxAndTextEdit < Panel\n  height: 20\n  margin-top: 2\n  CheckBox\n    id: tick\n    anchors.fill: parent\n    anchors.right: next.left\n    margin-top: 4\n    font: verdana-11px-rounded\n    text: Creature Name\n    text-offset: 17 -3\n  BotTextEdit\n    id: text\n    anchors.right: parent.right\n    anchors.top: parent.top\n    anchors.bottom: parent.bottom\n    width: 150\n    font: terminus-10px\n    margin-top: 1\n    margin-bottom: 1\n\nAlarmsWindow < MainWindow\n  !text: tr('Alarms')\n  size: 330 400\n  padding: 15\n  @onEscape: self:hide()\n  FlatPanel\n    id: list\n    anchors.fill: parent\n    anchors.bottom: settingsList.top\n    margin-bottom: 20\n    margin-top: 10\n    layout: verticalBox\n    padding: 10\n    padding-top: 5\n  FlatPanel\n    id: settingsList\n    anchors.left: parent.left\n    anchors.right: parent.right\n    anchors.bottom: separator.top\n    margin-bottom: 5\n    margin-top: 10\n    padding: 5\n    padding-left: 10\n    layout:\n      type: verticalBox\n      fit-children: true\n  Label\n    anchors.verticalCenter: settingsList.top\n    anchors.left: settingsList.left\n    margin-left: 5\n    width: 200\n    text: Alarms Settings\n    font: verdana-11px-rounded\n    color: #9f5031\n  Label\n    anchors.verticalCenter: list.top\n    anchors.left: list.left\n    margin-left: 5\n    width: 200\n    text: Active Alarms\n    font: verdana-11px-rounded\n    color: #9f5031\n  HorizontalSeparator\n    id: separator\n    anchors.right: parent.right\n    anchors.left: parent.left\n    anchors.bottom: closeButton.top\n    margin-bottom: 8\n  ResizeBorder\n    id: bottomResizeBorder\n    anchors.fill: separator\n    height: 3\n    minimum: 260\n    maximum: 600\n    margin-left: 3\n    margin-right: 3\n    background: #ffffff88\n  Button\n    id: closeButton\n    !text: tr('Close')\n    font: cipsoftFont\n    anchors.right: parent.right\n    anchors.bottom: parent.bottom\n    size: 45 21\n    margin-right: 5\n    @onClick: self:getParent():hide()"
-local nomeDoArquivoFinal = "alarms.otui"
-if not g_resources.fileExists(nomeDoArquivoFinal) then
-    pcall(function()
-        g_resources.writeFile(nomeDoArquivoFinal, textoPuroDoLayoutOtui)
-    end)
-end
-
 setDefaultTab("Main")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("      Smk Custom: v4.1      "):setColor('#C39BD3')
@@ -63,11 +55,142 @@ updateButtonReconectText()
 UI.Separator()
 --Alarms
 local panelName = "alarms"
--- [CORREÇÃO]: Cria o botão visual IMEDIATAMENTE de forma linear para ele nunca sumir da aba
-local ui = setupUI([[
+setupUI([[
+AlarmCheckBox < Panel
+  height: 20
+  margin-top: 2
+  CheckBox
+    id: tick
+    anchors.fill: parent
+    margin-top: 4
+    font: verdana-11px-rounded
+    text: Player Attack
+    text-offset: 17 -3
+
+AlarmCheckBoxAndSpinBox < Panel
+  height: 20
+  margin-top: 2
+  CheckBox
+    id: tick
+    anchors.fill: parent
+    anchors.right: next.left
+    margin-top: 4
+    font: verdana-11px-rounded
+    text: Player Attack
+    text-offset: 17 -3
+  SpinBox
+    id: value
+    anchors.top: parent.top
+    margin-top: 1
+    margin-bottom: 1
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right
+    width: 40
+    minimum: 0
+    maximum: 100
+    step: 1
+    editable: true
+    focusable: true
+
+AlarmCheckBoxAndTextEdit < Panel
+  height: 20
+  margin-top: 2
+  CheckBox
+    id: tick
+    anchors.fill: parent
+    anchors.right: next.left
+    margin-top: 4
+    font: verdana-11px-rounded
+    text: Creature Name
+    text-offset: 17 -3
+  BotTextEdit
+    id: text
+    anchors.right: parent.right
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    width: 150
+    font: terminus-10px
+    margin-top: 1
+    margin-bottom: 1
+
+AlarmsWindow < MainWindow
+  !text: tr('Alarms')
+  size: 330 400
+  padding: 15
+  @onEscape: self:hide()
+  FlatPanel
+    id: list
+    anchors.fill: parent
+    anchors.bottom: settingsList.top
+    margin-bottom: 20
+    margin-top: 10
+    layout: verticalBox
+    padding: 10
+    padding-top: 5
+  FlatPanel
+    id: settingsList
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: separator.top
+    margin-bottom: 5
+    margin-top: 10
+    padding: 5
+    padding-left: 10
+    layout: 
+      type: verticalBox
+      fit-children: true
+  Label
+    anchors.verticalCenter: settingsList.top
+    anchors.left: settingsList.left
+    margin-left: 5
+    width: 200
+    text: Alarms Settings
+    font: verdana-11px-rounded
+    color: #9f5031
+  Label
+    anchors.verticalCenter: list.top
+    anchors.left: list.left
+    margin-left: 5
+    width: 200
+    text: Active Alarms
+    font: verdana-11px-rounded
+    color: #9f5031
+  HorizontalSeparator
+    id: separator
+    anchors.right: parent.right
+    anchors.left: parent.left
+    anchors.bottom: closeButton.top
+    margin-bottom: 8
+  ResizeBorder
+    id: bottomResizeBorder
+    anchors.fill: separator
+    height: 3
+    minimum: 260
+    maximum: 600
+    margin-left: 3
+    margin-right: 3
+    background: #ffffff88  
+  Button
+    id: closeButton
+    !text: tr('Close')
+    font: cipsoftFont
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    size: 45 21
+    margin-right: 5
+    @onClick: self:getParent():hide()
+]])
+
+-- Localiza o painel real da aba do seu loader de forma segura
+local targetParent = parent
+if not targetParent and modules.game_bot then
+    targetParent = modules.game_bot.getBotPanel and modules.game_bot.getBotPanel()
+end
+
+-- 2. CRIAÇÃO DO MINI-BOTOÃO SUPERIOR
+local uiAlarms = setupUI([[
 Panel
   height: 19
-
   BotSwitch
     id: title
     anchors.top: parent.top
@@ -75,7 +198,6 @@ Panel
     text-align: center
     width: 130
     !text: tr('Alarms')
-
   Button
     id: alerts
     anchors.top: prev.top
@@ -84,155 +206,161 @@ Panel
     margin-left: 3
     height: 17
     text: Edit
-]], parent)
-ui:setId(panelName)
+]], targetParent)
 
-if not storage[panelName] then storage[panelName] = {} end
-local config = storage[panelName]
+if uiAlarms then
+  uiAlarms:setId(panelName)
 
-ui.title:setOn(config.enabled)
-ui.title.onClick = function(widget)
-  config.enabled = not config.enabled
-  widget:setOn(config.enabled)
-end
--- Variável local para segurar a referência da janela quando ela for criada
-local window = nil
--- Função assíncrona que monta os componentes internos da janela assim que o .otui estiver pronto no disco
-local function carregarAlarmsSeguro()
-    if not g_resources.fileExists("alarms.otui") then
-        schedule(100, carregarAlarmsSeguro)
-        return
+  if not storage[panelName] then storage[panelName] = {} end
+  local config = storage[panelName]
+
+  uiAlarms.title:setOn(config.enabled)
+  uiAlarms.title.onClick = function(widget)
+    config.enabled = not config.enabled
+    widget:setOn(config.enabled)
+  end
+
+  -- Instancia a janela diretamente a partir do texto acima carregado (Garante 100% de funcionamento instantâneo)
+  local window = setupUI([[AlarmsWindow]], g_ui.getRootWidget())
+  window:hide()
+
+  uiAlarms.alerts.onClick = function()
+    if window then
+      window:show()
+      window:raise()
+      window:focus()
     end
-    -- Cria e esconde a janela utilizando o arquivo físico gerado
-    window = UI.createWindow("AlarmsWindow")
-    window:hide()
+  end
 
-    local widgets = { "AlarmCheckBox", "AlarmCheckBoxAndSpinBox", "AlarmCheckBoxAndTextEdit" }
-    local parents = { window.list, window.settingsList }
+  local widgets = { "AlarmCheckBox", "AlarmCheckBoxAndSpinBox", "AlarmCheckBoxAndTextEdit" }
+  local parents = { window.list, window.settingsList }
 
-    addAlarm = function(id, title, defaultValue, alarmType, parent, tooltip)
-      local widget = UI.createWidget(widgets[alarmType], parents[parent])
-      widget:setId(id)
-      if type(config[id]) ~= 'table' then config[id] = {} end
+  -- Função de montagem direta sem passar pelo arquivo ui_legacy.lua defeituoso
+  local safeAddAlarm = function(id, title, defaultValue, alarmType, parentIndex, tooltip)
+    local targetParentPanel = parents[parentIndex]
+    if not targetParentPanel then return end
+
+    local widget = g_ui.createWidget(widgets[alarmType])
+    widget:setId(id)
+    targetParentPanel:addChild(widget)
+
+    if type(config[id]) ~= 'table' then config[id] = {} end
+
+    if widget.tick then
       widget.tick:setText(title)
       widget.tick:setChecked(config[id].enabled)
       if tooltip then widget.tick:setTooltip(tooltip) end
+      
       widget.tick.onClick = function()
         config[id].enabled = not config[id].enabled
         widget.tick:setChecked(config[id].enabled)
       end
-      if alarmType > 1 and type(config[id].value) == 'nil' then config[id].value = defaultValue end
-      if alarmType == 2 then
-        widget.value:setValue(config[id].value)
-        widget.value.onValueChange = function(w, value) config[id].value = value end
-      elseif alarmType == 3 then
-        widget.text:setText(config[id].value)
-        widget.text.onTextChange = function(w, newText) config[id].value = newText end
-      end
     end
 
-    addAlarm("ignoreFriends", "Ignore Friends", true, 1, 2)
-    addAlarm("flashClient", "Flash Client", true, 1, 2)
-    addAlarm("damageTaken", "Damage Taken", false, 1, 1)
-    addAlarm("lowHealth", "Low Health", 20, 2, 1)
-    addAlarm("lowMana", "Low Mana", 20, 2, 1)
-    addAlarm("playerAttack", "Player Attack", false, 1, 1)
+    if alarmType > 1 and type(config[id].value) == 'nil' then config[id].value = defaultValue end
 
-    UI.Separator(window.list)
-
-    addAlarm("privateMsg", "Private Message", false, 1, 1)
-    addAlarm("defaultMsg", "Default Message", false, 1, 1)
-    addAlarm("customMessage", "Custom Message:", "", 3, 1, "Você pode adicionar textos separados por vírgula.")
-
-    UI.Separator(window.list)
-
-    addAlarm("creatureDetected", "Creature Detected", false, 1, 1)
-    addAlarm("playerDetected", "Player Detected", false, 1, 1)
-    addAlarm("creatureName", "Creature Name:", "", 3, 1, "Você pode adicionar nomes de criaturas.")
-
-    local lastCall = now
-    local function alarm(file, windowText)
-      if now - lastCall < 2000 then return end
-      lastCall = now
-      if not g_resources.fileExists(file) then file = "/sounds/alarm.ogg" lastCall = now + 4000 end
-      if modules.game_bot and modules.game_bot.g_app and modules.game_bot.g_app.getOs() == "windows" and config.flashClient.enabled then g_window.flash() end
-      local localPlayer = g_game.getLocalPlayer()
-      g_window.setTitle((localPlayer and localPlayer:getName() or "Bot") .. " - " .. windowText)
-      playSound(file)
+    if alarmType == 2 and widget.value then
+      widget.value:setValue(config[id].value)
+      widget.value.onValueChange = function(w, value) config[id].value = value end
+    elseif alarmType == 3 and widget.text then
+      widget.text:setText(config[id].value)
+      widget.text.onTextChange = function(w, newText) config[id].value = newText end
     end
-
-    onTextMessage(function(mode, text)
-      if not config.enabled then return end
-      if mode == 22 and config.damageTaken.enabled then return alarm('/sounds/magnum.ogg', "Damage Received!") end
-      if config.customMessage.enabled then
-        local alertText = config.customMessage.value
-        if alertText and alertText:len() > 0 then
-          text = text:lower()
-          local parts = string.split(alertText, ",")
-          for i=1,#parts do
-            local part = parts[i]
-            if part then
-              part = part:trim():lower()
-              if text:find(part) then return alarm('/sounds/magnum.ogg', "Special Message!") end
-            end
-          end
-        end
-      end
-    end)
-
-    onTalk(function(name, level, mode, text, channelId, pos)
-      if not config.enabled then return end
-      local localPlayer = g_game.getLocalPlayer()
-      if not localPlayer or name == localPlayer:getName() then return end
-      if config.ignoreFriends.enabled and isFriend(name) then return end
-      if mode == 1 and config.defaultMsg.enabled then return alarm("/sounds/magnum.ogg", "Default Message!") end
-      if mode == 4 and config.privateMsg.enabled then return alarm("/sounds/Private_Message.ogg", "Private Message!") end
-    end)
-
-    macro(100, function() 
-      if not config.enabled then return end
-      if config.lowHealth.enabled and hppercent() < config.lowHealth.value then return alarm("/sounds/Low_Health.ogg", "Low Health!") end
-      if config.lowMana.enabled and manapercent() < config.lowMana.value then return alarm("/sounds/Low_Mana.ogg", "Low Mana!") end
-
-      local localPlayer = g_game.getLocalPlayer()
-      local currentPos = localPlayer and localPlayer:getPosition()
-      if not currentPos then return end
-
-      for i, spec in ipairs(g_map.getSpectators(currentPos, false)) do
-        if not spec:isLocalPlayer() and not (config.ignoreFriends.enabled and isFriend(spec)) then
-          if config.creatureDetected.enabled then return alarm("/sounds/magnum.ogg", "Creature Detected!") end
-          if spec:isPlayer() then 
-            if spec:isTimedSquareVisible() and config.playerAttack.enabled then return alarm("/sounds/Player_Attack.ogg", "Player Attack!") end
-            if config.playerDetected.enabled then return alarm("/sounds/Player_Detected.ogg", "Player Detected!") end
-          end
-          if config.creatureName.enabled and config.creatureName.value then
-            local name = spec:getName():lower()
-            local fragments = string.split(config.creatureName.value, ",")
-            for i=1,#fragments do
-              local frag = fragments[i]
-              if frag then
-                frag = frag:trim():lower()
-                if name:find(frag) then return alarm("/sounds/alarm.ogg", "Special Creature Detected!") end
-              end
-            end
-          end
-        end
-      end
-    end)
-end
--- Ação de clique do botão "Edit" protegida contra lag de carregamento
-ui.alerts.onClick = function()
-  if window then
-    window:show()
-    window:raise()
-    window:focus()
-  else
-    -- Caso a janela ainda esteja carregando no milissegundo do clique, avisa o usuário de forma limpa
-    print("[Alarms] A interface ainda está inicializando as configurações, tente novamente em 1 segundo.")
   end
+
+  -- Injeção instantânea dos alarmes na janela
+  safeAddAlarm("ignoreFriends", "Ignore Friends", true, 1, 2)
+  safeAddAlarm("flashClient", "Flash Client", true, 1, 2)
+  safeAddAlarm("damageTaken", "Damage Taken", false, 1, 1)
+  safeAddAlarm("lowHealth", "Low Health", 20, 2, 1)
+  safeAddAlarm("lowMana", "Low Mana", 20, 2, 1) 
+  safeAddAlarm("playerAttack", "Player Attack", false, 1, 1)
+
+  local sep1 = g_ui.createWidget("HorizontalSeparator")
+  window.list:addChild(sep1)
+
+  safeAddAlarm("privateMsg", "Private Message", false, 1, 1)
+  safeAddAlarm("defaultMsg", "Default Message", false, 1, 1)
+  safeAddAlarm("customMessage", "Custom Message:", "", 3, 1, "Você pode adicionar textos separados por vírgula.")
+
+  local sep2 = g_ui.createWidget("HorizontalSeparator")
+  window.list:addChild(sep2)
+
+  safeAddAlarm("creatureDetected", "Creature Detected", false, 1, 1)
+  safeAddAlarm("playerDetected", "Player Detected", false, 1, 1)
+  safeAddAlarm("creatureName", "Creature Name:", "", 3, 1, "Você pode adicionar nomes de criaturas.")
+
+  -- 3. CORE LOGICO DE DISPARO DE AUDIO
+  local lastCall = now
+  local function alarm(file, windowText)
+    if now - lastCall < 2000 then return end
+    lastCall = now
+    if not g_resources.fileExists(file) then file = "/sounds/alarm.ogg" lastCall = now + 4000 end
+    if config.flashClient.enabled then g_window.flash() end
+    local localPlayer = g_game.getLocalPlayer()
+    g_window.setTitle((localPlayer and localPlayer:getName() or "Bot") .. " - " .. windowText)
+    playSound(file)
+  end
+
+  onTextMessage(function(mode, text)
+    if not config.enabled then return end
+    if mode == 22 and config.damageTaken.enabled then return alarm('/sounds/magnum.ogg', "Damage Received!") end
+    if config.customMessage.enabled then
+      local alertText = config.customMessage.value
+      if alertText and alertText:len() > 0 then
+        text = text:lower()
+        local parts = string.split(alertText, ",")
+        for i=1,#parts do
+          local part = parts[i]
+          if part then
+            part = part:trim():lower()
+            if text:find(part) then return alarm('/sounds/magnum.ogg', "Special Message!") end
+          end
+        end
+      end
+    end
+  end)
+
+  onTalk(function(name, level, mode, text, channelId, pos)
+    if not config.enabled then return end
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer or name == localPlayer:getName() then return end
+    if config.ignoreFriends.enabled and isFriend(name) then return end
+    if mode == 1 and config.defaultMsg.enabled then return alarm("/sounds/magnum.ogg", "Default Message!") end
+    if mode == 4 and config.privateMsg.enabled then return alarm("/sounds/Private_Message.ogg", "Private Message!") end
+  end)
+
+  macro(100, function() 
+    if not config.enabled then return end
+    if config.lowHealth.enabled and hppercent() < config.lowHealth.value then return alarm("/sounds/Low_Health.ogg", "Low Health!") end
+    if config.lowMana.enabled and manapercent() < config.lowMana.value then return alarm("/sounds/Low_Mana.ogg", "Low Mana!") end
+
+    local localPlayer = g_game.getLocalPlayer()
+    local currentPos = localPlayer and localPlayer:getPosition()
+    if not currentPos then return end
+
+    for i, spec in ipairs(g_map.getSpectators(currentPos, false)) do
+      if not spec:isLocalPlayer() and not (config.ignoreFriends.enabled and isFriend(spec)) then
+        if config.creatureDetected.enabled then return alarm("/sounds/magnum.ogg", "Creature Detected!") end
+        if spec:isPlayer() then 
+          if spec:isTimedSquareVisible() and config.playerAttack.enabled then return alarm("/sounds/Player_Attack.ogg", "Player Attack!") end
+          if config.playerDetected.enabled then return alarm("/sounds/Player_Detected.ogg", "Player Detected!") end
+        end
+        if config.creatureName.enabled and config.creatureName.value then
+          local name = spec:getName():lower()
+          local fragments = string.split(config.creatureName.value, ",")
+          for i=1,#fragments do
+            local frag = fragments[i]
+            if frag then
+              frag = frag:trim():lower()
+              if name:find(frag) then return alarm("/sounds/alarm.ogg", "Special Creature Detected!") end
+            end
+          end
+        end
+      end
+    end
+  end)
 end
--- Dispara a checagem segura de carregamento em background
-schedule(50, carregarAlarmsSeguro)
 UI.Separator()
 --Auto Boost
 local panelName = "AutoBoost"
