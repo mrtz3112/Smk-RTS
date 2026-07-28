@@ -2830,7 +2830,7 @@ schedule(600, function()
     if not TargetBot or not TargetBot.isOn or not TargetBot.isOn() then return end
     local pos = player:getPosition()
     local creatures = g_map.getSpectatorsInRange(pos, false, 6, 6) -- Area 12x12
-    local highestPriority = -999999 -- [CORRIGIDO NO LOADER] Aceita valores negativos do Anti-KS
+    local highestPriority = -999999 
     local dangerLevel = 0
     local targets = 0
     local highestPriorityParams = nil
@@ -2842,7 +2842,7 @@ schedule(600, function()
           local path = findPath(pos, creaturePos, 7, {ignoreLastCreature=true, ignoreNonPathable=true, ignoreCost=true})
           if path then
             local params = TargetBot.Creature.calculateParams(creature, path)
-            if params and type(params) == "table" then
+            if params and type(params) == "table" and params.config then
               dangerLevel = dangerLevel + (params.danger or 0)
               local currentPriority = params.priority or 0
               if currentPriority > -1000 then
@@ -2867,10 +2867,10 @@ schedule(600, function()
     if tbPanel and tbPanel.danger and tbPanel.danger.right then
       tbPanel.danger.right:setText(dangerLevel)
     end
-    if highestPriorityParams and highestPriorityParams.creature and not isInPz() then
+    if highestPriorityParams and highestPriorityParams.creature and highestPriorityParams.config and not isInPz() then
       if tbPanel then
         if tbPanel.target and tbPanel.target.right then tbPanel.target.right:setText(highestPriorityParams.creature:getName()) end
-        if tbPanel.config and tbPanel.config.right then tbPanel.config.right:setText(highestPriorityParams.config and highestPriorityParams.config.name or "-") end
+        if tbPanel.config and tbPanel.config.right then tbPanel.config.right:setText(highestPriorityParams.config.name or "-") end
       end
       TargetBot.Creature.attack(highestPriorityParams, targets, false)    
       if TargetBot.isCaveBotActionAllowed and TargetBot.isCaveBotActionAllowed() then
@@ -2889,7 +2889,7 @@ schedule(600, function()
     TargetBot.setStatus("Waiting")
     TargetBot.walkTo(nil)
   end)
-  print("[Loader] Loop principal do TargetBot corrigido e injetado com sucesso!")
+  print("[Loader] Loop principal corrigido contra erros de config 'nil'!")
 end)
 
 -- NewCreature_Priority [Foco na Lista Fixa + Anti-KS Absoluto por Colagem]
@@ -3040,6 +3040,80 @@ schedule(400, function()
   end)
   print("[Loader] Sistema de prioridade e Anti-KS Absoluto injetados com sucesso!")
 end)
+
+--New CreatureEditor
+TargetBot.Creature.edit = function(config, callback) -- callback = function(newConfig)
+  config = config or {}
+  local editor = UI.createWindow('TargetBotCreatureEditorWindow')
+  local values = {} -- (key, function returning value of key)
+  editor.name:setText(config.name or "")
+  table.insert(values, {"name", function() return editor.name:getText() end})
+  local addScrollBar = function(id, title, min, max, defaultValue)
+    local widget = UI.createWidget('TargetBotCreatureEditorScrollBar', editor.left)
+    widget.scroll.onValueChange = function(scroll, value)
+      widget.text:setText(title .. ": " .. value)
+    end
+    widget.scroll:setRange(min, max)
+    if max-min > 1000 then
+      widget.scroll:setStep(100)
+    elseif max-min > 100 then
+      widget.scroll:setStep(10)
+    end
+    widget.scroll:setValue(config[id] or defaultValue)
+    widget.scroll.onValueChange(widget.scroll, widget.scroll:getValue())
+    table.insert(values, {id, function() return widget.scroll:getValue() end})
+  end
+  local addTextEdit = function(id, title, defaultValue)
+    local widget = UI.createWidget('TargetBotCreatureEditorTextEdit', editor.right)
+    widget.text:setText(title)
+    widget.textEdit:setText(config[id] or defaultValue or "")
+    table.insert(values, {id, function() return widget.textEdit:getText() end})
+  end
+  local addCheckBox = function(id, title, defaultValue)
+    local widget = UI.createWidget('TargetBotCreatureEditorCheckBox', editor.right)
+    widget.onClick = function()
+      widget:setOn(not widget:isOn())
+    end
+    widget:setText(title)
+    if config[id] == nil then
+      widget:setOn(defaultValue)
+    else
+      widget:setOn(config[id])
+    end
+    table.insert(values, {id, function() return widget:isOn() end})
+  end
+  local addItem = function(id, title, defaultItem)
+    local widget = UI.createWidget('TargetBotCreatureEditorItem', editor.right)
+    widget.text:setText(title)
+    widget.item:setItemId(config[id] or defaultItem)
+    table.insert(values, {id, function() return widget.item:getItemId() end})
+  end
+  editor.cancel.onClick = function()
+    editor:destroy()
+  end
+  editor.onEscape = editor.cancel.onClick
+  editor.ok.onClick = function()
+    local newConfig = {}
+    for _, value in ipairs(values) do
+      newConfig[value[1]] = value[2]()
+    end
+    if newConfig.name:len() < 1 then return end
+    newConfig.regex = "^" .. newConfig.name:trim():lower():gsub("%*", ".*"):gsub("%?", ".?") .. "$"
+
+    editor:destroy()
+    callback(newConfig)
+  end
+  addScrollBar("priority", "Priority", 0, 10, 1)
+  addScrollBar("danger", "Danger", 0, 10, 1)
+  addScrollBar("maxDistance", "Max Distance", 1, 10, 10)
+  addScrollBar("keepDistanceRange", "Keep Distance", 1, 10, 1)
+  addScrollBar("lureCount", "Lure", 0, 10, 1)
+
+  addCheckBox("chase", "Follow Attack", true)
+  addCheckBox("keepDistance", "Keep Distance", false)
+  addCheckBox("lureCavebot", "CaveBot Lure", false)
+  addCheckBox("avoidAttacks", "Avoid Monster Spells", false)
+  end
 
 --New CaveBot
 if _G then _G.warn = function() end end
