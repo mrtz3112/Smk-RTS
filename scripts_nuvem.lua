@@ -764,12 +764,14 @@ local function checkPz()
   local isPz = pzFlag or (g_game.isInPz and g_game.isInPz())
   return isPz
 end
+
 -- MACRO 1: Haste (Não executa se estiver calibrando)
-buffs = macro(100, "Haste", "CTRL+4", function()
-  -- Bloqueia a execução se o Smart Cast estiver calibrando
-  if storage.smartCastData hotel and storage.smartCastData.calibrando then 
+buffs = macro(100, "SmartHaste - Auto", "CTRL+4", function()
+  -- Correção efetuada aqui: Removida a palavra 'hotel' que causava o crash
+  if storage.smartCastData and storage.smartCastData.calibrando then 
     return 
   end
+
   local isPz = checkPz()
   if isPz then return end
   
@@ -779,23 +781,34 @@ buffs = macro(100, "Haste", "CTRL+4", function()
      saySpell(storage.autobuff1)
   end
 end) 
+
 UI.TextEdit(storage.autobuff1 or "", function(widget, text)    
   storage.autobuff1 = text
 end)
+
 -- MACRO 2: Buffs (Não executa se estiver calibrando)
-macro(100, "Buffs", "CTRL+4", function() -- Removido atalho duplicado CTRL+4 para evitar conflito
-  -- Bloqueia a execução se o Smart Cast estiver calibrando
+macro(100, "SmartBuffs - Combat", function()
   if storage.smartCastData and storage.smartCastData.calibrando then 
     return 
   end
+
   local isPz = checkPz()
   if isPz then return end
   if not g_game.isAttacking() then return end
+  
   say(storage.buffskill01)
   delay(100)
   say(storage.buffskill02)
   delay(65000)
 end)
+
+UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
+  storage.buffskill01 = text
+end)
+UI.TextEdit(storage.buffskill02 or "", function(widget, text)    
+  storage.buffskill02 = text
+end)
+
 
 UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
   storage.buffskill01 = text
