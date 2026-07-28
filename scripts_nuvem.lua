@@ -293,6 +293,8 @@ macro(100, function()
     end
   end
 end)
+-- Dispara a checagem segura de carregamento
+schedule(50, carregarAlarmsSeguro)
 UI.Separator()
 --Auto Boost
 local panelName = "AutoBoost"
