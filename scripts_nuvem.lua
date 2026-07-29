@@ -3,57 +3,6 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("      Smk Custom: v4.1      "):setColor('#C39BD3')
 UI.Label("        Since 2025       "):setColor('#C39BD3')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
--- Hooker de IDs de Interface e Elementos (Universal Corrigido para Smk)
-macro(50, "Universal Hooker por Mouse", function()
-    if not g_game.isOnline() then return end
-
-    -- 1. Captura a coordenada exata em pixels do cursor na tela
-    local mousePos = g_window.getMousePosition()
-    if not mousePos then return end
-
-    -- 2. Localiza a raiz absoluta de todas as janelas e componentes da tela
-    local rootWidget = g_ui.getRootWidget()
-    if not rootWidget then return end
-
-    -- CORREÇÃO: Busca o componente visual bruto do cliente usando o método compatível do Smk
-    local widget = rootWidget:recursiveGetChildByPos(mousePos)
-    if not widget then return end
-
-    -- 4. Análise de componentes de Interface (Botões, Painéis, Inventário, Abas)
-    local idInterface = widget:getId()
-    local tipoWidget = widget:getStyleName() or "UIWidget"
-    
-    if idInterface and idInterface ~= "" and idInterface ~= "root" then
-        print(string.format("[INTERFACE-HOOK] Componente: '%s' | ID Visual: %s", tipoWidget, idInterface))
-    end
-
-    -- 5. MANTÉM A CAPTURA DO MAPA (Monstros/Itens do chão) se o mouse estiver sobre o jogo
-    local mapPanel = modules.game_interface.getMapPanel() or g_ui.getMapWidget()
-    if mapPanel and mapPanel:isVisible() then
-        local gamePos = mapPanel:getPosition(mousePos)
-        if gamePos then
-            local tile = g_map.getTile(gamePos)
-            if tile then
-                local things = tile:getThings()
-                if things then
-                    for _, thing in ipairs(things) do
-                        if thing and thing.getId and type(thing.getId) == "function" then
-                            local idBruto = thing:getId()
-                            if idBruto and idBruto > 0 then
-                                local tipoElemento = "Item / Piso / Cenário"
-                                if thing:isCreature() then 
-                                    tipoElemento = "Criatura (Monstro/Player)" 
-                                end
-                                print(string.format("[MAPA-HOOK] %s -> ID do Client: %d", tipoElemento, idBruto))
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-UI.Separator()
 --Macro Editor
 UI.Button("Macro Editor", function(newText)
     UI.MultilineEditorWindow(storage.combos or "", {title="Macro Editor", description="Aqui voce pode editar os seus combos."}, function(text)
