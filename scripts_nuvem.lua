@@ -819,12 +819,12 @@ local function hasStrengthened()
     return false
 end
 macro(100, "Buff", "CTRL+4", function()
-    if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) or not g_game.isAttacking() then return end
+if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) or not g_game.isAttacking() then return end
     if not hasStrengthened() then
         say(storage.buffskill01)
-        say(storage.buffskill02)
-        delay(50000)
-    end
+	    say(storage.buffskill02)
+		delay(10000)
+	end
 end)
 UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
     storage.buffskill01 = text
