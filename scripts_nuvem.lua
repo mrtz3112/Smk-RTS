@@ -783,7 +783,6 @@ buffs = macro(100, "Haste", "CTRL+4", function()
     if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) then 
         return 
     end
-
     if not hasHaste() then
         saySpell(storage.autobuff1)
         delay(55000)
@@ -1436,7 +1435,7 @@ macro(100, function()
             say(storage.autobarrier)
             ultimoUsoBarreira = tempoAgora
             
-            print("[Auto Barrier] Magia conjurada! Aguardando " .. DELAY_SEGUNDOS .. " segundos de recarga.")
+            print("[Barrier] Magia conjurada! Aguardando " .. DELAY_SEGUNDOS .. " segundos de recarga.")
         end
     end
   end
@@ -3003,49 +3002,50 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
     end
   end
 
-  if isSpecial and config.stopForElites then
-    
-    local localPlayer = g_game.getLocalPlayer()
-    local myId = localPlayer:getId()
-    
-    local specialCount = 0
-    local playerPos = localPlayer:getPosition()
-    local spectators = g_map.getSpectators(playerPos, false)
-    
-    for _, spec in ipairs(spectators) do
-      if spec:isMonster() then
-        local specName = string.lower(spec:getName() or "")
-        for _, name in ipairs(specialMonsters) do
-          if string.find(specName, name, 1, true) then
-            
-            local targetId = spec.timedTarget or (type(spec.getTargetId) == "function" and spec:getTargetId())
-            
-            if targetId and targetId > 0 then
-              if targetId ~= myId then
-                break
+  if isSpecial then
+    priority = 1000
+
+    if config.stopForElites then
+      local localPlayer = g_game.getLocalPlayer()
+      local myId = localPlayer:getId()
+      
+      local specialCount = 0
+      local playerPos = localPlayer:getPosition()
+      local spectators = g_map.getSpectators(playerPos, false)
+      
+      for _, spec in ipairs(spectators) do
+        if spec:isMonster() then
+          local specName = string.lower(spec:getName() or "")
+          for _, name in ipairs(specialMonsters) do
+            if string.find(specName, name, 1, true) then
+              
+              local targetId = spec.timedTarget or (type(spec.getTargetId) == "function" and spec:getTargetId())
+              
+              if targetId and targetId > 0 then
+                if targetId ~= myId then
+                  break
+                end
               end
+              
+              specialCount = specialCount + 1
+              break
             end
-            
-            specialCount = specialCount + 1
-            break
           end
+        end
+      end
+
+      local minToStop = config.minElitesToStop or 1
+
+      if specialCount >= minToStop then
+        if CaveBot and type(CaveBot.delay) == "function" then
+          CaveBot.delay(1000)
+        elseif CaveBot and type(CaveBot.setWalkingDelay) == "function" then
+          CaveBot.setWalkingDelay(1000)
         end
       end
     end
 
-    local minToStop = config.minElitesToStop or 1
-
-    if specialCount >= minToStop then
-      priority = 1000
-      
-      if CaveBot and type(CaveBot.delay) == "function" then
-        CaveBot.delay(1000)
-      elseif CaveBot and type(CaveBot.setWalkingDelay) == "function" then
-        CaveBot.setWalkingDelay(1000)
-      end
-      
-      return priority
-    end
+    return priority
   end
 
   if g_game.getAttackingCreature() == creature then
@@ -3056,7 +3056,7 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
     return priority
   end
 
-  priority = priority + config.priority
+  priority = priority + (config.priority or 1)
   
   local path_length = #path
   if path_length == 1 then
