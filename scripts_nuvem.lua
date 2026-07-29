@@ -1091,26 +1091,25 @@ local function salvarCooldownCalibrado(novoCd)
     storage.smartCastData.menorCooldownSeguro = novoCd
 end
 
+--Spell Wave
 local ultimoDisparoTurnWave = 0
-
--- 2. MACRO PRINCIPAL DA WAVE COGNITIVA
 turnCombo = macro(50, "Spell Wave (Reta)", function()
     local target = g_game.getAttackingCreature()
     if not target then return end
     
     local agora = os.clock() * 1000
-    -- Lê o cooldown do set ativo atualmente (PvE ou PvP)
     local delaySmartCast = obterCooldownAtivo()
     
     if (agora - ultimoDisparoTurnWave) < delaySmartCast then
         return
     end
-    
-    -- Mecânica de girar em direção ao Target (Vira o boneco automaticamente)
     local targetPos = target:getPosition()
     local myPos = pos()
+    if not targetPos or not myPos then return end
+    
     local diffX = targetPos.x - myPos.x
     local diffY = targetPos.y - myPos.y
+    
     if math.abs(diffX) >= math.abs(diffY) then
         if diffX > 0 then
             g_game.turn(1)
@@ -1125,21 +1124,18 @@ turnCombo = macro(50, "Spell Wave (Reta)", function()
         end
     end   
     delay(30)
-    -- Solta a magia configurada se houver texto válido
     if storage.turnSpell and storage.turnSpell ~= "" then
         say(storage.turnSpell)
         ultimoDisparoTurnWave = agora
-        
-        -- 3. CALIBRAÇÃO EXCLUSIVA DO MODO ATIVO (AJUSTADO PARA -5ms)
-        if storage.smartCastData.calibrando then
+        if storage.smartCastData and storage.smartCastData.calibrando then
             if delaySmartCast > COOLDOWN_MINIMO_ABSOLUTO then
-                -- CORREÇÃO CIRÚRGICA: Reduz a velocidade do set atual estritamente de 5 em 5ms
                 local novoCd = math.max(COOLDOWN_MINIMO_ABSOLUTO, delaySmartCast - 5)
                 salvarCooldownCalibrado(novoCd)
             end
         end
     end
 end)
+
 if storage.turnComboEnabled then turnCombo.setOn() else turnCombo.setOff() end
 macro(200, function()
     if turnCombo then storage.turnComboEnabled = turnCombo.isOn() end
