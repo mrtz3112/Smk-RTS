@@ -350,7 +350,7 @@ ui.titleBoost.onClick = function(widget)
     widget:setOn(config.enabled)
 end
 
--- Tabela interna para controlar o tempo de reuso (1 hora e 10 segundos por slot)
+-- Tabela interna para controlar o tempo de reuso (10 segundos individual por slot)
 local boostCooldowns = {0, 0, 0}
 
 -- Execução da Macro rodando a cada 100ms para precisão de clique
@@ -361,16 +361,32 @@ macro(100, function()
     local currentTime = now
     local boostIds = {storage.boostId1, storage.boostId2, storage.boostId3}
 
+    -- Percorre a lista de IDs configurados na ordem exata (Slot 1 -> Slot 2 -> Slot 3)
     for index, id in ipairs(boostIds) do
         -- Apenas processa se o slot tiver um ID válido maior que 0
         if id and id > 0 then
-            -- Cooldown: 1 hora (3600000ms) + 10 segundos (10000ms) = 3610000ms
-            if currentTime - boostCooldowns[index] >= 3610000 then
-                local boostItem = findItem(id)
-                if boostItem then
-                    g_game.use(boostItem)
-                    boostCooldowns[index] = currentTime -- Registra o milissegundo de uso do boost
-                    break -- Uso único por ciclo de 100ms para manter o intervalo solicitado entre itens distintos
+            -- Verifica se já se passaram 10000ms (10 segundos) desde o último uso DESTE slot específico
+            if currentTime - boostCooldowns[index] >= 10000 then
+                
+                -- BUSCA EXCLUSIVA EM CONTAINERS: Vasculha todas as backpacks abertas na tela
+                local itemFound = nil
+                local containers = g_game.getContainers()
+                
+                for _, container in pairs(containers) do
+                    for _, item in ipairs(container:getItems()) do
+                        if item:getId() == id then
+                            itemFound = item
+                            break
+                        end
+                    end
+                    if itemFound then break end
+                end
+
+                -- Se encontrou o item dentro de alguma backpack aberta, dá Use nele
+                if itemFound then
+                    g_game.use(itemFound)
+                    boostCooldowns[index] = currentTime -- Atualiza o tempo do cooldown com o milissegundo atual
+                    break -- Interrompe o loop atual. O próximo item da ordem só será processado nos próximos ciclos de 100ms
                 end
             end
         end
@@ -785,21 +801,30 @@ buffs = macro(100, "Haste", "CTRL+4", function()
     end
     if not hasHaste() then
         saySpell(storage.autobuff1)
-        delay(55000)
+        delay(40000)
     end
 end) 
 UI.TextEdit(storage.autobuff1 or "", function(widget, text)    
     storage.autobuff1 = text
 end)
 -- Buff
-macro(100, "Buff", "CTRL+4", function()
-    if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) or not g_game.isAttacking() then 
-        return 
+local function hasStrengthened()
+    local rootWidget = g_ui.getRootWidget()
+    if rootWidget then
+        local buffIcon = rootWidget:recursiveGetChildById('condition_strengthened')
+        if buffIcon and buffIcon:isVisible() then
+            return true
+        end
     end
-    say(storage.buffskill01)
-    delay(100)
-    say(storage.buffskill02)
-    delay(60100)
+    return false
+end
+macro(100, "Buff", "CTRL+4", function()
+    if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) or not g_game.isAttacking() then return end
+    if not hasStrengthened() then
+        say(storage.buffskill01)
+        say(storage.buffskill02)
+        delay(50000)
+    end
 end)
 UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
     storage.buffskill01 = text
@@ -836,7 +861,7 @@ local function aplicarPenalidadeExhaust()
             storage.smartCastData.calibrando = false
             storage.smartCastData.faseCalibracao = 1 
             storage.smartCastData.menorCooldownSeguro = valorFinal
-            print("[Smart Cast] Cooldown Perfeito Encontrado! Travado de forma estável em: " .. math.floor(valorFinal) .. "ms")
+            print("[Smart Cast] Cooldown Perfeito Encontrado! Novo CD: " .. math.floor(valorFinal) .. "ms")
         end
     end
 end
@@ -2912,7 +2937,7 @@ TargetBot.Creature.edit = function(config, callback)
     callback(newConfig)
   end
   
-  addScrollBar("maxDistance", "Max Distance", 1, 6, 1)
+  addScrollBar("maxDistance", "Max Distance", 1, 7, 1)
   addScrollBar("keepDistanceRange", "Keep Distance", 1, 4, 1)
   addScrollBar("lureCount", "Lure", 0, 8, 1)
   addScrollBar("minElitesToStop", "Min Elites to Stop", 1, 5, 1)
@@ -2926,7 +2951,7 @@ end
 
 
 -- Anti KS
-schedule(500, function()
+schedule(100, function()
   if not TargetBot or not TargetBot.Creature then
       print("[Loader] Erro: Estrutura do TargetBot nao encontrada para injetar o calculateParams.")
       return
