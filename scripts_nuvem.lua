@@ -2883,3 +2883,65 @@ schedule(100, function()
         print("[Loader] Erro: CaveBot original não foi encontrado para ser modificado.")
     end
 end)
+
+-- INJEÇÃO DO FILTRO DE KS NO CALCULATEPARAMS (PRIORIDADE ZERO PARA KS)
+schedule(500, function()
+  if not TargetBot or not TargetBot.Creature then
+      print("[Loader] Erro: Estrutura do TargetBot nao encontrada para injetar o calculateParams.")
+      return
+  end
+  -- Função auxiliar para checar se o monstro é uma exceção de treino
+  local function isTrainerMonster(creatureName)
+      if not creatureName then return false end
+      local name = creatureName:lower()
+      return name:find("house trainer", 1, true) or name == "trainer"
+  end
+  -- Função que valida se o monstro está colado (1 quadrado) em outro player
+  local function isMonsterGluedToOtherPlayer(monster)
+      if isTrainerMonster(monster:getName()) then return false end
+      local localPlayer = g_game.getLocalPlayer()
+      if not localPlayer then return false end
+      local myId = localPlayer:getId()
+      local monsterPos = monster:getPosition()
+      if not monsterPos then return false end
+
+      local spectators = g_map.getSpectators(monsterPos, false)
+      for _, spec in ipairs(spectators) do
+          if spec:isPlayer() and spec:getId() ~= myId then
+              local pPos = spec:getPosition()
+              if pPos then
+                  if math.abs(monsterPos.x - pPos.x) <= 1 and math.abs(monsterPos.y - pPos.y) <= 1 then
+                      return true
+                  end
+              end
+          end
+      end
+      return false
+  end
+  -- Salva a função original de cálculo de parâmetros para usar como base
+  local originalCalculateParams = TargetBot.Creature.calculateParams
+  -- Sobrescreve a função de leitura de monstros na memória do bot
+  TargetBot.Creature.calculateParams = function(creature, path)
+      -- Executa o cálculo padrão original do bot primeiro
+      local params = originalCalculateParams(creature, path)
+
+      if params and type(params) == "table" and creature:isMonster() then
+          local localPlayer = g_game.getLocalPlayer()
+          if localPlayer then
+              local myId = localPlayer:getId()
+              local mTargetId = creature.getTargetId and creature:getTargetId() or 0
+
+              -- REGRA DE KS ABSOLUTA: Se estiver focando outro player OU colado em outro player (EXCETO TRAINERS)
+              if not isTrainerMonster(creature:getName()) then
+                  if (mTargetId > 0 and mTargetId ~= myId) or isMonsterGluedToOtherPlayer(creature) then
+                      -- Zera a prioridade e remove o bicho da lista de alvos ativos para o bot passar direto
+                      params.priority = 0
+                  end
+              end
+          end
+      end
+
+      return params
+  end
+  print("[Loader] Filtro de Prioridade 0 para monstros em KS injetado com sucesso!")
+end)
