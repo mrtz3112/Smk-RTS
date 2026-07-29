@@ -949,55 +949,33 @@ setDefaultTab("Fight")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Haste & Buff ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-local function checkPz()
-  local player = g_game.getLocalPlayer()
-  if not player then return false end
-  local pzFlag = bit.band(player:getStates(), 1) == 1 or bit.band(player:getStates(), 16384) == 16384
-  local isPz = pzFlag or (g_game.isInPz and g_game.isInPz())
-  return isPz
-end
-local proximoHasteTime = 0
-local proximoBuffTime = 0
-buffs = macro(100, "Haste", "CTRL+4", function()
-  if storage.smartCastData and storage.smartCastData.calibrando then 
-    return 
-  end
-  local agora = os.clock() * 1000
-  if agora < proximoHasteTime then return end
-  local isPz = checkPz()
-  if isPz then return end
-  if hasHaste() then
-     proximoHasteTime = agora + 55000 
-  else
-     saySpell(storage.autobuff1)
-     proximoHasteTime = os.clock() * 1000 + 55000 
-  end
+buffs = macro(100, "Haste", "SHIFT+F", function()
+    if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) then 
+        return 
+    end
+    if not hasHaste() then
+        saySpell(storage.autobuff1)
+        delay(55000)
+    end
 end) 
 UI.TextEdit(storage.autobuff1 or "", function(widget, text)    
-  storage.autobuff1 = text
+    storage.autobuff1 = text
 end)
-macro(100, "Buffs", "CTRL+4", function()
-  if storage.smartCastData and storage.smartCastData.calibrando then 
-    return 
-  end
-  local agora = os.clock() * 1000
-  if agora < proximoBuffTime then return end
-  local isPz = checkPz()
-  if isPz then return end
-  if not g_game.isAttacking() then return end
-  say(storage.buffskill01)
-  schedule(100, function()
-    if storage.smartCastData and storage.smartCastData.calibrando then return end
-    if not g_game.isAttacking() then return end
+-- Buff
+macro(100, "Buff", "SHIFT+F", function()
+    if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) or not g_game.isAttacking() then 
+        return 
+    end
+    say(storage.buffskill01)
+    delay(100)
     say(storage.buffskill02)
-  end)
-  proximoBuffTime = os.clock() * 1000 + 65000 
+    delay(60100)
 end)
 UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
-  storage.buffskill01 = text
+    storage.buffskill01 = text
 end)
 UI.TextEdit(storage.buffskill02 or "", function(widget, text)    
-  storage.buffskill02 = text
+    storage.buffskill02 = text
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
