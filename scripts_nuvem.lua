@@ -884,7 +884,7 @@ local function aplicarPenalidadeExhaust()
             print("[Smart Cast] Exhaust Detectado! Iniciando Calibracao Fina (-10ms).")
         
         elseif storage.smartCastData.faseCalibracao == 2 then
-            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 30) -- Margem de segurança de 30ms sobre o exaust real
+            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 30) -- Margem de segurança de 25ms sobre o exaust real
             storage.smartCastData.calibrando = false
             storage.smartCastData.faseCalibracao = 1 
             storage.smartCastData.menorCooldownSeguro = valorFinal
@@ -955,7 +955,7 @@ combo = macro(20, "Smart Cast", function()
         storage.smartCastData.ultimoDisparoTime = agora
         if storage.smartCastData.calibrando then
             if cdSeguroAtual > COOLDOWN_MINIMO_ABSOLUTO then
-                local redutor = 10 -- Redução fina ajustada para 10ms
+                local redutor = 10 -- Redução fina ajustada para 5ms
                 if storage.smartCastData.faseCalibracao == 1 then
                     redutor = 50 -- Redução rápida ajustada para 50ms
                 end
@@ -2701,7 +2701,7 @@ if player:getBlessings() == 0 then
   say("!bless")
   schedule(1000, function()
     if player:getBlessings() == 0 then
-      print("[Loader] Bless automatica injetada com sucesso.")
+      print("[PvE] Bless automatica injetada com sucesso.")
     end
   end)
 end
@@ -2973,28 +2973,6 @@ TargetBot.Creature.edit = function(config, callback) -- callback = function(newC
   addCheckBox("stopForElites", "Stop for Elites", false)
 end
 
---New CaveBot
-if _G then _G.warn = function() end end
-local warn = function() end
-schedule(100, function()
-    local realCavebotMacro = nil
-    if CaveBot and CaveBot.actionList then
-        local oldDoWalking = CaveBot.doWalking
-        if oldDoWalking then
-            CaveBot.doWalking = function()
-                local isWalking = oldDoWalking()
-                if isWalking and cavebotMacro then
-                    cavebotMacro.delay = now + 40
-                end
-                return isWalking
-            end
-        end
-        print("[Loader] CaveBot otimizado e estabilizado com sucesso.")
-    else
-        print("[Loader] Erro: CaveBot original não foi encontrado para ser modificado.")
-    end
-end)
-
 -- INJEÇÃO DO FILTRO DE KS NO CALCULATEPARAMS (PRIORIDADE ZERO PARA KS)
 schedule(500, function()
   if not TargetBot or not TargetBot.Creature then
@@ -3148,3 +3126,47 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
 
   return priority
 end
+
+--Otimização do CaveBot
+if _G then _G.warn = function() end end
+local cavebotOptimizeLoop = nil
+print("[Loader] Iniciando monitoramento para otimizacao do CaveBot...")
+-- Usamos a função nativa 'macro' com intervalo de 200ms para checagem contínua
+cavebotOptimizeLoop = macro(200, function()
+    -- Modificado: Verificamos apenas a tabela global CaveBot e sua função de caminhar
+    if CaveBot and type(CaveBot.doWalking) == "function" then
+        -- Altera o pingDelay nativo se existir na base
+        if CaveBot.pingDelay then
+            CaveBot.pingDelay = 10
+        end
+        -- Faz a interceptação segura da função de caminhar
+        local oldDoWalking = CaveBot.doWalking
+        -- Evita duplicar o hook caso o script seja recarregado
+        if oldDoWalking and not CaveBot.isOptimizedByLoader then
+            CaveBot.doWalking = function() 
+                -- Limpa qualquer trava residual de andada antiga
+                if CaveBot.walkingDelay then CaveBot.walkingDelay = 0 end
+                if type(CaveBot.setWalkingDelay) == "function" then CaveBot.setWalkingDelay(0) end
+                -- Executa a caminhada original
+                local isWalking = oldDoWalking()
+                -- OTIMIZAÇÃO EXTRA: Se encontrar a variável do macro ou tabela do bot, força o delay menor
+                if isWalking then
+                    if cavebotMacro then
+                        cavebotMacro.delay = now + 5
+                    elseif CaveBot.macro and type(CaveBot.macro) == "table" then
+                        CaveBot.macro.delay = now + 5
+                    end
+                end
+                return isWalking
+            end
+            -- Marca que o bot já foi otimizado para evitar loops visuais
+            CaveBot.isOptimizedByLoader = true
+            -- PRINT DE CONFIRMAÇÃO AUTOMÁTICA
+            print("[Loader] CaveBot detectado e otimizado com sucesso.")
+            -- DESLIGA A MACRO: Interceptação concluída, desliga o monitoramento
+            cavebotOptimizeLoop.setOff()
+        end
+    end
+end)
+
+
