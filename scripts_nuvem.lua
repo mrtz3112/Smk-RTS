@@ -1,3 +1,4 @@
+--Esconder Msgs de SlowMacro
 if g_logger then
     local functionsToFilter = {"log", "warning", "error", "info"}
     for _, funcName in ipairs(functionsToFilter) do
