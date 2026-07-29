@@ -1714,7 +1714,7 @@ macro(100, function()
  if storage[panelNameFastPot].setting then
     if hppercent() <= storage[panelNameFastPot].hp then
         use(storage[panelNameFastPot].id)
-		delay(1000)
+		delay(500)
     end
 	end
 end)
@@ -1810,7 +1810,7 @@ macro(100, function()
  if storage[panelNameManaPot].setting then
     if manapercent() <= storage[panelNameManaPot].hp then
         use(storage[panelNameManaPot].id)
-		delay(1000)
+		delay(500)
     end
 	end
 end)
