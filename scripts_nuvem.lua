@@ -1641,7 +1641,7 @@ Panel
     anchors.left: item.right
     anchors.bottom: item.verticalCenter
     text-align: center
-    !text: tr('Activate')
+    !text: tr('Health Potion')
     margin-left: 10
     width: 120
   
@@ -1737,7 +1737,7 @@ Panel
     anchors.left: item.right
     anchors.bottom: item.verticalCenter
     text-align: center
-    !text: tr('Activate')
+    !text: tr('Mana Potion')
     margin-left: 10
     width: 120
   
@@ -1832,7 +1832,7 @@ Panel
     anchors.left: item.right
     anchors.bottom: item.verticalCenter
     text-align: center
-    !text: tr('Activate')
+    !text: tr('Pet')
     margin-left: 10
     width: 120
   
