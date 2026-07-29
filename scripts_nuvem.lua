@@ -3,6 +3,57 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("      Smk Custom: v4.1      "):setColor('#C39BD3')
 UI.Label("        Since 2025       "):setColor('#C39BD3')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+-- Hooker de IDs de Interface e Elementos (Universal Corrigido para Smk)
+macro(50, "Universal Hooker por Mouse", function()
+    if not g_game.isOnline() then return end
+
+    -- 1. Captura a coordenada exata em pixels do cursor na tela
+    local mousePos = g_window.getMousePosition()
+    if not mousePos then return end
+
+    -- 2. Localiza a raiz absoluta de todas as janelas e componentes da tela
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end
+
+    -- CORREÇÃO: Busca o componente visual bruto do cliente usando o método compatível do Smk
+    local widget = rootWidget:recursiveGetChildByPos(mousePos)
+    if not widget then return end
+
+    -- 4. Análise de componentes de Interface (Botões, Painéis, Inventário, Abas)
+    local idInterface = widget:getId()
+    local tipoWidget = widget:getStyleName() or "UIWidget"
+    
+    if idInterface and idInterface ~= "" and idInterface ~= "root" then
+        print(string.format("[INTERFACE-HOOK] Componente: '%s' | ID Visual: %s", tipoWidget, idInterface))
+    end
+
+    -- 5. MANTÉM A CAPTURA DO MAPA (Monstros/Itens do chão) se o mouse estiver sobre o jogo
+    local mapPanel = modules.game_interface.getMapPanel() or g_ui.getMapWidget()
+    if mapPanel and mapPanel:isVisible() then
+        local gamePos = mapPanel:getPosition(mousePos)
+        if gamePos then
+            local tile = g_map.getTile(gamePos)
+            if tile then
+                local things = tile:getThings()
+                if things then
+                    for _, thing in ipairs(things) do
+                        if thing and thing.getId and type(thing.getId) == "function" then
+                            local idBruto = thing:getId()
+                            if idBruto and idBruto > 0 then
+                                local tipoElemento = "Item / Piso / Cenário"
+                                if thing:isCreature() then 
+                                    tipoElemento = "Criatura (Monstro/Player)" 
+                                end
+                                print(string.format("[MAPA-HOOK] %s -> ID do Client: %d", tipoElemento, idBruto))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+UI.Separator()
 --Macro Editor
 UI.Button("Macro Editor", function(newText)
     UI.MultilineEditorWindow(storage.combos or "", {title="Macro Editor", description="Aqui voce pode editar os seus combos."}, function(text)
@@ -378,7 +429,7 @@ macro(100, function()
 end)
 UI.Separator()
 --Deposit Gold & Stack Items
-macro(250, "DepositGold & StackItems", function()
+macro(1000, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
   local coinIds = {3031, 3035, 3043, 10137} 
   local minAmount = 1
@@ -774,177 +825,7 @@ UI.Separator()
 UI.Button("Screen: +  Zoom", function() zoomIn() end)
 UI.Button("Screen: -  Zoom", function() zoomOut() end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---Ice Hud HP Percent
-macro(100, function()
-local hp = g_ui.getRootWidget():recursiveGetChildById("healthCircleFront")
-hp:setText("   ".. hppercent().. "             ") 
-hp:setColor("white")
-end)
---Ice Hud MP Percent
-macro(100, function()
-local hp = g_ui.getRootWidget():recursiveGetChildById("manaCircleFront")
-hp:setText("                   ".. manapercent().. "          ") 
-hp:setColor("white")
-end)
---Auto Bless
-if player:getBlessings() == 0 then
-  say("!bless")
-  schedule(1000, function()
-    if player:getBlessings() == 0 then
-      print("[Loader] Bless: ON")
-    end
-  end)
-end
---CaveBot Creator Always Opened
-macro(100, function()
-  local botWindow = modules.game_bot.botWindow
-  if not botWindow then return end
-  local creatorPanel = botWindow:recursiveGetChildById('CaveBot.Editor')
-  if creatorPanel and not creatorPanel:isVisible() then
-    creatorPanel:show()
-    local titleButton = botWindow:recursiveGetChildById('createCavebotBtn') or botWindow:recursiveGetChildById('createCavebot')
-    if titleButton then
-      titleButton:setOn(true)
-    end
-  end
-end)
--- Magic wall & Wild growth timer
-local magicWallId = 10980
-local magicWallTime = 20000
-local wildGrowthId = 2130
-local wildGrowthTime = 45000
-local activeTimers = {}
-onAddThing(function(tile, thing)
-  if not thing:isItem() then
-    return
-  end
-  local timer = 0
-  if thing:getId() == magicWallId then
-    timer = magicWallTime
-  elseif thing:getId() == wildGrowthId then
-    timer = wildGrowthTime
-  else
-    return
-  end
-  local pos = tile:getPosition().x .. "," .. tile:getPosition().y .. "," .. tile:getPosition().z
-  if not activeTimers[pos] or activeTimers[pos] < now then    
-    activeTimers[pos] = now + timer
-  end
-  tile:setTimer(activeTimers[pos] - now)
-end)
-onRemoveThing(function(tile, thing)
-  if not thing:isItem() then
-    return
-  end
-  if (thing:getId() == magicWallId or thing:getId() == wildGrowthId) and tile:getGround() then
-    local pos = tile:getPosition().x .. "," .. tile:getPosition().y .. "," .. tile:getPosition().z
-    activeTimers[pos] = nil
-    tile:setTimer(0)
-  end  
-end)
---SafeFightSync
-local ultimoEstadoSeguro = nil
-macro(200, function()
-    local rootWidget = g_ui.getRootWidget()
-    if not rootWidget then return end
-    local bBalanced = rootWidget:recursiveGetChildById("fightBalancedBox")
-    local estaNoBalanced = bBalanced and (bBalanced:isOn() or bBalanced:isChecked())
 
-    if estaNoBalanced then
-        if ultimoEstadoSeguro ~= true then
-            if g_game.setSafeFight then 
-                pcall(function() g_game.setSafeFight(false) end) 
-            end
-            ultimoEstadoSeguro = true
-            print("[PvP Protocol] Modo Balanced: SafeFight LIGADO.")
-        end
-    else
-        if ultimoEstadoSeguro ~= false then
-            if g_game.setSafeFight then 
-                pcall(function() g_game.setSafeFight(true) end) 
-            end
-            ultimoEstadoSeguro = false
-            print("[PvP Protocol] Modo Offensive: SafeFight DESLIGADO.")
-        end
-    end
-end)
---Target Health Bar
-local lifeColors = {
-    { percent = 35, color = 'red' },
-    { percent = 75, color = 'yellow' },
-    { percent = 100, color = 'green' }
-}
-
-local widgetTarget = [[
-UIWidget
-  id: targetPanelFixed
-  background-color: #1a1a1aef
-  border: 1 #3a3a3a
-  border-radius: 4
-  size: 300 50
-  focusable: false
-  phantom: true
-  draggable: false
-
-  UILabel
-    id: targetTitle
-    anchors.top: parent.top
-    anchors.horizontalCenter: parent.horizontalCenter
-    margin-top: 5
-    color: #e8e8e8
-    font: verdana-11px-rounded
-    text-auto-resize: true
-
-  ProgressBar
-    id: progressBar
-    height: 14
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.bottom: parent.bottom
-    margin: 6
-    background-color: #880000
-    text-align: center
-    text-color: white
-]]
-
-local panel = {}
-panel['targetWidget'] = setupUI(widgetTarget, g_ui.getRootWidget())
-panel['targetWidget']:setVisible(false)
-local function getColorByPercent(percent, colorList)
-    for i = 1, #colorList do
-        if percent <= colorList[i].percent then
-            return colorList[i].color
-        end
-    end
-    return colorList[#colorList].color
-end
-local function updateTargetWidget(targetNameText, percent, hasTarget)
-    local target = panel['targetWidget']
-    if not target then return end
-    target:setVisible(hasTarget)
-    if not hasTarget then return end
-    local rootWidth = g_ui.getRootWidget():getWidth()
-    local posX = (rootWidth / 2) - (target:getWidth() / 2) + 90
-    local posY = 80 
-    target:setPosition({ x = posX, y = posY })
-    target.targetTitle:setText(targetNameText)    
-    target.progressBar:setText(string.format("%d%%", percent))
-    target.progressBar:setPercent(percent)
-    target.progressBar:setBackgroundColor(getColorByPercent(percent, lifeColors))
-end
-macro(100, function()
-    local name, percent = "", 100
-    local hasTarget = false   
-    if g_game.isAttacking() then
-        local target = g_game.getAttackingCreature()
-        if target then
-            name = target:getName()
-            percent = target:getHealthPercent()
-            hasTarget = true
-        end
-    end 
-    updateTargetWidget(name, percent, hasTarget)
-end)
 setDefaultTab("Fight")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Haste & Buff ~"):setColor('#EBDEF0')
@@ -953,6 +834,7 @@ buffs = macro(100, "Haste", "SHIFT+F", function()
     if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) then 
         return 
     end
+
     if not hasHaste() then
         saySpell(storage.autobuff1)
         delay(55000)
@@ -999,14 +881,14 @@ local function aplicarPenalidadeExhaust()
             local novoCd = math.min(COOLDOWN_MAXIMO, cdAtual + 200) -- Adiciona margem rápida
             storage.smartCastData.faseCalibracao = 2
             storage.smartCastData.menorCooldownSeguro = novoCd
-            print("[Smart Cast] Exhausthed Detectado! Ajustando +150ms. Iniciando Calibracao Fina (-10ms)...")
+            print("[Smart Cast] Exhaust Detectado! Iniciando Calibracao Fina (-10ms).")
         
         elseif storage.smartCastData.faseCalibracao == 2 then
-            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 25) -- Margem de segurança de 40ms sobre o exaust real
+            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 25) -- Margem de segurança de 25ms sobre o exaust real
             storage.smartCastData.calibrando = false
             storage.smartCastData.faseCalibracao = 1 
             storage.smartCastData.menorCooldownSeguro = valorFinal
-            print("[Smart Cast] Cooldown Perfeito Encontrado! Travado de forma estavel em: " .. math.floor(valorFinal) .. "ms")
+            print("[Smart Cast] Cooldown Perfeito Encontrado! Travado de forma estável em: " .. math.floor(valorFinal) .. "ms")
         end
     end
 end
@@ -1026,7 +908,7 @@ combo = macro(20, "Smart Cast", function()
         storage.smartCastData.calibrando = true
         storage.smartCastData.ultimoDisparoTime = os.clock() * 1000
         storage.smartCastData.menorCooldownSeguro = 2000
-        print("[Smart Cast] Iniciando Calibracao Rapida a partir de 2000ms...")
+        print("[Smart Cast] Iniciando Calibracao rapida a partir de 2000ms.")
         storage.smartCastData.estadoAnteriorMacro = true
     end
     if not g_game.isAttacking() then return end     
@@ -1101,8 +983,6 @@ UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text end)
 
--- Força sincronia inicial
-if storage.comboEnabled then combo.setOn() else combo.setOff() end
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Others ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
@@ -1302,6 +1182,13 @@ if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 if not storage.smartCastData then
     storage.smartCastData = {}
 end
+if storage.painelSalvo == nil then storage.painelSalvo = {} end
+if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
+if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
+if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
+if not storage.smartCastData then
+    storage.smartCastData = {}
+end
 local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
@@ -1353,6 +1240,62 @@ MainWindow
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 6
 ]], modules.game_interface.getMapPanel())
+painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
+painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
+local function isMacroActive(macroRef, storageKey)
+    if macroRef and type(macroRef) == "table" and macroRef.isOn and type(macroRef.isOn) == "function" then
+        local success, result = pcall(function() return macroRef.isOn() end)
+        if success then return result end
+    end
+    return storage.painelSalvo and storage.painelSalvo[storageKey] or false
+end
+local function alternarEstadoMacro(macroRef, storageKey)
+    if not storage.painelSalvo then storage.painelSalvo = {} end
+    local novoEstado = not storage.painelSalvo[storageKey]
+    storage.painelSalvo[storageKey] = novoEstado
+    if macroRef and type(macroRef) == "table" and macroRef.setOn then
+        pcall(function() macroRef.setOn(novoEstado) end)
+    elseif macroRef and type(macroRef) == "function" then
+        pcall(macroRef)
+    end
+end
+if painelIconesUI then
+    local container = painelIconesUI:getChildById("containerIcones")
+    if container then
+        local btnSpecial = container:getChildById("botaoSpecial")
+        local btnSpells = container:getChildById("botaoSpells")
+        local btnWave = container:getChildById("botaoWave")
+        local lblCdAtual = container:getChildById("labelCdAtual")
+        if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
+        if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
+        if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
+        local jaSincronizou = false
+        local hooksConfigurados = false
+        local ultimoEstadoBot = false
+        if TargetBot and TargetBot.isEnabled then ultimoEstadoBot = TargetBot.isEnabled() end     
+        macro(100, function()
+            if not g_game.isOnline() then return end
+            if not jaSincronizou then
+                if lowhp and type(lowhp) == "table" and lowhp.setOn then pcall(function() lowhp.setOn(storage.painelSalvo.special) end) end
+                if combo and type(combo) == "table" and combo.setOn then pcall(function() combo.setOn(storage.painelSalvo.spells) end) end
+                if turnCombo and type(turnCombo) == "table" and turnCombo.setOn then pcall(function() turnCombo.setOn(storage.painelSalvo.wave) end) end
+                jaSincronizou = true
+            end
+            if not hooksConfigurados then
+                hooksConfigurados = true
+            end       
+            if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp, "special") and "green" or "red") end
+            if btnSpells then btnSpells:setColor(isMacroActive(combo, "spells") and "green" or "red") end
+            if btnWave then btnWave:setColor(isMacroActive(turnCombo, "wave") and "green" or "red") end
+            if lblCdAtual then
+                local cdSalvoMilissegundos = storage.smartCastData and storage.smartCastData.menorCooldownSeguro or 0
+                local cdEmSegundos = cdSalvoMilissegundos / 1000
+                local sufixo = (storage.smartCastData and storage.smartCastData.calibrando) and "s [C]" or "s"
+                lblCdAtual:setText("Cast: " .. string.format("%.2f", cdEmSegundos) .. sufixo)
+            end
+        end)
+    end
+end
 painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
 painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
 local function isMacroActive(macroRef, storageKey)
@@ -2174,15 +2117,18 @@ ui.title.onClick = function(widget)
 end
 macro(1000, function()
     if not config.enabled then return end
+
     -- Usa os IDs dinâmicos salvos no storage
     local scroll = findItem(storage.legendaryScroll)
     local item = findItem(storage.legendaryItem)
+
     if scroll and item then
         useWith(scroll, item)
     end
 end)
 onTextMessage(function(mode, text)
     text = text:upper()
+
     if text:find("NEW RARITY: LEGENDARY") or text:find("NEW RARITY: KAMI") then
         config.enabled = false
         ui.title:setOn(false)
@@ -2736,6 +2682,184 @@ macro(100, function()
   if pvehud.skills8 then pvehud.skills8:setText("~ Weapon: " .. player:getSkillLevel(2) .. " - (" .. player:getSkillLevelPercent(2) .. "%)") end
 end)
 
+--Ice Hud HP Percent
+macro(100, function()
+local hp = g_ui.getRootWidget():recursiveGetChildById("healthCircleFront")
+hp:setText("   ".. hppercent().. "             ") 
+hp:setColor("white")
+end)
+
+--Ice Hud MP Percent
+macro(100, function()
+local hp = g_ui.getRootWidget():recursiveGetChildById("manaCircleFront")
+hp:setText("                   ".. manapercent().. "          ") 
+hp:setColor("white")
+end)
+
+--Auto Bless
+if player:getBlessings() == 0 then
+  say("!bless")
+  schedule(1000, function()
+    if player:getBlessings() == 0 then
+      print("[Loader] Bless automatica injetada com sucesso.")
+    end
+  end)
+end
+
+--CaveBot Creator Always Opened
+macro(100, function()
+  local botWindow = modules.game_bot.botWindow
+  if not botWindow then return end
+  local creatorPanel = botWindow:recursiveGetChildById('CaveBot.Editor')
+  if creatorPanel and not creatorPanel:isVisible() then
+    creatorPanel:show()
+    local titleButton = botWindow:recursiveGetChildById('createCavebotBtn') or botWindow:recursiveGetChildById('createCavebot')
+    if titleButton then
+      titleButton:setOn(true)
+    end
+  end
+end)
+
+-- Magic wall & Wild growth timer
+local magicWallId = 10980
+local magicWallTime = 20000
+local wildGrowthId = 2130
+local wildGrowthTime = 45000
+local activeTimers = {}
+onAddThing(function(tile, thing)
+  if not thing:isItem() then
+    return
+  end
+  local timer = 0
+  if thing:getId() == magicWallId then
+    timer = magicWallTime
+  elseif thing:getId() == wildGrowthId then
+    timer = wildGrowthTime
+  else
+    return
+  end
+  local pos = tile:getPosition().x .. "," .. tile:getPosition().y .. "," .. tile:getPosition().z
+  if not activeTimers[pos] or activeTimers[pos] < now then    
+    activeTimers[pos] = now + timer
+  end
+  tile:setTimer(activeTimers[pos] - now)
+end)
+onRemoveThing(function(tile, thing)
+  if not thing:isItem() then
+    return
+  end
+  if (thing:getId() == magicWallId or thing:getId() == wildGrowthId) and tile:getGround() then
+    local pos = tile:getPosition().x .. "," .. tile:getPosition().y .. "," .. tile:getPosition().z
+    activeTimers[pos] = nil
+    tile:setTimer(0)
+  end  
+end)
+
+--SafeFightSync
+local ultimoEstadoSeguro = nil
+macro(200, function()
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end
+    local bBalanced = rootWidget:recursiveGetChildById("fightBalancedBox")
+    local estaNoBalanced = bBalanced and (bBalanced:isOn() or bBalanced:isChecked())
+
+    if estaNoBalanced then
+        if ultimoEstadoSeguro ~= true then
+            if g_game.setSafeFight then 
+                pcall(function() g_game.setSafeFight(false) end) 
+            end
+            ultimoEstadoSeguro = true
+            print("[PvE] SafeFight LIGADO.")
+        end
+    else
+        if ultimoEstadoSeguro ~= false then
+            if g_game.setSafeFight then 
+                pcall(function() g_game.setSafeFight(true) end) 
+            end
+            ultimoEstadoSeguro = false
+            print("[PvP] SafeFight DESLIGADO.")
+        end
+    end
+end)
+
+--Target Health Bar
+local lifeColors = {
+    { percent = 35, color = 'red' },
+    { percent = 75, color = 'yellow' },
+    { percent = 100, color = 'green' }
+}
+
+local widgetTarget = [[
+UIWidget
+  id: targetPanelFixed
+  background-color: #1a1a1aef
+  border: 1 #3a3a3a
+  border-radius: 4
+  size: 300 50
+  focusable: false
+  phantom: true
+  draggable: false
+
+  UILabel
+    id: targetTitle
+    anchors.top: parent.top
+    anchors.horizontalCenter: parent.horizontalCenter
+    margin-top: 5
+    color: #e8e8e8
+    font: verdana-11px-rounded
+    text-auto-resize: true
+
+  ProgressBar
+    id: progressBar
+    height: 14
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    margin: 6
+    background-color: #880000
+    text-align: center
+    text-color: white
+]]
+
+local panel = {}
+panel['targetWidget'] = setupUI(widgetTarget, g_ui.getRootWidget())
+panel['targetWidget']:setVisible(false)
+local function getColorByPercent(percent, colorList)
+    for i = 1, #colorList do
+        if percent <= colorList[i].percent then
+            return colorList[i].color
+        end
+    end
+    return colorList[#colorList].color
+end
+local function updateTargetWidget(targetNameText, percent, hasTarget)
+    local target = panel['targetWidget']
+    if not target then return end
+    target:setVisible(hasTarget)
+    if not hasTarget then return end
+    local rootWidth = g_ui.getRootWidget():getWidth()
+    local posX = (rootWidth / 2) - (target:getWidth() / 2) + 90
+    local posY = 80 
+    target:setPosition({ x = posX, y = posY })
+    target.targetTitle:setText(targetNameText)    
+    target.progressBar:setText(string.format("%d%%", percent))
+    target.progressBar:setPercent(percent)
+    target.progressBar:setBackgroundColor(getColorByPercent(percent, lifeColors))
+end
+macro(100, function()
+    local name, percent = "", 100
+    local hasTarget = false   
+    if g_game.isAttacking() then
+        local target = g_game.getAttackingCreature()
+        if target then
+            name = target:getName()
+            percent = target:getHealthPercent()
+            hasTarget = true
+        end
+    end 
+    updateTargetWidget(name, percent, hasTarget)
+end)
+
 --CaveBotConfigs
 local cavebotTab = "Cave"
 local targetingTab = "Target"
@@ -2766,13 +2890,14 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
---New CreatureEditor
+-- New CreatureEditor
 TargetBot.Creature.edit = function(config, callback) -- callback = function(newConfig)
   config = config or {}
   local editor = UI.createWindow('TargetBotCreatureEditorWindow')
   local values = {} -- (key, function returning value of key)
   editor.name:setText(config.name or "")
   table.insert(values, {"name", function() return editor.name:getText() end})
+  
   local addScrollBar = function(id, title, min, max, defaultValue)
     local widget = UI.createWidget('TargetBotCreatureEditorScrollBar', editor.left)
     widget.scroll.onValueChange = function(scroll, value)
@@ -2788,12 +2913,14 @@ TargetBot.Creature.edit = function(config, callback) -- callback = function(newC
     widget.scroll.onValueChange(widget.scroll, widget.scroll:getValue())
     table.insert(values, {id, function() return widget.scroll:getValue() end})
   end
+  
   local addTextEdit = function(id, title, defaultValue)
     local widget = UI.createWidget('TargetBotCreatureEditorTextEdit', editor.right)
     widget.text:setText(title)
     widget.textEdit:setText(config[id] or defaultValue or "")
     table.insert(values, {id, function() return widget.textEdit:getText() end})
   end
+  
   local addCheckBox = function(id, title, defaultValue)
     local widget = UI.createWidget('TargetBotCreatureEditorCheckBox', editor.right)
     widget.onClick = function()
@@ -2807,16 +2934,19 @@ TargetBot.Creature.edit = function(config, callback) -- callback = function(newC
     end
     table.insert(values, {id, function() return widget:isOn() end})
   end
+  
   local addItem = function(id, title, defaultItem)
     local widget = UI.createWidget('TargetBotCreatureEditorItem', editor.right)
     widget.text:setText(title)
     widget.item:setItemId(config[id] or defaultItem)
     table.insert(values, {id, function() return widget.item:getItemId() end})
   end
+  
   editor.cancel.onClick = function()
     editor:destroy()
   end
   editor.onEscape = editor.cancel.onClick
+  
   editor.ok.onClick = function()
     local newConfig = {}
     for _, value in ipairs(values) do
@@ -2828,17 +2958,20 @@ TargetBot.Creature.edit = function(config, callback) -- callback = function(newC
     editor:destroy()
     callback(newConfig)
   end
+  
   addScrollBar("priority", "Priority", 0, 10, 1)
   addScrollBar("danger", "Danger", 0, 10, 1)
   addScrollBar("maxDistance", "Max Distance", 1, 6, 1)
   addScrollBar("keepDistanceRange", "Keep Distance", 1, 4, 1)
   addScrollBar("lureCount", "Lure", 0, 8, 1)
+  addScrollBar("minElitesToStop", "Min Elites to Stop", 1, 5, 1)
 
   addCheckBox("chase", "Follow Attack", true)
   addCheckBox("keepDistance", "Keep Distance", false)
   addCheckBox("lureCavebot", "CaveBot Lure", false)
   addCheckBox("avoidAttacks", "Avoid Monster Spells", false)
-  end
+  addCheckBox("stopForElites", "Stop for Elites", false)
+end
 
 --New CaveBot
 if _G then _G.warn = function() end end
@@ -2856,7 +2989,7 @@ schedule(100, function()
                 return isWalking
             end
         end
-        print("[Loader] CaveBot otimizado e estabilizado com sucesso de forma nativa!")
+        print("[Loader] CaveBot otimizado e estabilizado com sucesso.")
     else
         print("[Loader] Erro: CaveBot original não foi encontrado para ser modificado.")
     end
@@ -2921,5 +3054,97 @@ schedule(500, function()
 
       return params
   end
-  print("[Loader] Filtro de Prioridade 0 para monstros em KS injetado com sucesso!")
+  print("[Loader] Anti KS injetado com sucesso.")
 end)
+
+--Stop CaveBot: Elites
+local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
+
+TargetBot.Creature.calculatePriority = function(creature, config, path)
+  local priority = 0
+  local creatureName = string.lower(creature:getName() or "")
+  local isSpecial = false
+
+  for _, name in ipairs(specialMonsters) do
+    if string.find(creatureName, name, 1, true) then
+      isSpecial = true
+      break
+    end
+  end
+
+  if isSpecial and config.stopForElites then
+    
+    local localPlayer = g_game.getLocalPlayer()
+    local myId = localPlayer:getId()
+    
+    local specialCount = 0
+    local playerPos = localPlayer:getPosition()
+    local spectators = g_map.getSpectators(playerPos, false)
+    
+    for _, spec in ipairs(spectators) do
+      if spec:isMonster() then
+        local specName = string.lower(spec:getName() or "")
+        for _, name in ipairs(specialMonsters) do
+          if string.find(specName, name, 1, true) then
+            
+            local targetId = spec.timedTarget or (type(spec.getTargetId) == "function" and spec:getTargetId())
+            
+            if targetId and targetId > 0 then
+              if targetId ~= myId then
+                break
+              end
+            end
+            
+            specialCount = specialCount + 1
+            break
+          end
+        end
+      end
+    end
+
+    local minToStop = config.minElitesToStop or 1
+
+    if specialCount >= minToStop then
+      priority = 1000
+      
+      if CaveBot and type(CaveBot.delay) == "function" then
+        CaveBot.delay(1000)
+      elseif CaveBot and type(CaveBot.setWalkingDelay) == "function" then
+        CaveBot.setWalkingDelay(1000)
+      end
+      
+      return priority
+    end
+  end
+
+  if g_game.getAttackingCreature() == creature then
+    priority = priority + 1
+  end
+
+  if #path > config.maxDistance then
+    return priority
+  end
+
+  priority = priority + config.priority
+  
+  local path_length = #path
+  if path_length == 1 then
+    priority = priority + 3
+  elseif path_length <= 3 then
+    priority = priority + 1
+  end
+
+  if config.chase and creature:getHealthPercent() < 30 then
+    priority = priority + 5
+  elseif creature:getHealthPercent() < 20 then
+    priority = priority + 2.5
+  elseif creature:getHealthPercent() < 40 then
+    priority = priority + 1.5
+  elseif creature:getHealthPercent() < 60 then
+    priority = priority + 0.5
+  elseif creature:getHealthPercent() < 80 then
+    priority = priority + 0.2
+  end
+
+  return priority
+end
