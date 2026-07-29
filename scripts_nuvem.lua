@@ -2830,7 +2830,7 @@ TargetBot.Creature.edit = function(config, callback) -- callback = function(newC
   end
   addScrollBar("priority", "Priority", 0, 10, 1)
   addScrollBar("danger", "Danger", 0, 10, 1)
-  addScrollBar("maxDistance", "Max Distance", 1, 6, 10)
+  addScrollBar("maxDistance", "Max Distance", 1, 6, 1)
   addScrollBar("keepDistanceRange", "Keep Distance", 1, 4, 1)
   addScrollBar("lureCount", "Lure", 0, 8, 1)
 
