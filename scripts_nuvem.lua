@@ -2769,7 +2769,7 @@ macro(200, function()
                 pcall(function() g_game.setSafeFight(false) end) 
             end
             ultimoEstadoSeguro = true
-            print("[PvE] SafeFight LIGADO.")
+            print("[PvP] SafeFight LIGADO.")
         end
     else
         if ultimoEstadoSeguro ~= false then
