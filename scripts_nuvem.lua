@@ -830,7 +830,7 @@ setDefaultTab("Fight")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Haste & Buff ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-buffs = macro(100, "Haste", "SHIFT+F", function()
+buffs = macro(100, "Haste", "CTRL+4", function()
     if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) then 
         return 
     end
@@ -844,7 +844,7 @@ UI.TextEdit(storage.autobuff1 or "", function(widget, text)
     storage.autobuff1 = text
 end)
 -- Buff
-macro(100, "Buff", "SHIFT+F", function()
+macro(100, "Buff", "CTRL+4", function()
     if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) or not g_game.isAttacking() then 
         return 
     end
