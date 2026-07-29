@@ -1,19 +1,10 @@
--- ====================================================================
--- DESATIVAR APENAS AS NOTIFICAÇÕES DE SLOW MACRO (VERSÃO BLINDADA)
--- ====================================================================
 if g_logger and g_logger.warning then
     local originalLogWarning = g_logger.warning
-    
     g_logger.warning = function(text)
-        -- Converte para texto caso o argumento não seja uma string limpa
         local message = tostring(text)
-        
-        -- Se a mensagem contiver o aviso de lentidão, descarta silenciosamente
         if message:find("Slow macro") or message:find("%[BOT%]") then
             return 
         end
-        
-        -- Se for qualquer outro aviso do jogo/servidor, exibe normalmente
         return originalLogWarning(text)
     end
 end
