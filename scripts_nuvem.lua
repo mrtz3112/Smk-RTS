@@ -1476,8 +1476,10 @@ Panel
     width: 34
     height: 34
 ]])
+
 storage.foodItem1 = storage.foodItem1 or 3577
-storage.foodItem2 = 0
+storage.foodItem2 = storage.foodItem2 or 0
+
 ui.item1:setItemId(storage.foodItem1)
 ui.item2:setItemId(storage.foodItem2)
 
@@ -1493,7 +1495,6 @@ ui.title.onClick = function(widget)
     widget:setOn(config.enabled)
 end
 local foodCooldowns = {0, 0}
-
 macro(100, function()
     if not config.enabled or isInPz() then return end
     
