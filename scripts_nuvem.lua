@@ -1021,14 +1021,14 @@ local function aplicarPenalidadeExhaust()
             local novoCd = math.min(COOLDOWN_MAXIMO, cdAtual + 200) -- Adiciona margem rápida
             storage.smartCastData.faseCalibracao = 2
             storage.smartCastData.menorCooldownSeguro = novoCd
-            print("[Smart Cast] Exhaust Detectado! Ajustando +150ms. Iniciando Calibração Fina (-10ms)...")
+            print("[Smart Cast] Exhausthed Detectado! Ajustando +150ms. Iniciando Calibracao Fina (-10ms)...")
         
         elseif storage.smartCastData.faseCalibracao == 2 then
             local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 25) -- Margem de segurança de 40ms sobre o exaust real
             storage.smartCastData.calibrando = false
             storage.smartCastData.faseCalibracao = 1 
             storage.smartCastData.menorCooldownSeguro = valorFinal
-            print("[Smart Cast] Cooldown Perfeito Encontrado! Travado de forma estável em: " .. math.floor(valorFinal) .. "ms")
+            print("[Smart Cast] Cooldown Perfeito Encontrado! Travado de forma estavel em: " .. math.floor(valorFinal) .. "ms")
         end
     end
 end
@@ -1048,7 +1048,7 @@ combo = macro(20, "Smart Cast", function()
         storage.smartCastData.calibrando = true
         storage.smartCastData.ultimoDisparoTime = os.clock() * 1000
         storage.smartCastData.menorCooldownSeguro = 2000
-        print("[Smart Cast] Iniciando Calibração Rápida a partir de 2000ms...")
+        print("[Smart Cast] Iniciando Calibracao Rapida a partir de 2000ms...")
         storage.smartCastData.estadoAnteriorMacro = true
     end
     if not g_game.isAttacking() then return end     
