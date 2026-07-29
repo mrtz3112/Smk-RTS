@@ -1,33 +1,3 @@
---Esconder Msgs de SlowMacro
-if g_logger then
-    local functionsToFilter = {"log", "warning", "error", "info"}
-    for _, funcName in ipairs(functionsToFilter) do
-        if g_logger[funcName] then
-            local originalFunc = g_logger[funcName]
-            g_logger[funcName] = function(text, ...)
-                local message = tostring(text)
-                if message:find("Slow macro") or message:find("target.lua") or message:find("cavebot.lua") then
-                    return 
-                end
-                return originalFunc(text, ...)
-            end
-        end
-    end
-end
-if print then
-    local originalPrint = print
-    print = function(...)
-        local args = {...}
-        if args[1] then
-            local message = tostring(args[1])
-            if message:find("Slow macro") or message:find("target.lua") or message:find("cavebot.lua") then
-                return 
-            end
-        end
-        return originalPrint(...)
-    end
-end
-
 setDefaultTab("Main")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("      Smk Custom: v4.1      "):setColor('#C39BD3')
