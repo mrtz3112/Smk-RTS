@@ -955,7 +955,7 @@ combo = macro(20, "Smart Cast", function()
         storage.smartCastData.ultimoDisparoTime = agora
         if storage.smartCastData.calibrando then
             if cdSeguroAtual > COOLDOWN_MINIMO_ABSOLUTO then
-                local redutor = 5 -- Redução fina ajustada para 5ms
+                local redutor = 10 -- Redução fina ajustada para 10ms
                 if storage.smartCastData.faseCalibracao == 1 then
                     redutor = 50 -- Redução rápida ajustada para 50ms
                 end
