@@ -2891,10 +2891,10 @@ dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
 -- New CreatureEditor
-TargetBot.Creature.edit = function(config, callback) -- callback = function(newConfig)
+TargetBot.Creature.edit = function(config, callback)
   config = config or {}
   local editor = UI.createWindow('TargetBotCreatureEditorWindow')
-  local values = {} -- (key, function returning value of key)
+  local values = {}
   editor.name:setText(config.name or "")
   table.insert(values, {"name", function() return editor.name:getText() end})
   
@@ -2952,6 +2952,10 @@ TargetBot.Creature.edit = function(config, callback) -- callback = function(newC
     for _, value in ipairs(values) do
       newConfig[value[1]] = value[2]()
     end
+    
+    newConfig.danger = 1
+    newConfig.priority = 1
+    
     if newConfig.name:len() < 1 then return end
     newConfig.regex = "^" .. newConfig.name:trim():lower():gsub("%*", ".*"):gsub("%?", ".?") .. "$"
 
@@ -2959,8 +2963,6 @@ TargetBot.Creature.edit = function(config, callback) -- callback = function(newC
     callback(newConfig)
   end
   
-  addScrollBar("priority", "Priority", 0, 10, 1)
-  addScrollBar("danger", "Danger", 0, 10, 1)
   addScrollBar("maxDistance", "Max Distance", 1, 6, 1)
   addScrollBar("keepDistanceRange", "Keep Distance", 1, 4, 1)
   addScrollBar("lureCount", "Lure", 0, 8, 1)
@@ -2973,7 +2975,8 @@ TargetBot.Creature.edit = function(config, callback) -- callback = function(newC
   addCheckBox("stopForElites", "Stop for Elites", false)
 end
 
--- INJEÇÃO DO FILTRO DE KS NO CALCULATEPARAMS (PRIORIDADE ZERO PARA KS)
+
+-- Anti KS
 schedule(500, function()
   if not TargetBot or not TargetBot.Creature then
       print("[Loader] Erro: Estrutura do TargetBot nao encontrada para injetar o calculateParams.")
