@@ -986,7 +986,10 @@ lowhp = macro(100, function()
         return
     end  
     local target = g_game.getAttackingCreature()
-    if not target then return end
+    if not target or not target:isPlayer() then 
+        return 
+    end
+    
     local agora = os.clock() * 1000
     if (agora - ultimoDisparoEspecial) < cooldownFixoEspecial then
         return
@@ -1025,7 +1028,6 @@ ui.title:setOn(storage[panelName].enabled)
 ui.title.onClick = function(widget)
   storage[panelName].enabled = not storage[panelName].enabled
   widget:setOn(storage[panelName].enabled)
-  
   if storage.painelSalvo then
       storage.painelSalvo.special = storage[panelName].enabled
   end
