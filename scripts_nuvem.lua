@@ -3025,7 +3025,7 @@ if TargetBot and TargetBot.Creature and TargetBot.Creature.calculateParams then
 end
 
 -- ----------------------------------------------------------------------------
--- [3/5] REGRAS DE PRIORIDADE E STOP PARA ELITES VIVOS (DISTÂNCIA COMPENSADA)
+-- [3/5] REGRAS DE PRIORIDADE E STOP PARA ELITES VIVOS (Filtra Corpos)
 -- ----------------------------------------------------------------------------
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 if TargetBot and TargetBot.Creature then
@@ -3078,30 +3078,19 @@ if TargetBot and TargetBot.Creature then
         return priority 
       end
 
-      -- CÓDIGO CORRIGIDO PARA CRIATURAS NORMAIS: FOCO TOTAL EM LIMPAR DE PERTO PRIMEIRO
       if g_game.getAttackingCreature() == creature then
-        priority = priority + 5 -- Aumentado de +1 para +5 (Mantém o foco no que já está atacando)
+        priority = priority + 1
       end
-      
       if #path > config.maxDistance then
         return priority
       end
-      
       priority = priority + (config.priority or 1)
-      
-      -- CALIBRAGEM CIRÚRGICA DE DISTÂNCIA (Garante ataque nos monstros colados primeiro)
       local path_length = #path
       if path_length == 1 then
-        priority = priority + 50 -- Bônus massivo! Monstros colados (1 SQM) viram prioridade máxima absoluta
-      elseif path_length == 2 then
-        priority = priority + 30 -- Monstros a 2 SQMs ganham muita força de foco
-      elseif path_length == 3 then
-        priority = priority + 15 -- Monstros a 3 SQMs
-      else
-        priority = priority + 1  -- Monstros distantes perdem prioridade contra os de perto
+        priority = priority + 3
+      elseif path_length <= 3 then
+        priority = priority + 1
       end
-
-      -- Bônus de vida baixa mantido como desempate, mas sem ultrapassar o bônus de distância
       if config.chase and creature:getHealthPercent() < 30 then
         priority = priority + 5
       elseif creature:getHealthPercent() < 20 then
@@ -3113,7 +3102,6 @@ if TargetBot and TargetBot.Creature then
       elseif creature:getHealthPercent() < 80 then
         priority = priority + 0.2
       end
-      
       return priority
     end
 end
@@ -3142,32 +3130,6 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
     local lastKnownPathCount = 0
     
     CaveBot.doWalking = function()
-        -- CORREÇÃO MASTER CONTRA TRAVAMENTO DE MONTANHA/ESCADA:
-        -- Se o bot travou a andada por causa de um monstro (blockMonster ativo)
-        if storage and (storage.clearing or storage.blockMonster) then
-            local target = g_game.getAttackingCreature()
-            if target then
-                local player = g_game.getLocalPlayer()
-                if player then
-                    local pPos = player:getPosition()
-                    local tPos = target:getPosition()
-                    
-                    -- SE O MONSTRO ESTIVER EM OUTRO ANDAR (Z) OU EM CIMA DE UMA ROCHA NÃO CAMINHÁVEL:
-                    if pPos.z ~= tPos.z or (g_map.isWalkable and not g_map.isWalkable(tPos)) then
-                        -- Força o destravamento limpando as flags e cancelando o foco do TargetBot
-                        storage.blockMonster = false
-                        storage.clearing = false
-                        g_game.cancelAttack()
-                        if TargetBot and type(TargetBot.isCurrentTarget) == "function" then
-                            -- Se o seu bot tiver função de limpar alvo, reseta a mira
-                            g_game.cancelAttack()
-                        end
-                    end
-                end
-            end
-        end
-
-        -- Retoma o fluxo original do script após a checagem de segurança
         if storage and (storage.clearing or storage.blockMonster) then
             if cavebotMacro and type(cavebotMacro) == "table" then
                 cavebotMacro.delay = now + 150 
@@ -3246,42 +3208,3 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
     print("[Loader] CaveBot otimizado com sucesso.")
 end
 
-
-
--- ----------------------------------------------------------------------------
--- [5/5] INTERCEPTAÇÃO DO PATHFINDING DO TARGETBOT (Monitoramento por Loop Seguro)
--- ----------------------------------------------------------------------------
-local targetOptimizeLoop = nil
-
--- Criamos uma macro temporária de checagem para dar tempo de o arquivo target.lua carregar
-targetOptimizeLoop = macro(200, function()
-    -- No momento em que o TargetBot e as funções de ataque forem criadas na memória:
-    if TargetBot and type(TargetBot.Creature) == "table" and type(findPath) == "function" then
-        
-        local oldFindPath = findPath
-        if oldFindPath then
-            findPath = function(startPos, endPos, maxDist, params)
-                -- Filtra chamadas pesadas originadas estritamente pelo escopo do TargetBot
-                if params and params.ignoreLastCreature then
-                    local player = g_game.getLocalPlayer()
-                    if player then
-                        local pPos = player:getPosition()
-                        local distance = math.max(math.abs(pPos.x - endPos.x), math.abs(pPos.y - endPos.y))
-                        
-                        -- Se o monstro já estiver a até 4 quadrados de distância, pula o cálculo complexo e foca o alvo
-                        if distance <= 4 and pPos.z == endPos.z then
-                            return { 1 } 
-                        end
-                    end
-                end
-                return oldFindPath(startPos, endPos, maxDist, params)
-            end
-            
-            -- PRINT DE CONFIRMAÇÃO OBRIGATÓRIO
-            print("[Loader] TargetBot otimizado com sucesso.")
-            
-            -- DESLIGA O MONITOR: Otimização concluída, encerra a macro para poupar recursos
-            targetOptimizeLoop.setOff()
-        end
-    end
-end)
