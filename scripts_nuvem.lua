@@ -3231,7 +3231,7 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
             return oldRegisterAction(name, color, newCallback)
         end
     end
-    print("[Loader] CaveBot otimizado com sucesso e protegido contra monstros trancados.")
+    print("[Loader] CaveBot otimizado com sucesso.")
 end
 
 
