@@ -3130,6 +3130,32 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
     local lastKnownPathCount = 0
     
     CaveBot.doWalking = function()
+        -- CORREÇÃO MASTER CONTRA TRAVAMENTO DE MONTANHA/ESCADA:
+        -- Se o bot travou a andada por causa de um monstro (blockMonster ativo)
+        if storage and (storage.clearing or storage.blockMonster) then
+            local target = g_game.getAttackingCreature()
+            if target then
+                local player = g_game.getLocalPlayer()
+                if player then
+                    local pPos = player:getPosition()
+                    local tPos = target:getPosition()
+                    
+                    -- SE O MONSTRO ESTIVER EM OUTRO ANDAR (Z) OU EM CIMA DE UMA ROCHA NÃO CAMINHÁVEL:
+                    if pPos.z ~= tPos.z or (g_map.isWalkable and not g_map.isWalkable(tPos)) then
+                        -- Força o destravamento limpando as flags e cancelando o foco do TargetBot
+                        storage.blockMonster = false
+                        storage.clearing = false
+                        g_game.cancelAttack()
+                        if TargetBot and type(TargetBot.isCurrentTarget) == "function" then
+                            -- Se o seu bot tiver função de limpar alvo, reseta a mira
+                            g_game.cancelAttack()
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Retoma o fluxo original do script após a checagem de segurança
         if storage and (storage.clearing or storage.blockMonster) then
             if cavebotMacro and type(cavebotMacro) == "table" then
                 cavebotMacro.delay = now + 150 
@@ -3205,8 +3231,10 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
             return oldRegisterAction(name, color, newCallback)
         end
     end
-    print("[Loader] CaveBot otimizado com sucesso.")
+    print("[Loader] CaveBot otimizado com sucesso e protegido contra monstros trancados.")
 end
+
+
 
 -- ----------------------------------------------------------------------------
 -- [5/5] INTERCEPTAÇÃO DO PATHFINDING DO TARGETBOT (Monitoramento por Loop Seguro)
@@ -3245,4 +3273,3 @@ targetOptimizeLoop = macro(200, function()
         end
     end
 end)
-
