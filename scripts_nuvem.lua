@@ -978,9 +978,6 @@ lowhp = macro(100, function()
     end  
     local target = g_game.getAttackingCreature()
     if not target then return end
-    if not target:isPlayer() then 
-        return 
-    end
     local agora = os.clock() * 1000
     if (agora - ultimoDisparoEspecial) < cooldownFixoEspecial then
         return
@@ -1051,6 +1048,7 @@ macro(200, function()
     end
 end)
 UI.Separator()
+--Spell Wave
 if storage.turnComboEnabled == nil then
     storage.turnComboEnabled = false
 end
@@ -1091,7 +1089,6 @@ local function salvarCooldownCalibrado(novoCd)
     storage.smartCastData.menorCooldownSeguro = novoCd
 end
 
---Spell Wave
 local ultimoDisparoTurnWave = 0
 turnCombo = macro(50, "Spell Wave (Reta)", function()
     local target = g_game.getAttackingCreature()
@@ -3095,14 +3092,14 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   return priority
 end
 
---Otimização do CaveBot
+--Otimização do CaveBot Sem Passo Extra
 if _G then _G.warn = function() end end
 local cavebotOptimizeLoop = nil
 print("[Loader] Iniciando monitoramento para otimizacao do CaveBot...")
 -- Usamos a função nativa 'macro' com intervalo de 200ms para checagem contínua
 cavebotOptimizeLoop = macro(200, function()
-    -- Modificado: Verificamos apenas a tabela global CaveBot e sua função de caminhar
-    if CaveBot and type(CaveBot.doWalking) == "function" then
+    -- Verificamos apenas a tabela global CaveBot e sua função de caminhar
+    if CaveBot and type(CaveBot.doWalking) == "function" and type(CaveBot.getCurrentWaypoint) == "function" then
         -- Altera o pingDelay nativo se existir na base
         if CaveBot.pingDelay then
             CaveBot.pingDelay = 10
@@ -3112,17 +3109,36 @@ cavebotOptimizeLoop = macro(200, function()
         -- Evita duplicar o hook caso o script seja recarregado
         if oldDoWalking and not CaveBot.isOptimizedByLoader then
             CaveBot.doWalking = function() 
+                -- TRAVA ANTIOVERSHOOT: Verifica se já chegou no ponto exato para evitar o passo a mais
+                local localPlayer = g_game.getLocalPlayer()
+                local currentWaypoint = CaveBot.getCurrentWaypoint()
+                if localPlayer and currentWaypoint and (currentWaypoint.type == "walk" or currentWaypoint.type == "node") then
+                    local playerPos = localPlayer:getPosition()
+                    local wpPos = currentWaypoint.pos
+                    if playerPos and wpPos and playerPos.z == wpPos.z then
+                        -- Se a distância até o waypoint for zero, força o pulo e não anda mais nessa direção
+                        if playerPos.x == wpPos.x and playerPos.y == wpPos.y then
+                            if type(CaveBot.nextWaypoint) == "function" then
+                                CaveBot.nextWaypoint()
+                            elseif type(CaveBot.skipWaypoint) == "function" then
+                                CaveBot.skipWaypoint()
+                            end
+                            return false -- Bloqueia a andada extra imediatamente
+                        end
+                    end
+                end
                 -- Limpa qualquer trava residual de andada antiga
                 if CaveBot.walkingDelay then CaveBot.walkingDelay = 0 end
                 if type(CaveBot.setWalkingDelay) == "function" then CaveBot.setWalkingDelay(0) end
+                
                 -- Executa a caminhada original
                 local isWalking = oldDoWalking()
-                -- OTIMIZAÇÃO EXTRA: Se encontrar a variável do macro ou tabela do bot, força o delay menor
+                -- Ajustado de 5ms para 35ms: Tempo perfeito para sincronizar com o ping do servidor
                 if isWalking then
                     if cavebotMacro then
-                        cavebotMacro.delay = now + 5
+                        cavebotMacro.delay = now + 35
                     elseif CaveBot.macro and type(CaveBot.macro) == "table" then
-                        CaveBot.macro.delay = now + 5
+                        CaveBot.macro.delay = now + 35
                     end
                 end
                 return isWalking
@@ -3130,11 +3146,12 @@ cavebotOptimizeLoop = macro(200, function()
             -- Marca que o bot já foi otimizado para evitar loops visuais
             CaveBot.isOptimizedByLoader = true
             -- PRINT DE CONFIRMAÇÃO AUTOMÁTICA
-            print("[Loader] CaveBot detectado e otimizado com sucesso.")
+            print("[Loader] CaveBot detectado e otimizado com sucesso (Sem passo extra).")
             -- DESLIGA A MACRO: Interceptação concluída, desliga o monitoramento
             cavebotOptimizeLoop.setOff()
         end
     end
 end)
+
 
 
