@@ -2668,7 +2668,7 @@ if player:getBlessings() == 0 then
   say("!bless")
   schedule(1000, function()
     if player:getBlessings() == 0 then
-      print("[PvE] Bless automatica injetada com sucesso.")
+      print("[PvE] Auto Bless injetado com sucesso.")
     end
   end)
 end
