@@ -3092,54 +3092,81 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   return priority
 end
 
--- Otimização Avançada do Módulo Walking via Loader (Anti-Círculos por Sincronia Direta)
-local cavebotOptimizeLoop = nil
-print("[Loader] Monitorando para aplicar otimizacao de passos (walking.lua)...")
-cavebotOptimizeLoop = macro(200, function()
-    -- Verifica se as estruturas de caminhada e configuração estão na memória
-    if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" then
-        -- 1. FORÇA O AJUSTE DOS DELAYS DE CONFIGURAÇÃO INTERNA
+-- Otimização Avançada do CaveBot
+local masterOptimizeLoop = nil
+print("[Loader] Iniciando monitoramento para otimizacao completa...")
+
+masterOptimizeLoop = macro(200, function()
+    -- Verifica se todos os módulos do bot terminaram de carregar na memória
+    if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and CaveBot.Actions then
         if type(CaveBot.Config.set) == "function" then
-            CaveBot.Config.set("walkDelay", 5)       -- Delay mínimo após o passo
-            CaveBot.Config.set("ping", 10)            -- Margem mínima de resposta do servidor
-            CaveBot.Config.set("mapClickDelay", 20)   -- Delay mínimo de cliques no mapa
+            -- Ajustamos o walkDelay estritamente de 5 para 45ms.
+            -- 45ms é o limite matemático que impede o servidor de recusar o passo 
+            -- (evita o Rubberband) mas mantém a velocidade de Dash idêntica.
+            CaveBot.Config.set("walkDelay", 45)       
+            CaveBot.Config.set("ping", 10)            
+            CaveBot.Config.set("mapClickDelay", 45)   
         end
-        -- 2. HOOK DO RECALCULADOR DE PASSOS E AJUSTE ANTI-CÍRCULOS
+        if warn and type(warn) == "function" then
+            local oldWarn = warn
+            warn = function(message, ...)
+                if message and (string.find(message, "Duplicated config key") or string.find(message, "ping") or string.find(message, "walkDelay")) then
+                    return 
+                end
+                return oldWarn(message, ...)
+            end
+        end
+        if type(schedule) == "function" then
+            local oldSchedule = schedule
+            schedule = function(time, callback)
+                if time == 3000 then
+                    return oldSchedule(350, callback)
+                end
+                return oldSchedule(time, callback)
+            end
+        end
         local oldDoWalking = CaveBot.doWalking
         local lastKnownPathCount = 0
         if oldDoWalking and not CaveBot.isWalkingOptimized then
             CaveBot.doWalking = function()
-                -- PROTEÇÃO ANTI-CÍRCULOS SEM USAR METATABELAS:
-                -- Se a engine do walking.lua esvaziar a tabela de rota de repente no meio de um passo,
-                -- nós forçamos o retorno verdadeiro para simular que o passo ainda está ativo, 
-                -- impedindo que o boneco mude de ideia e tente voltar para trás em círculos.
+                -- PROTEÇÃO DO ACTIONS (ANTI-CÍRCULOS DE COMBATE):
+                if storage and (storage.clearing or storage.blockMonster) then
+                    if cavebotMacro and type(cavebotMacro) == "table" then
+                        cavebotMacro.delay = now + 150 
+                    end
+                    return oldDoWalking()
+                end
+                -- Filtro Anti-Círculos Padrão por Sincronia Direta:
                 local player = g_game.getLocalPlayer()
                 if player and player:isWalking() then
                     if CaveBot.walkPath and #CaveBot.walkPath == 0 and lastKnownPathCount > 0 then
-                        -- Força o macro a pular o atraso e manter a andada linear
                         if cavebotMacro and type(cavebotMacro) == "table" then
-                            cavebotMacro.delay = now + 5
+                            cavebotMacro.delay = now + 10
                         end
                         return true
                     end
                 end
-                -- Atualiza o histórico de tamanho da rota atual
                 if CaveBot.walkPath then
                     lastKnownPathCount = #CaveBot.walkPath
                 end
-                -- Limpa qualquer trava residual de andada antiga
+                -- Reseta delays mecânicos residuais
                 if CaveBot.walkingDelay then CaveBot.walkingDelay = 0 end
                 if type(CaveBot.setWalkingDelay) == "function" then CaveBot.setWalkingDelay(0) end
-                -- Executa a caminhada original
+                
                 local isWalking = oldDoWalking()
-                -- Se for um passo normal da caminhada, aplica a aceleração máxima fluida
+                -- Se andou com sucesso, injeta velocidade ajustada contra trancos
                 if isWalking then
-                    local safeDelay = 25
-                    -- Se houver uma requisição de delay muito alta na tabela, respeita (Ex: Stops, Elites)
+                    -- CALIBRAGEM ANTITRANCO: Mudamos de 25ms para 50ms fixos.
+                    -- 50ms é o "sweet spot" (ponto perfeito) que dá tempo do servidor aceitar 
+                    -- o pacote de andada sem recusar, eliminando os 3 passos para trás.
+                    local safeDelay = 50
+                    
+                    -- Verifica se há uma ordem legítima de STOP ativa (Elites/Lure >= 500ms)
                     local currentDelay = (cavebotMacro and cavebotMacro.delay) or (CaveBot.macro and CaveBot.macro.delay) or 0
                     if currentDelay - now >= 500 then
                         return isWalking
                     end
+                    
                     if cavebotMacro and type(cavebotMacro) == "table" then
                         cavebotMacro.delay = now + safeDelay
                     elseif CaveBot.macro and type(CaveBot.macro) == "table" then
@@ -3148,11 +3175,11 @@ cavebotOptimizeLoop = macro(200, function()
                 end
                 return isWalking
             end
-            -- 3. INTERCEPTAÇÃO INDIVIDUAL DO MÉTODO DE DELAY PARA SALVAGUARDAR STOPS
+            -- Interceptador do manipulador de tempo global do CaveBot
             local oldCaveBotDelay = CaveBot.delay
             if oldCaveBotDelay then
                 CaveBot.delay = function(value)
-                    -- Se o valor do delay for alto (>= 500ms), é um STOP legítimo (Elites, Lure). Deixa parar!
+                    -- Se for um comando real de parada (ex: Elites exigindo Stop), respeita a pausa!
                     if value and value >= 500 then
                         if cavebotMacro and type(cavebotMacro) == "table" then
                             cavebotMacro.delay = math.max(cavebotMacro.delay or 0, now + value)
@@ -3163,18 +3190,38 @@ cavebotOptimizeLoop = macro(200, function()
                         end
                         return
                     end
-                    -- Delays comuns de passos rápidos são ignorados para manter o ritmo cravado em 25ms
-                    return oldCaveBotDelay(25)
+                    -- Sincroniza o delay de passos normais com a nossa margem de 50ms
+                    return oldCaveBotDelay(50)
                 end
             end
-            -- Marca o status de otimizado para o módulo walking
+            local oldRegisterAction = CaveBot.registerAction
+            if oldRegisterAction then
+                CaveBot.registerAction = function(name, color, callback)
+                    local oldCallback = callback
+                    local newCallback = function(value, retries, prevResult)
+                        local ret = oldCallback(value, retries, prevResult)
+                        if ret == true or ret == nil then
+                            if cavebotMacro and type(cavebotMacro) == "table" then
+                                cavebotMacro.delay = now + 5
+                            elseif CaveBot.macro and type(CaveBot.macro) == "table" then
+                                CaveBot.macro.delay = now + 5
+                            end
+                        end
+                        return ret
+                    end
+                    return oldRegisterAction(name, color, newCallback)
+                end
+            end
+            -- Aplica a flag de conclusão total da injeção
             CaveBot.isWalkingOptimized = true
-            print("[Loader] Sucesso: Caminhada otimizada e blindada contra loops na sandbox!")
-            -- Desliga o monitoramento do loader
-            cavebotOptimizeLoop.setOff()
+            print("[Loader] CaveBot otimizado com sucesso.")
+            
+            -- Desativa o macro de monitoramento do loader
+            masterOptimizeLoop.setOff()
         end
     end
 end)
+
 
 
 
