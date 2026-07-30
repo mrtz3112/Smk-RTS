@@ -393,59 +393,49 @@ macro(100, function()
     end
 end)
 UI.Separator()
---Deposit Gold & Stack Items
-macro(1000, "DepositGold & StackItems", function()
+--Deposit Gold & Stack Items (Versão Alinhada Sem Lag)
+macro(2000, "DepositGold & StackItems", function() -- Aumentado para 2000ms para poupar CPU
   if not g_game.isOnline() then return end
   local coinIds = {3031, 3035, 3043, 10137} 
-  local minAmount = 1
   local shouldDeposit = false
   
-  for _, id in ipairs(coinIds) do
-    local item = findItem(id)
-    if item and item:getCount() >= minAmount then
-      shouldDeposit = true
-      break
-    end
+  for i=1, #coinIds do
+    local item = findItem(coinIds[i])
+    if item and item:getCount() >= 1 then shouldDeposit = true break end
   end
-  if shouldDeposit then
-    say("!deposit all")
-    delay(500)
-    return
-  end
+  if shouldDeposit then say("!deposit all") delay(500) return end
+  
   local containers = g_game.getContainers()
   local itensMapeados = {}
   for _, container in pairs(containers) do
-    for slotIndex, item in ipairs(container:getItems()) do
-      if item:isStackable() and item:getCount() < 10000 then
-        local itemId = item:getId()
-        local count = item:getCount()
-        local posicaoAtual = container:getSlotPosition(slotIndex - 1)
-
-        if not itensMapeados[itemId] or count > itensMapeados[itemId].count then
-          itensMapeados[itemId] = {
-            posicao = posicaoAtual,
-            count = count
-          }
+    local items = container:getItems()
+    for index = 1, #items do
+        local item = items[index]
+        if item and item:isStackable() and item:getCount() < 100 then
+          local itemId = item:getId()
+          local count = item:getCount()
+          local posicaoAtual = container:getSlotPosition(index - 1)
+          if posicaoAtual and (not itensMapeados[itemId] or count > itensMapeados[itemId].count) then
+            itensMapeados[itemId] = {posicao = posicaoAtual, count = count}
+          end
         end
-      end
     end
   end
   for _, container in pairs(containers) do
-    for slotIndex, item in ipairs(container:getItems()) do
-      if item:isStackable() and item:getCount() < 10000 then
-        local itemId = item:getId()
-        local destino = itensMapeados[itemId]
-
-        if destino then
-          local posicaoAtual = container:getSlotPosition(slotIndex - 1)
-
-          if posicaoAtual.x ~= destino.posicao.x or posicaoAtual.y ~= destino.posicao.y or posicaoAtual.slot ~= destino.posicao.slot then
-            g_game.move(item, destino.posicao, item:getCount())
-            delay(150)
-            return "retry"
+    local items = container:getItems()
+    for index = 1, #items do
+        local item = items[index]
+        if item and item:isStackable() and item:getCount() < 100 then
+          local destino = itensMapeados[item:getId()]
+          if destino then
+            local posicaoAtual = container:getSlotPosition(index - 1)
+            if posicaoAtual and (posicaoAtual.x ~= destino.posicao.x or posicaoAtual.y ~= destino.posicao.y or posicaoAtual.slot ~= destino.posicao.slot) then
+              g_game.move(item, destino.posicao, item:getCount())
+              delay(300)
+              return "retry"
+            end
           end
         end
-      end
     end
   end
 end)
@@ -795,19 +785,18 @@ setDefaultTab("Fight")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Haste & Buff ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-buffs = macro(100, "Haste", "CTRL+4", function()
-    if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) then 
-        return 
-    end
+--Haste
+buffs = macro(100, "Haste", function()
+    if isInPz() then return end
     if not hasHaste() then
         saySpell(storage.autobuff1)
-        delay(40000)
+        delay(5000)
     end
 end) 
 UI.TextEdit(storage.autobuff1 or "", function(widget, text)    
     storage.autobuff1 = text
 end)
--- Buff
+--Buffs
 local function hasStrengthened()
     local rootWidget = g_ui.getRootWidget()
     if rootWidget then
@@ -818,14 +807,15 @@ local function hasStrengthened()
     end
     return false
 end
-macro(100, "Buff", "CTRL+4", function()
-if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) or not g_game.isAttacking() then return end
+macro(100, "Buff", function()
+    if isInPz() or not g_game.isAttacking() then return end
     if not hasStrengthened() then
         say(storage.buffskill01)
-	    say(storage.buffskill02)
-		delay(10000)
-	end
+        say(storage.buffskill02)
+        delay(2000)
+    end
 end)
+UI.Separator()
 UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
     storage.buffskill01 = text
 end)
@@ -838,61 +828,42 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 local distance = 2
 local amountOfMonsters = 2
 local COOLDOWN_MINIMO_ABSOLUTO = 50
-local COOLDOWN_MAXIMO = 2000          
+
 if not storage.smartCastData then storage.smartCastData = {} end
-if not storage.smartCastData.menorCooldownSeguro then storage.smartCastData.menorCooldownSeguro = 2000 end 
-if storage.smartCastData.faseCalibracao == nil then storage.smartCastData.faseCalibracao = 1 end
-if storage.smartCastData.estadoAnteriorMacro == nil then storage.smartCastData.estadoAnteriorMacro = false end
 if storage.smartCastData.ultimoDisparoTime == nil then storage.smartCastData.ultimoDisparoTime = 0 end
 if storage.comboEnabled == nil then storage.comboEnabled = false end
 
-local function aplicarPenalidadeExhaust()
-    if storage.smartCastData.calibrando then
-        local cdAtual = storage.smartCastData.menorCooldownSeguro
-        
-        if storage.smartCastData.faseCalibracao == 1 then
-            local novoCd = math.min(COOLDOWN_MAXIMO, cdAtual + 200) -- Adiciona margem rápida
-            storage.smartCastData.faseCalibracao = 2
-            storage.smartCastData.menorCooldownSeguro = novoCd
-            print("[Smart Cast] Exhaust Detectado! Iniciando Calibracao Fina (-10ms).")
-        
-        elseif storage.smartCastData.faseCalibracao == 2 then
-            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 30) -- Margem de segurança de 25ms sobre o exaust real
-            storage.smartCastData.calibrando = false
-            storage.smartCastData.faseCalibracao = 1 
-            storage.smartCastData.menorCooldownSeguro = valorFinal
-            print("[Smart Cast] Cooldown Perfeito Encontrado! Novo CD: " .. math.floor(valorFinal) .. "ms")
-        end
-    end
-end
-onTextMessage(function(mode, text)
-    local msg = text:lower()
-    if string.find(msg, "exha") or string.find(msg, "exhaust") then
-        aplicarPenalidadeExhaust()
-        return true 
-    end
-end)
+-- Como a leitura do painel 'Fight' é 100% exata, desativamos o interceptador antigo de exhaust
+onTextMessage(function() return false end)
+
 local indexArea = 1
 local indexSingle = 1
+
+-- Macro rodando com alta precisão de 20ms
 combo = macro(20, "Smart Cast", function()
     if not g_game.isOnline() then return end
-    if not storage.smartCastData.estadoAnteriorMacro then
-        storage.smartCastData.faseCalibracao = 1
-        storage.smartCastData.calibrando = true
-        storage.smartCastData.ultimoDisparoTime = os.clock() * 1000
-        storage.smartCastData.menorCooldownSeguro = 2000
-        print("[Smart Cast] Iniciando Calibracao rapida a partir de 2000ms.")
-        storage.smartCastData.estadoAnteriorMacro = true
-    end
     if not g_game.isAttacking() then return end     
+    
     local agora = os.clock() * 1000 
-    local cdSeguroAtual = storage.smartCastData.menorCooldownSeguro
+    
+    -- VINCULO REAL: Puxa o milissegundo exato calculado pela fórmula oficial do painel Fight
+    -- Se por acaso o painel ainda não tiver lido, assume o padrão seguro baseado no set atual
+    local cdSeguroAtual = storage.smartCastData.menorCooldownSeguro or 950
+    
+    -- Garante que o bot respeite o limite mínimo físico do jogo
+    if cdSeguroAtual < COOLDOWN_MINIMO_ABSOLUTO then 
+        cdSeguroAtual = COOLDOWN_MINIMO_ABSOLUTO 
+    end
+
+    -- Trava de Tempo: Bloqueia o disparo se o cooldown do seu Casting Speed atual não passou
     if (agora - storage.smartCastData.ultimoDisparoTime) < cdSeguroAtual then
         return
     end
+    
     local target = g_game.getAttackingCreature()
     local atacandoPlayer = target and target:isPlayer()
     local specAmount = 0  
+    
     if not atacandoPlayer then
         for i, mob in ipairs(getSpectators()) do
             if (getDistanceBetween(pos(), mob:getPosition()) <= distance and mob:isMonster()) then
@@ -900,6 +871,7 @@ combo = macro(20, "Smart Cast", function()
             end
         end
     end
+    
     local enviouMagia = false
     if (specAmount >= amountOfMonsters and not atacandoPlayer) then
         local areaSpells = {}
@@ -923,26 +895,13 @@ combo = macro(20, "Smart Cast", function()
             enviouMagia = true
         end
     end
-    -- Pós-disparo: Ajusta calibração se necessário
+    
+    -- Registra o momento exato do disparo para a trava de tempo do próximo ciclo
     if enviouMagia then
         storage.smartCastData.ultimoDisparoTime = agora
-        if storage.smartCastData.calibrando then
-            if cdSeguroAtual > COOLDOWN_MINIMO_ABSOLUTO then
-                local redutor = 10 -- Redução fina ajustada para 5ms
-                if storage.smartCastData.faseCalibracao == 1 then
-                    redutor = 50 -- Redução rápida ajustada para 50ms
-                end
-                local novoCd = math.max(COOLDOWN_MINIMO_ABSOLUTO, cdSeguroAtual - redutor)
-                storage.smartCastData.menorCooldownSeguro = novoCd
-            end
-        end
     end
 end)
-macro(250, function()
-    if combo and not combo.isOn() then
-        storage.smartCastData.estadoAnteriorMacro = false
-    end
-end)
+
 if storage.comboEnabled then combo.setOn() else combo.setOff() end
 UI.Separator()
 UI.Label("Area Spells (2+ Mobs)"):setColor('#FFEA99')
@@ -955,7 +914,6 @@ UI.Separator()
 UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text end)
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text end)
-
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Others ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
@@ -1048,62 +1006,42 @@ macro(200, function()
     end
 end)
 UI.Separator()
---Spell Wave
+--Spell Wave (Sincronizado com Painel Fight & Cast Speed)
 if storage.turnComboEnabled == nil then
     storage.turnComboEnabled = false
 end
-local COOLDOWN_MINIMO_ABSOLUTO = 100
--- 1. ESTRUTURAÇÃO DO BANCO DE DADOS (Garante que as tabelas existam em sincronia)
+
+local COOLDOWN_MINIMO_ABSOLUTO = 50
+
+-- Garante a existência da tabela global unificada de dados
 if not storage.smartCastData then storage.smartCastData = {} end
-if not storage.smartCastData.cdPvE then storage.smartCastData.cdPvE = 2000 end 
-if not storage.smartCastData.cdPvP then storage.smartCastData.cdPvP = 2000 end 
--- Função de suporte para ler qual botão de combate nativo está marcado no client
-local function obterModoAtaqueNativo()
-    local root = g_ui.getRootWidget()
-    if root then
-        local boxOffensive = root:recursiveGetChildById('fightOffensiveBox')
-        if boxOffensive and boxOffensive:isChecked() then
-            return "offensive"
-        end
-    end
-    return "balanced"
-end
--- Função para ler o valor de CD do modo que está ativo AGORA
-local function obterCooldownAtivo()
-    local modo = obterModoAtaqueNativo()
-    if modo == "offensive" then
-        return storage.smartCastData.cdPvE
-    else
-        return storage.smartCastData.cdPvP
-    end
-end
--- Função para salvar o novo valor calibrado de forma isolada no respectivo set
-local function salvarCooldownCalibrado(novoCd)
-    local modo = obterModoAtaqueNativo()
-    if modo == "offensive" then
-        storage.smartCastData.cdPvE = novoCd
-    else
-        storage.smartCastData.cdPvP = novoCd
-    end
-    -- Sincroniza o valor de leitura do painel de botões
-    storage.smartCastData.menorCooldownSeguro = novoCd
-end
 
 local ultimoDisparoTurnWave = 0
-turnCombo = macro(50, "Spell Wave (Reta)", function()
+
+turnCombo = macro(30, "Spell Wave (Reta)", function() -- Rodando a 30ms para manter precisão de clique sem floodar
     local target = g_game.getAttackingCreature()
     if not target then return end
     
     local agora = os.clock() * 1000
-    local delaySmartCast = obterCooldownAtivo()
     
+    -- VÍNCULO REAL: Puxa o MS exato calculado pela fórmula oficial assintótica do painel Fight
+    local delaySmartCast = storage.smartCastData.menorCooldownSeguro or 957
+    
+    -- Garante que respeite o limite mínimo físico configurado
+    if delaySmartCast < COOLDOWN_MINIMO_ABSOLUTO then
+        delaySmartCast = COOLDOWN_MINIMO_ABSOLUTO
+    end
+    
+    -- Trava de Tempo: Bloqueia o disparo se o cooldown baseado no seu set atual não passou
     if (agora - ultimoDisparoTurnWave) < delaySmartCast then
         return
     end
+    
     local targetPos = target:getPosition()
     local myPos = pos()
     if not targetPos or not myPos then return end
     
+    -- Mecânica de girar em direção ao Target (Vira o boneco automaticamente)
     local diffX = targetPos.x - myPos.x
     local diffY = targetPos.y - myPos.y
     
@@ -1120,16 +1058,14 @@ turnCombo = macro(50, "Spell Wave (Reta)", function()
             g_game.turn(0)
         end
     end   
+    
+    -- Pequena folga interna nativa para o pacote de giro ser processado antes da magia
     delay(30)
+    
+    -- Solta a magia configurada se houver texto válido
     if storage.turnSpell and storage.turnSpell ~= "" then
         say(storage.turnSpell)
-        ultimoDisparoTurnWave = agora
-        if storage.smartCastData and storage.smartCastData.calibrando then
-            if delaySmartCast > COOLDOWN_MINIMO_ABSOLUTO then
-                local novoCd = math.max(COOLDOWN_MINIMO_ABSOLUTO, delaySmartCast - 5)
-                salvarCooldownCalibrado(novoCd)
-            end
-        end
+        ultimoDisparoTurnWave = agora -- Registra o milissegundo do disparo atual
     end
 end)
 
@@ -1145,16 +1081,89 @@ if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
-if not storage.smartCastData then
+
+-- Limpador de cache residual seguro
+if not storage.smartCastData or (storage.smartCastData and storage.smartCastData.menorCooldownSeguro and (storage.smartCastData.menorCooldownSeguro > 1100 or storage.smartCastData.menorCooldownSeguro < 200)) then
     storage.smartCastData = {}
+    storage.smartCastData.menorCooldownSeguro = 957 
+    storage.smartCastData.ultimoDisparoTime = 0     
+    storage.smartCastData.faseCalibracao = 1
+    storage.smartCastData.estadoAnteriorMacro = false
 end
-if storage.painelSalvo == nil then storage.painelSalvo = {} end
-if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
-if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
-if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
-if not storage.smartCastData then
-    storage.smartCastData = {}
+
+if storage.smartCastData.ultimoDisparoTime == nil then
+    storage.smartCastData.ultimoDisparoTime = 0
 end
+
+-- Variáveis de controle para o Cache Anti-Lag
+local ultimoCalculoMS = 957
+local ultimoTempoChecagemInterface = 0
+
+-- FUNÇÃO MESTRE CORRIGIDA: Varre apenas painéis específicos para eliminar o lag
+local function puxarCastTimeIndividual()
+    local agoraTempo = os.clock() * 1000
+    
+    -- Mantém a CPU leve: Só refaz a varredura a cada 2 segundos
+    if agoraTempo - ultimoTempoChecagemInterface < 2000 then
+        return ultimoCalculoMS
+    end
+    ultimoTempoChecagemInterface = agoraTempo
+
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return ultimoCalculoMS end
+
+    local porcentagemLida = nil
+
+    -- 1. Leitura rápida via módulo de Skills nativo
+    if modules.game_skills and modules.game_skills.skillsWindow then
+        local castingSpeedWidget = modules.game_skills.skillsWindow:recursiveGetChildById('castingSpeed') or modules.game_skills.skillsWindow:recursiveGetChildById('casting_speed')
+        if castingSpeedWidget and castingSpeedWidget.getText then
+            local text = castingSpeedWidget:getText()
+            local match = text:match("(%d+)%%")
+            if match then porcentagemLida = tonumber(match) end
+        end
+    end
+
+    -- 2. CORREÇÃO CRÍTICA DO LAG: Varredura Restrita por Painel Lateral
+    -- Em vez de vasculhar a interface inteira com rootWidget:recursiveGetChildren(),
+    -- nós limitamos a varredura apenas para as barras onde as miniwindows ficam acopladas.
+    if not porcentagemLida then
+        -- Foca diretamente nos painéis laterais padrões do OtClient
+        local sidePanel = rootWidget:getChildById('rightPanel') or rootWidget:getChildById('leftPanel') or rootWidget
+        
+        -- Executa a busca em uma lista extremamente curta de componentes (LAG ZERO)
+        local allChildren = sidePanel:recursiveGetChildren()
+        for i = 1, #allChildren do
+            local child = allChildren[i]
+            if child and child.getText then
+                local text = child:getText()
+                if string.find(text, "Casting Speed") then
+                    local match = text:match("(%d+)%%")
+                    if not match and allChildren[i+1] and allChildren[i+1].getText then
+                        match = allChildren[i+1]:getText():match("(%d+)%%")
+                    end
+                    if match then
+                        porcentagemLida = tonumber(match)
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    -- COOLDOWN REAL: Aplica a fórmula matemática assintótica + 10ms de segurança
+    if porcentagemLida and porcentagemLida > 0 then
+        local baseCooldown = 2000 
+        local contaServidor = baseCooldown / (1 + (porcentagemLida / 100))
+        
+        ultimoCalculoMS = math.floor(contaServidor) + 10
+        if ultimoCalculoMS < 50 then ultimoCalculoMS = 50 end
+        storage.smartCastData.menorCooldownSeguro = ultimoCalculoMS
+    end
+
+    return ultimoCalculoMS
+end
+
 local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
@@ -1206,8 +1215,11 @@ MainWindow
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 6
 ]], modules.game_interface.getMapPanel())
+
+
 painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
 painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
+
 local function isMacroActive(macroRef, storageKey)
     if macroRef and type(macroRef) == "table" and macroRef.isOn and type(macroRef.isOn) == "function" then
         local success, result = pcall(function() return macroRef.isOn() end)
@@ -1215,6 +1227,7 @@ local function isMacroActive(macroRef, storageKey)
     end
     return storage.painelSalvo and storage.painelSalvo[storageKey] or false
 end
+
 local function alternarEstadoMacro(macroRef, storageKey)
     if not storage.painelSalvo then storage.painelSalvo = {} end
     local novoEstado = not storage.painelSalvo[storageKey]
@@ -1225,6 +1238,7 @@ local function alternarEstadoMacro(macroRef, storageKey)
         pcall(macroRef)
     end
 end
+
 if painelIconesUI then
     local container = painelIconesUI:getChildById("containerIcones")
     if container then
@@ -1232,92 +1246,44 @@ if painelIconesUI then
         local btnSpells = container:getChildById("botaoSpells")
         local btnWave = container:getChildById("botaoWave")
         local lblCdAtual = container:getChildById("labelCdAtual")
+        
         if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
         if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
         if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
+        
         local jaSincronizou = false
         local hooksConfigurados = false
-        local ultimoEstadoBot = false
-        if TargetBot and TargetBot.isEnabled then ultimoEstadoBot = TargetBot.isEnabled() end     
+        
         macro(100, function()
             if not g_game.isOnline() then return end
+            
             if not jaSincronizou then
                 if lowhp and type(lowhp) == "table" and lowhp.setOn then pcall(function() lowhp.setOn(storage.painelSalvo.special) end) end
                 if combo and type(combo) == "table" and combo.setOn then pcall(function() combo.setOn(storage.painelSalvo.spells) end) end
                 if turnCombo and type(turnCombo) == "table" and turnCombo.setOn then pcall(function() turnCombo.setOn(storage.painelSalvo.wave) end) end
                 jaSincronizou = true
             end
+            
             if not hooksConfigurados then
                 hooksConfigurados = true
             end       
+            
             if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp, "special") and "green" or "red") end
             if btnSpells then btnSpells:setColor(isMacroActive(combo, "spells") and "green" or "red") end
             if btnWave then btnWave:setColor(isMacroActive(turnCombo, "wave") and "green" or "red") end
+            
+            -- SINCRO VISUAL DINÂMICA: Executa a varredura e exibe o valor em segundos na caixa Fight
             if lblCdAtual then
-                local cdSalvoMilissegundos = storage.smartCastData and storage.smartCastData.menorCooldownSeguro or 0
-                local cdEmSegundos = cdSalvoMilissegundos / 1000
-                local sufixo = (storage.smartCastData and storage.smartCastData.calibrando) and "s [C]" or "s"
-                lblCdAtual:setText("Cast: " .. string.format("%.2f", cdEmSegundos) .. sufixo)
+                local cdEmMilissegundos = puxarCastTimeIndividual()
+                local cdEmSegundos = cdEmMilissegundos / 1000
+                
+                -- Atualiza dinamicamente o texto da caixa para bater com a foto (Ex: Cast: 1.09s)
+                lblCdAtual:setText("Cast: " .. string.format("%.2f", cdEmSegundos) .. "s")
             end
         end)
     end
 end
-painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
-painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
-local function isMacroActive(macroRef, storageKey)
-    if macroRef and type(macroRef) == "table" and macroRef.isOn and type(macroRef.isOn) == "function" then
-        local success, result = pcall(function() return macroRef.isOn() end)
-        if success then return result end
-    end
-    return storage.painelSalvo and storage.painelSalvo[storageKey] or false
-end
-local function alternarEstadoMacro(macroRef, storageKey)
-    if not storage.painelSalvo then storage.painelSalvo = {} end
-    local novoEstado = not storage.painelSalvo[storageKey]
-    storage.painelSalvo[storageKey] = novoEstado
-    if macroRef and type(macroRef) == "table" and macroRef.setOn then
-        pcall(function() macroRef.setOn(novoEstado) end)
-    elseif macroRef and type(macroRef) == "function" then
-        pcall(macroRef)
-    end
-end
-if painelIconesUI then
-    local container = painelIconesUI:getChildById("containerIcones")
-    if container then
-        local btnSpecial = container:getChildById("botaoSpecial")
-        local btnSpells = container:getChildById("botaoSpells")
-        local btnWave = container:getChildById("botaoWave")
-        local lblCdAtual = container:getChildById("labelCdAtual")
-        if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
-        if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
-        if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
-        local jaSincronizou = false
-        local hooksConfigurados = false
-        local ultimoEstadoBot = false
-        if TargetBot and TargetBot.isEnabled then ultimoEstadoBot = TargetBot.isEnabled() end     
-        macro(100, function()
-            if not g_game.isOnline() then return end
-            if not jaSincronizou then
-                if lowhp and type(lowhp) == "table" and lowhp.setOn then pcall(function() lowhp.setOn(storage.painelSalvo.special) end) end
-                if combo and type(combo) == "table" and combo.setOn then pcall(function() combo.setOn(storage.painelSalvo.spells) end) end
-                if turnCombo and type(turnCombo) == "table" and turnCombo.setOn then pcall(function() turnCombo.setOn(storage.painelSalvo.wave) end) end
-                jaSincronizou = true
-            end
-            if not hooksConfigurados then
-                hooksConfigurados = true
-            end       
-            if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp, "special") and "green" or "red") end
-            if btnSpells then btnSpells:setColor(isMacroActive(combo, "spells") and "green" or "red") end
-            if btnWave then btnWave:setColor(isMacroActive(turnCombo, "wave") and "green" or "red") end
-            if lblCdAtual then
-                local cdSalvoMilissegundos = storage.smartCastData and storage.smartCastData.menorCooldownSeguro or 0
-                local cdEmSegundos = cdSalvoMilissegundos / 1000
-                local sufixo = (storage.smartCastData and storage.smartCastData.calibrando) and "s [C]" or "s"
-                lblCdAtual:setText("Cast: " .. string.format("%.2f", cdEmSegundos) .. sufixo)
-            end
-        end)
-    end
-end
+
 setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Survival ~"):setColor('#EBDEF0')
@@ -1412,9 +1378,9 @@ Panel
     
 ]], parent)
 ui:setId(panelName)
+
 if not storage[panelName] then
   storage[panelName] = {
-      title = enabled,
       enabled = false,
       setting = true,
       hp = 70
@@ -1439,21 +1405,19 @@ ui.HP:setValue(storage[panelName].hp)
 UI.TextEdit(storage.autobarrier or "reiatsu barrier", function(widget, text)    
   storage.autobarrier = text
 end)
+
 local ultimoUsoBarreira = 0
-local DELAY_SEGUNDOS = 46
+local DELAY_MILISSEGUNDOS = 46000
+
 macro(100, function()
   if not storage[panelName].enabled then return end
-  if storage.smartCastData and storage.smartCastData.calibrando then 
-    return 
-  end
   if storage[panelName].setting then
     if hppercent() <= storage[panelName].hp then
-        local tempoAgora = os.time()
-        if (tempoAgora - ultimoUsoBarreira) >= DELAY_SEGUNDOS then
+        local tempoAgora = os.clock() * 1000
+        if (tempoAgora - ultimoUsoBarreira) >= DELAY_MILISSEGUNDOS then
             say(storage.autobarrier)
             ultimoUsoBarreira = tempoAgora
-            
-            print("[Barrier] Magia conjurada! Aguardando " .. DELAY_SEGUNDOS .. " segundos de recarga.")
+            print("[Barrier] Magia conjurada! Aguardando 46 segundos de recarga.")
         end
     end
   end
@@ -2344,6 +2308,36 @@ onTalk(function(...)
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 
+--CaveBotConfigs
+local cavebotTab = "Cave"
+local targetingTab = "Target"
+setDefaultTab(cavebotTab)
+CaveBot = {}
+CaveBot.Extensions = {}
+importStyle("/cavebot/cavebot.otui")
+importStyle("/cavebot/config.otui")
+importStyle("/cavebot/editor.otui")
+importStyle("/cavebot/supply.otui")
+dofile("/cavebot/actions.lua")
+dofile("/cavebot/config.lua")
+dofile("/cavebot/editor.lua")
+dofile("/cavebot/example_functions.lua")
+dofile("/cavebot/recorder.lua")
+dofile("/cavebot/walking.lua")
+dofile("/cavebot/depositer.lua")
+dofile("/cavebot/supply.lua")
+dofile("/cavebot/cavebot.lua")
+setDefaultTab(targetingTab)
+TargetBot = {} -- global namespace
+importStyle("/targetbot/target.otui")
+importStyle("/targetbot/creature_editor.otui")
+dofile("/targetbot/creature.lua")
+dofile("/targetbot/creature_attack.lua")
+dofile("/targetbot/creature_editor.lua")
+dofile("/targetbot/creature_priority.lua")
+dofile("/targetbot/walking.lua")
+dofile("/targetbot/target.lua")
+
 local pvehud = setupUI([[
 Panel
   id: pveMainPanel
@@ -2827,37 +2821,24 @@ macro(100, function()
     updateTargetWidget(name, percent, hasTarget)
 end)
 
---CaveBotConfigs
-local cavebotTab = "Cave"
-local targetingTab = "Target"
-setDefaultTab(cavebotTab)
-CaveBot = {}
-CaveBot.Extensions = {}
-importStyle("/cavebot/cavebot.otui")
-importStyle("/cavebot/config.otui")
-importStyle("/cavebot/editor.otui")
-importStyle("/cavebot/supply.otui")
-dofile("/cavebot/actions.lua")
-dofile("/cavebot/config.lua")
-dofile("/cavebot/editor.lua")
-dofile("/cavebot/example_functions.lua")
-dofile("/cavebot/recorder.lua")
-dofile("/cavebot/walking.lua")
-dofile("/cavebot/depositer.lua")
-dofile("/cavebot/supply.lua")
-dofile("/cavebot/cavebot.lua")
-setDefaultTab(targetingTab)
-TargetBot = {} -- global namespace
-importStyle("/targetbot/target.otui")
-importStyle("/targetbot/creature_editor.otui")
-dofile("/targetbot/creature.lua")
-dofile("/targetbot/creature_attack.lua")
-dofile("/targetbot/creature_editor.lua")
-dofile("/targetbot/creature_priority.lua")
-dofile("/targetbot/walking.lua")
-dofile("/targetbot/target.lua")
+-- ============================================================================
+-- LINHA 2869: COMPILADO MASTER DE PERFORMANCE (PARTE 1)
+-- PROPRIEDADES: Editor Customizado, Anti-KS, Stop Elites Vivos & Silenciador
+-- ============================================================================
 
--- New CreatureEditor
+if warn and type(warn) == "function" then
+    local oldWarn = warn
+    warn = function(message, ...)
+        if message and (string.find(message, "Duplicated config key") or string.find(message, "ping") or string.find(message, "walkDelay")) then
+            return 
+        end
+        return oldWarn(message, ...)
+    end
+end
+
+-- ----------------------------------------------------------------------------
+-- [1/5] CUSTOMIZAÇÃO DO EDITOR DE CRIATURAS (TargetBot.Creature.edit)
+-- ----------------------------------------------------------------------------
 TargetBot.Creature.edit = function(config, callback)
   config = config or {}
   local editor = UI.createWindow('TargetBotCreatureEditorWindow')
@@ -2942,289 +2923,282 @@ TargetBot.Creature.edit = function(config, callback)
   addCheckBox("stopForElites", "Stop for Elites", false)
 end
 
+-- ----------------------------------------------------------------------------
+-- [2/5] SISTEMA DE ANTI-KS SEGURO COM EXCEÇÕES (Trainers e Boss Guild)
+-- ----------------------------------------------------------------------------
+local isTrainerMonster = function(creatureName)
+    if not creatureName then return false end
+    local name = creatureName:lower()
+    return name:find("house trainer", 1, true) or name == "trainer"
+end
 
--- Anti KS com Exceção para Boss Guild
-schedule(100, function()
-  if not TargetBot or not TargetBot.Creature then
-      print("[Loader] Erro: Estrutura do TargetBot nao encontrada para injetar o calculateParams.")
-      return
-  end
-  local function isTrainerMonster(creatureName)
-      if not creatureName then return false end
-      local name = creatureName:lower()
-      return name:find("house trainer", 1, true) or name == "trainer"
-  end
-  local function isBossGuild(creatureName)
-      if not creatureName then return false end
-      return creatureName:lower():find("boss guild", 1, true) ~= nil
-  end
-  local function isMonsterGluedToOtherPlayer(monster)
-      if isTrainerMonster(monster:getName()) or isBossGuild(monster:getName()) then return false end
-      local localPlayer = g_game.getLocalPlayer()
-      if not localPlayer then return false end
-      local myId = localPlayer:getId()
-      local monsterPos = monster:getPosition()
-      if not monsterPos then return false end
-      local spectators = g_map.getSpectators(monsterPos, false)
-      for _, spec in ipairs(spectators) do
-          if spec:isPlayer() and spec:getId() ~= myId then
-              local pPos = spec:getPosition()
-              if pPos then
-                  if math.abs(monsterPos.x - pPos.x) <= 1 and math.abs(monsterPos.y - pPos.y) <= 1 then
-                      return true
-                  end
-              end
-          end
-      end
-      return false
-  end
-  local originalCalculateParams = TargetBot.Creature.calculateParams
-  TargetBot.Creature.calculateParams = function(creature, path)
-      local params = originalCalculateParams(creature, path)
-      if params and type(params) == "table" and creature:isMonster() then
-          local localPlayer = g_game.getLocalPlayer()
-          if localPlayer then
-              local myId = localPlayer:getId()
-              local mTargetId = creature.getTargetId and creature:getTargetId() or 0
-              local cName = creature:getName()
-              if not isTrainerMonster(cName) and not isBossGuild(cName) then
-                  if (mTargetId > 0 and mTargetId ~= myId) or isMonsterGluedToOtherPlayer(creature) then
-                      params.priority = 0
-                  end
-              end
-          end
-      end
-      return params
-  end
-  print("[Loader] Anti KS injetado com sucesso.")
-end)
+local isBossGuild = function(creatureName)
+    if not creatureName then return false end
+    return creatureName:lower():find("boss guild", 1, true) ~= nil
+end
 
---Stop CaveBot: Elites
-local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
-
-TargetBot.Creature.calculatePriority = function(creature, config, path)
-  local priority = 0
-  local creatureName = string.lower(creature:getName() or "")
-  local isSpecial = false
-
-  for _, name in ipairs(specialMonsters) do
-    if string.find(creatureName, name, 1, true) then
-      isSpecial = true
-      break
+local isMonsterGluedToOtherPlayer = function(monster)
+    if isTrainerMonster(monster:getName()) or isBossGuild(monster:getName()) then return false end
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer then return false end
+    local myId = localPlayer:getId()
+    local monsterPos = monster:getPosition()
+    if not monsterPos then return false end
+    local spectators = g_map.getSpectators(monsterPos, false)
+    for _, spec in ipairs(spectators) do
+        if spec:isPlayer() and spec:getId() ~= myId then
+            local pPos = spec:getPosition()
+            if pPos then
+                if math.abs(monsterPos.x - pPos.x) <= 1 and math.abs(monsterPos.y - pPos.y) <= 1 then
+                    return true
+                end
+            end
+        end
     end
-  end
+    return false
+end
 
-  if isSpecial then
-    priority = 1000
+if TargetBot and TargetBot.Creature and TargetBot.Creature.calculateParams then
+    local originalCalculateParams = TargetBot.Creature.calculateParams
+    TargetBot.Creature.calculateParams = function(creature, path)
+        local params = originalCalculateParams(creature, path)
+        if params and type(params) == "table" and creature:isMonster() then
+            local localPlayer = g_game.getLocalPlayer()
+            if localPlayer then
+                local myId = localPlayer:getId()
+                local mTargetId = creature.getTargetId and creature:getTargetId() or 0
+                local cName = creature:getName()
+                if not isTrainerMonster(cName) and not isBossGuild(cName) then
+                    if (mTargetId > 0 and mTargetId ~= myId) or isMonsterGluedToOtherPlayer(creature) then
+                        params.priority = 0
+                    end
+                end
+            end
+        end
+        return params
+    end
+    print("[Loader] Anti KS injetado com sucesso.")
+end
 
-    if config.stopForElites then
-      local localPlayer = g_game.getLocalPlayer()
-      local myId = localPlayer:getId()
-      
-      local specialCount = 0
-      local playerPos = localPlayer:getPosition()
-      local spectators = g_map.getSpectators(playerPos, false)
-      
-      for _, spec in ipairs(spectators) do
-        if spec:isMonster() then
-          local specName = string.lower(spec:getName() or "")
-          for _, name in ipairs(specialMonsters) do
-            if string.find(specName, name, 1, true) then
-              
-              local targetId = spec.timedTarget or (type(spec.getTargetId) == "function" and spec:getTargetId())
-              
-              if targetId and targetId > 0 then
-                if targetId ~= myId then
+-- ----------------------------------------------------------------------------
+-- [3/5] REGRAS DE PRIORIDADE E STOP PARA ELITES VIVOS (Filtra Corpos)
+-- ----------------------------------------------------------------------------
+local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
+if TargetBot and TargetBot.Creature then
+    TargetBot.Creature.calculatePriority = function(creature, config, path)
+      local priority = 0
+      local creatureName = string.lower(creature:getName() or "")
+      local isSpecial = false
+      for _, name in ipairs(specialMonsters) do
+        if string.find(creatureName, name, 1, true) then
+          isSpecial = true
+          break
+        end
+      end
+
+      if isSpecial then
+        priority = 1000 
+        if config.stopForElites then
+          local localPlayer = g_game.getLocalPlayer()
+          local myId = localPlayer:getId()
+          local specialCount = 0
+          local playerPos = localPlayer:getPosition()
+          local spectators = g_map.getSpectators(playerPos, false)
+          
+          for _, spec in ipairs(spectators) do
+            if spec:isMonster() and spec:getHealthPercent() > 0 and (type(spec.isVisible) ~= "function" or spec:isVisible()) then
+              local specName = string.lower(spec:getName() or "")
+              for _, name in ipairs(specialMonsters) do
+                if string.find(specName, name, 1, true) then
+                  local targetId = spec.timedTarget or (type(spec.getTargetId) == "function" and spec:getTargetId())
+                  if targetId and targetId > 0 then
+                    if targetId ~= myId then
+                      break
+                    end
+                  end
+                  specialCount = specialCount + 1
                   break
                 end
               end
-              
-              specialCount = specialCount + 1
-              break
+            end
+          end
+          local minToStop = config.minElitesToStop or 1
+          if specialCount >= minToStop then
+            if CaveBot and type(CaveBot.delay) == "function" then
+              CaveBot.delay(1000)
+            elseif CaveBot and type(CaveBot.setWalkingDelay) == "function" then
+              CaveBot.setWalkingDelay(1000)
             end
           end
         end
+        return priority 
       end
 
-      local minToStop = config.minElitesToStop or 1
-
-      if specialCount >= minToStop then
-        if CaveBot and type(CaveBot.delay) == "function" then
-          CaveBot.delay(1000)
-        elseif CaveBot and type(CaveBot.setWalkingDelay) == "function" then
-          CaveBot.setWalkingDelay(1000)
-        end
+      if g_game.getAttackingCreature() == creature then
+        priority = priority + 1
       end
+      if #path > config.maxDistance then
+        return priority
+      end
+      priority = priority + (config.priority or 1)
+      local path_length = #path
+      if path_length == 1 then
+        priority = priority + 3
+      elseif path_length <= 3 then
+        priority = priority + 1
+      end
+      if config.chase and creature:getHealthPercent() < 30 then
+        priority = priority + 5
+      elseif creature:getHealthPercent() < 20 then
+        priority = priority + 2.5
+      elseif creature:getHealthPercent() < 40 then
+        priority = priority + 1.5
+      elseif creature:getHealthPercent() < 60 then
+        priority = priority + 0.5
+      elseif creature:getHealthPercent() < 80 then
+        priority = priority + 0.2
+      end
+      return priority
     end
-
-    return priority
-  end
-
-  if g_game.getAttackingCreature() == creature then
-    priority = priority + 1
-  end
-
-  if #path > config.maxDistance then
-    return priority
-  end
-
-  priority = priority + (config.priority or 1)
-  
-  local path_length = #path
-  if path_length == 1 then
-    priority = priority + 3
-  elseif path_length <= 3 then
-    priority = priority + 1
-  end
-
-  if config.chase and creature:getHealthPercent() < 30 then
-    priority = priority + 5
-  elseif creature:getHealthPercent() < 20 then
-    priority = priority + 2.5
-  elseif creature:getHealthPercent() < 40 then
-    priority = priority + 1.5
-  elseif creature:getHealthPercent() < 60 then
-    priority = priority + 0.5
-  elseif creature:getHealthPercent() < 80 then
-    priority = priority + 0.2
-  end
-
-  return priority
 end
 
--- Otimização Avançada do CaveBot
-local masterOptimizeLoop = nil
-print("[Loader] Iniciando monitoramento para otimizacao completa...")
+-- ----------------------------------------------------------------------------
+-- [4/5] INTERCEPTAÇÃO E MOTOR DE ACELERAÇÃO DE PASSOS CAVEBOT MASTER (V3)
+-- ----------------------------------------------------------------------------
+if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and CaveBot.Actions then
+    if type(CaveBot.Config.set) == "function" then
+        CaveBot.Config.set("walkDelay", 45)       
+        CaveBot.Config.set("ping", 10)            
+        CaveBot.Config.set("mapClickDelay", 45)   
+    end
+    
+    if type(schedule) == "function" then
+        local oldSchedule = schedule
+        schedule = function(time, callback)
+            if time == 3000 then
+                return oldSchedule(350, callback)
+            end
+            return oldSchedule(time, callback)
+        end
+    end
 
-masterOptimizeLoop = macro(200, function()
-    -- Verifica se todos os módulos do bot terminaram de carregar na memória
-    if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and CaveBot.Actions then
-        if type(CaveBot.Config.set) == "function" then
-            -- Ajustamos o walkDelay estritamente de 5 para 45ms.
-            -- 45ms é o limite matemático que impede o servidor de recusar o passo 
-            -- (evita o Rubberband) mas mantém a velocidade de Dash idêntica.
-            CaveBot.Config.set("walkDelay", 45)       
-            CaveBot.Config.set("ping", 10)            
-            CaveBot.Config.set("mapClickDelay", 45)   
+    local oldDoWalking = CaveBot.doWalking
+    local lastKnownPathCount = 0
+    
+    CaveBot.doWalking = function()
+        if storage and (storage.clearing or storage.blockMonster) then
+            if cavebotMacro and type(cavebotMacro) == "table" then
+                cavebotMacro.delay = now + 150 
+            end
+            return oldDoWalking()
         end
-        if warn and type(warn) == "function" then
-            local oldWarn = warn
-            warn = function(message, ...)
-                if message and (string.find(message, "Duplicated config key") or string.find(message, "ping") or string.find(message, "walkDelay")) then
-                    return 
+        
+        local player = g_game.getLocalPlayer()
+        if player and player:isWalking() then
+            if CaveBot.walkPath and #CaveBot.walkPath == 0 and lastKnownPathCount > 0 then
+                if cavebotMacro and type(cavebotMacro) == "table" then
+                    cavebotMacro.delay = now + 10
                 end
-                return oldWarn(message, ...)
+                return true
             end
         end
-        if type(schedule) == "function" then
-            local oldSchedule = schedule
-            schedule = function(time, callback)
-                if time == 3000 then
-                    return oldSchedule(350, callback)
-                end
-                return oldSchedule(time, callback)
-            end
+        
+        if CaveBot.walkPath then
+            lastKnownPathCount = #CaveBot.walkPath
         end
-        local oldDoWalking = CaveBot.doWalking
-        local lastKnownPathCount = 0
-        if oldDoWalking and not CaveBot.isWalkingOptimized then
-            CaveBot.doWalking = function()
-                -- PROTEÇÃO DO ACTIONS (ANTI-CÍRCULOS DE COMBATE):
-                if storage and (storage.clearing or storage.blockMonster) then
-                    if cavebotMacro and type(cavebotMacro) == "table" then
-                        cavebotMacro.delay = now + 150 
-                    end
-                    return oldDoWalking()
-                end
-                -- Filtro Anti-Círculos Padrão por Sincronia Direta:
-                local player = g_game.getLocalPlayer()
-                if player and player:isWalking() then
-                    if CaveBot.walkPath and #CaveBot.walkPath == 0 and lastKnownPathCount > 0 then
-                        if cavebotMacro and type(cavebotMacro) == "table" then
-                            cavebotMacro.delay = now + 10
-                        end
-                        return true
-                    end
-                end
-                if CaveBot.walkPath then
-                    lastKnownPathCount = #CaveBot.walkPath
-                end
-                -- Reseta delays mecânicos residuais
-                if CaveBot.walkingDelay then CaveBot.walkingDelay = 0 end
-                if type(CaveBot.setWalkingDelay) == "function" then CaveBot.setWalkingDelay(0) end
-                
-                local isWalking = oldDoWalking()
-                -- Se andou com sucesso, injeta velocidade ajustada contra trancos
-                if isWalking then
-                    -- CALIBRAGEM ANTITRANCO: Mudamos de 25ms para 50ms fixos.
-                    -- 50ms é o "sweet spot" (ponto perfeito) que dá tempo do servidor aceitar 
-                    -- o pacote de andada sem recusar, eliminando os 3 passos para trás.
-                    local safeDelay = 50
-                    
-                    -- Verifica se há uma ordem legítima de STOP ativa (Elites/Lure >= 500ms)
-                    local currentDelay = (cavebotMacro and cavebotMacro.delay) or (CaveBot.macro and CaveBot.macro.delay) or 0
-                    if currentDelay - now >= 500 then
-                        return isWalking
-                    end
-                    
-                    if cavebotMacro and type(cavebotMacro) == "table" then
-                        cavebotMacro.delay = now + safeDelay
-                    elseif CaveBot.macro and type(CaveBot.macro) == "table" then
-                        CaveBot.macro.delay = now + safeDelay
-                    end
-                end
+        
+        if CaveBot.walkingDelay then CaveBot.walkingDelay = 0 end
+        if type(CaveBot.setWalkingDelay) == "function" then CaveBot.setWalkingDelay(0) end
+        
+        local isWalking = oldDoWalking()
+        if isWalking then
+            local safeDelay = 50 
+            local currentDelay = (cavebotMacro and cavebotMacro.delay) or (CaveBot.macro and CaveBot.macro.delay) or 0
+            if currentDelay - now >= 500 then
                 return isWalking
             end
-            -- Interceptador do manipulador de tempo global do CaveBot
-            local oldCaveBotDelay = CaveBot.delay
-            if oldCaveBotDelay then
-                CaveBot.delay = function(value)
-                    -- Se for um comando real de parada (ex: Elites exigindo Stop), respeita a pausa!
-                    if value and value >= 500 then
-                        if cavebotMacro and type(cavebotMacro) == "table" then
-                            cavebotMacro.delay = math.max(cavebotMacro.delay or 0, now + value)
-                        elseif CaveBot.macro and type(CaveBot.macro) == "table" then
-                            CaveBot.macro.delay = math.max(CaveBot.macro.delay or 0, now + value)
-                        else
-                            return oldCaveBotDelay(value)
-                        end
-                        return
-                    end
-                    -- Sincroniza o delay de passos normais com a nossa margem de 50ms
-                    return oldCaveBotDelay(50)
-                end
+            if cavebotMacro and type(cavebotMacro) == "table" then
+                cavebotMacro.delay = now + safeDelay
+            elseif CaveBot.macro and type(CaveBot.macro) == "table" then
+                CaveBot.macro.delay = now + safeDelay
             end
-            local oldRegisterAction = CaveBot.registerAction
-            if oldRegisterAction then
-                CaveBot.registerAction = function(name, color, callback)
-                    local oldCallback = callback
-                    local newCallback = function(value, retries, prevResult)
-                        local ret = oldCallback(value, retries, prevResult)
-                        if ret == true or ret == nil then
-                            if cavebotMacro and type(cavebotMacro) == "table" then
-                                cavebotMacro.delay = now + 5
-                            elseif CaveBot.macro and type(CaveBot.macro) == "table" then
-                                CaveBot.macro.delay = now + 5
-                            end
-                        end
-                        return ret
-                    end
-                    return oldRegisterAction(name, color, newCallback)
+        end
+        return isWalking
+    end
+
+    local oldCaveBotDelay = CaveBot.delay
+    if oldCaveBotDelay then
+        CaveBot.delay = function(value)
+            if value and value >= 500 then
+                if cavebotMacro and type(cavebotMacro) == "table" then
+                    cavebotMacro.delay = math.max(cavebotMacro.delay or 0, now + value)
+                elseif CaveBot.macro and type(CaveBot.macro) == "table" then
+                    cavebotMacro.delay = math.max(CaveBot.macro.delay or 0, now + value)
+                else
+                    return oldCaveBotDelay(value)
                 end
+                return
             end
-            -- Aplica a flag de conclusão total da injeção
-            CaveBot.isWalkingOptimized = true
-            print("[Loader] CaveBot otimizado com sucesso.")
+            return oldCaveBotDelay(50)
+        end
+    end
+
+    local oldRegisterAction = CaveBot.registerAction
+    if oldRegisterAction then
+        CaveBot.registerAction = function(name, color, callback)
+            local oldCallback = callback
+            local newCallback = function(value, retries, prevResult)
+                local ret = oldCallback(value, retries, prevResult)
+                if ret == true or ret == nil then
+                    if cavebotMacro and type(cavebotMacro) == "table" then
+                        cavebotMacro.delay = now + 5
+                    elseif CaveBot.macro and type(CaveBot.macro) == "table" then
+                        CaveBot.macro.delay = now + 5
+                    end
+                end
+                return ret
+            end
+            return oldRegisterAction(name, color, newCallback)
+        end
+    end
+    print("[Loader] CaveBot otimizado com sucesso.")
+end
+
+-- ----------------------------------------------------------------------------
+-- [5/5] INTERCEPTAÇÃO DO PATHFINDING DO TARGETBOT (Monitoramento por Loop Seguro)
+-- ----------------------------------------------------------------------------
+local targetOptimizeLoop = nil
+
+-- Criamos uma macro temporária de checagem para dar tempo de o arquivo target.lua carregar
+targetOptimizeLoop = macro(200, function()
+    -- No momento em que o TargetBot e as funções de ataque forem criadas na memória:
+    if TargetBot and type(TargetBot.Creature) == "table" and type(findPath) == "function" then
+        
+        local oldFindPath = findPath
+        if oldFindPath then
+            findPath = function(startPos, endPos, maxDist, params)
+                -- Filtra chamadas pesadas originadas estritamente pelo escopo do TargetBot
+                if params and params.ignoreLastCreature then
+                    local player = g_game.getLocalPlayer()
+                    if player then
+                        local pPos = player:getPosition()
+                        local distance = math.max(math.abs(pPos.x - endPos.x), math.abs(pPos.y - endPos.y))
+                        
+                        -- Se o monstro já estiver a até 4 quadrados de distância, pula o cálculo complexo e foca o alvo
+                        if distance <= 4 and pPos.z == endPos.z then
+                            return { 1 } 
+                        end
+                    end
+                end
+                return oldFindPath(startPos, endPos, maxDist, params)
+            end
             
-            -- Desativa o macro de monitoramento do loader
-            masterOptimizeLoop.setOff()
+            -- PRINT DE CONFIRMAÇÃO OBRIGATÓRIO
+            print("[Loader] TargetBot otimizado com sucesso.")
+            
+            -- DESLIGA O MONITOR: Otimização concluída, encerra a macro para poupar recursos
+            targetOptimizeLoop.setOff()
         end
     end
 end)
-
-
-
-
-
-
 
