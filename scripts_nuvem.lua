@@ -830,32 +830,35 @@ local amountOfMonsters = 2
 local COOLDOWN_MINIMO_ABSOLUTO = 50
 
 if not storage.smartCastData then storage.smartCastData = {} end
+-- Garante que o cronômetro exista na memória sem dar erro de valor nulo (nil)
 if storage.smartCastData.ultimoDisparoTime == nil then storage.smartCastData.ultimoDisparoTime = 0 end
 if storage.comboEnabled == nil then storage.comboEnabled = false end
 
--- Como a leitura do painel 'Fight' é 100% exata, desativamos o interceptador antigo de exhaust
+-- Desativa o interceptador de mensagens antigo para não conflitar com o painel Fight
 onTextMessage(function() return false end)
 
 local indexArea = 1
 local indexSingle = 1
 
--- Macro rodando com alta precisão de 20ms
+-- MACRO MESTRE: Roda fixo a cada 20ms para precisão cirúrgica de clique
 combo = macro(20, "Smart Cast", function()
     if not g_game.isOnline() then return end
     if not g_game.isAttacking() then return end     
     
     local agora = os.clock() * 1000 
     
-    -- VINCULO REAL: Puxa o milissegundo exato calculado pela fórmula oficial do painel Fight
-    -- Se por acaso o painel ainda não tiver lido, assume o padrão seguro baseado no set atual
-    local cdSeguroAtual = storage.smartCastData.menorCooldownSeguro or 950
+    -- VÍNCULO CORRIGIDO: Puxa o MS exato que o painel Fight está calculando em tempo real
+    -- Se por acaso for o primeiro login do boneco, assume 957ms como padrão de segurança
+    local cdSeguroAtual = storage.smartCastData.menorCooldownSeguro or 957
     
-    -- Garante que o bot respeite o limite mínimo físico do jogo
+    -- Garante que respeite o limite mínimo físico do jogo
     if cdSeguroAtual < COOLDOWN_MINIMO_ABSOLUTO then 
         cdSeguroAtual = COOLDOWN_MINIMO_ABSOLUTO 
     end
 
-    -- Trava de Tempo: Bloqueia o disparo se o cooldown do seu Casting Speed atual não passou
+    -- TRAVA MATEMÁTICA RÍGIDA: Se o tempo decorrido desde o último feitiço for menor 
+    -- do que os milissegundos calculados pelo painel Fight, o bot aborta na hora!
+    -- Isso impede o spam descontrolado de pacotes de rede e mata 100% o exhausted.
     if (agora - storage.smartCastData.ultimoDisparoTime) < cdSeguroAtual then
         return
     end
@@ -896,7 +899,7 @@ combo = macro(20, "Smart Cast", function()
         end
     end
     
-    -- Registra o momento exato do disparo para a trava de tempo do próximo ciclo
+    -- REGISTRA O MILISSEGUNDO DO TIRO: Alimenta o cronômetro para travar o próximo turno de 20ms
     if enviouMagia then
         storage.smartCastData.ultimoDisparoTime = agora
     end
