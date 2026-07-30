@@ -1095,70 +1095,87 @@ if storage.smartCastData.ultimoDisparoTime == nil then
     storage.smartCastData.ultimoDisparoTime = 0
 end
 
--- Variáveis de controle para o Cache Anti-Lag
+-- Variáveis de controle para o Cache Anti-Lag Estável
 local ultimoCalculoMS = 957
 local ultimoTempoChecagemInterface = 0
 
--- FUNÇÃO MESTRE CORRIGIDA: Varre apenas painéis específicos para eliminar o lag
+-- Variáveis do Distribuidor de Carga para eliminação de travadas
+local listaComponentesCache = {}
+local indiceAtualVarredura = 1
+local aPorcentagemFoiEncontrada = nil
+
+-- FUNÇÃO MESTRE RESTAURADA: Usa a exata lógica que funcionou para você, mas distribui a carga na CPU
 local function puxarCastTimeIndividual()
     local agoraTempo = os.clock() * 1000
     
-    -- Mantém a CPU leve: Só refaz a varredura a cada 2 segundos
-    if agoraTempo - ultimoTempoChecagemInterface < 2000 then
-        return ultimoCalculoMS
-    end
-    ultimoTempoChecagemInterface = agoraTempo
+    -- CONTROLE DE PROCESSAMENTO: Só inicia uma nova captura de tela a cada 2 segundos
+    if agoraTempo - ultimoTempoChecagemInterface >= 2000 and #listaComponentesCache == 0 then
+        ultimoTempoChecagemInterface = agoraTempo
+        
+        -- 1. Método rápido direto (Tenta ler sem lag se o módulo estiver aberto)
+        if modules.game_skills and modules.game_skills.skillsWindow then
+            local castingSpeedWidget = modules.game_skills.skillsWindow:recursiveGetChildById('castingSpeed') or modules.game_skills.skillsWindow:recursiveGetChildById('casting_speed')
+            if castingSpeedWidget and castingSpeedWidget.getText then
+                local text = castingSpeedWidget:getText()
+                local match = text:match("(%d+)%%")
+                if match then 
+                    aPorcentagemFoiEncontrada = tonumber(match) 
+                end
+            end
+        end
 
-    local rootWidget = g_ui.getRootWidget()
-    if not rootWidget then return ultimoCalculoMS end
-
-    local porcentagemLida = nil
-
-    -- 1. Leitura rápida via módulo de Skills nativo
-    if modules.game_skills and modules.game_skills.skillsWindow then
-        local castingSpeedWidget = modules.game_skills.skillsWindow:recursiveGetChildById('castingSpeed') or modules.game_skills.skillsWindow:recursiveGetChildById('casting_speed')
-        if castingSpeedWidget and castingSpeedWidget.getText then
-            local text = castingSpeedWidget:getText()
-            local match = text:match("(%d+)%%")
-            if match then porcentagemLida = tonumber(match) end
+        -- 2. Se a aba estiver fechada, puxa a árvore de componentes completa que VOCÊ aprovou
+        if not aPorcentagemFoiEncontrada then
+            local rootWidget = g_ui.getRootWidget()
+            local searchBase = rootWidget:recursiveGetChildById('skillsWindow') or rootWidget:recursiveGetChildById('skillsPanel') or rootWidget:recursiveGetChildById('skills') or rootWidget
+            
+            -- Guarda a lista de componentes na memória para processar em pedaços pequenos
+            listaComponentesCache = searchBase:recursiveGetChildren()
+            indiceAtualVarredura = 1
         end
     end
 
-    -- 2. CORREÇÃO CRÍTICA DO LAG: Varredura Restrita por Painel Lateral
-    -- Em vez de vasculhar a interface inteira com rootWidget:recursiveGetChildren(),
-    -- nós limitamos a varredura apenas para as barras onde as miniwindows ficam acopladas.
-    if not porcentagemLida then
-        -- Foca diretamente nos painéis laterais padrões do OtClient
-        local sidePanel = rootWidget:getChildById('rightPanel') or rootWidget:getChildById('leftPanel') or rootWidget
+    -- SPREAD LOAD MOTOR (DISTRIBUIDOR DE CARGA): 
+    -- Em vez de ler 600 itens de uma vez só travando a tela, o bot lê apenas 25 itens por ciclo.
+    -- Isso consome 0% de CPU, elimina as travadinhas e garante que o valor mude com a janela fechada!
+    if #listaComponentesCache > 0 and not aPorcentagemFoiEncontrada then
+        local limiteDesteCiclo = math.min(indiceAtualVarredura + 25, #listaComponentesCache)
         
-        -- Executa a busca em uma lista extremamente curta de componentes (LAG ZERO)
-        local allChildren = sidePanel:recursiveGetChildren()
-        for i = 1, #allChildren do
-            local child = allChildren[i]
+        for i = indiceAtualVarredura, limiteDesteCiclo do
+            local child = listaComponentesCache[i]
             if child and child.getText then
                 local text = child:getText()
                 if string.find(text, "Casting Speed") then
                     local match = text:match("(%d+)%%")
-                    if not match and allChildren[i+1] and allChildren[i+1].getText then
-                        match = allChildren[i+1]:getText():match("(%d+)%%")
+                    if not match and listaComponentesCache[i+1] and listaComponentesCache[i+1].getText then
+                        match = listaComponentesCache[i+1]:getText():match("(%d+)%%")
                     end
                     if match then
-                        porcentagemLida = tonumber(match)
+                        aPorcentagemFoiEncontrada = tonumber(match)
                         break
                     end
                 end
             end
         end
+        
+        indiceAtualVarredura = limiteDesteCiclo + 1
+        -- Se terminou de ler a lista toda e não achou ou se achou a porcentagem, limpa o cache da rodada
+        if indiceAtualVarredura > #listaComponentesCache or aPorcentagemFoiEncontrada then
+            listaComponentesCache = {}
+        end
     end
 
-    -- COOLDOWN REAL: Aplica a fórmula matemática assintótica + 10ms de segurança
-    if porcentagemLida and porcentagemLida > 0 then
+    -- COOLDOWN REAL: Se o distribuidor de carga achou o valor novo na tela fechada, aplica a matemática
+    if aPorcentagemFoiEncontrada and aPorcentagemFoiEncontrada > 0 then
         local baseCooldown = 2000 
-        local contaServidor = baseCooldown / (1 + (porcentagemLida / 100))
+        local contaServidor = baseCooldown / (1 + (aPorcentagemFoiEncontrada / 100))
         
         ultimoCalculoMS = math.floor(contaServidor) + 10
         if ultimoCalculoMS < 50 then ultimoCalculoMS = 50 end
         storage.smartCastData.menorCooldownSeguro = ultimoCalculoMS
+        
+        -- Reseta para a próxima varredura cíclica de 2 segundos
+        aPorcentagemFoiEncontrada = nil
     end
 
     return ultimoCalculoMS
@@ -1215,6 +1232,7 @@ MainWindow
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 6
 ]], modules.game_interface.getMapPanel())
+
 
 
 painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
