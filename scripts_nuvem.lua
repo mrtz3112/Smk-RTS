@@ -1083,7 +1083,7 @@ if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 
 -- Limpador de cache residual seguro
-if not storage.smartCastData or (storage.smartCastData and storage.smartCastData.menorCooldownSeguro and (storage.smartCastData.menorCooldownSeguro > 1100 or storage.smartCastData.menorCooldownSeguro < 200)) then
+if not storage.smartCastData or (storage.smartCastData and storage.smartCastData.menorCooldownSeguro and (storage.smartCastData.menorCooldownSeguro > 1500 or storage.smartCastData.menorCooldownSeguro < 200)) then
     storage.smartCastData = {}
     storage.smartCastData.menorCooldownSeguro = 957 
     storage.smartCastData.ultimoDisparoTime = 0     
@@ -1095,90 +1095,70 @@ if storage.smartCastData.ultimoDisparoTime == nil then
     storage.smartCastData.ultimoDisparoTime = 0
 end
 
--- Variáveis de controle para o Cache Anti-Lag Estável
-local ultimoCalculoMS = 957
+-- Variáveis de controle para o Cache Anti-Lag (Estabilizadas)
 local ultimoTempoChecagemInterface = 0
 
--- Variáveis do Distribuidor de Carga para eliminação de travadas
-local listaComponentesCache = {}
-local indiceAtualVarredura = 1
-local aPorcentagemFoiEncontrada = nil
-
--- FUNÇÃO MESTRE RESTAURADA: Usa a exata lógica que funcionou para você, mas distribui a carga na CPU
+-- FUNÇÃO MESTRE CORRIGIDA: Sincroniza o MS direto no Storage Global da Macro
 local function puxarCastTimeIndividual()
     local agoraTempo = os.clock() * 1000
     
-    -- CONTROLE DE PROCESSAMENTO: Só inicia uma nova captura de tela a cada 2 segundos
-    if agoraTempo - ultimoTempoChecagemInterface >= 2000 and #listaComponentesCache == 0 then
-        ultimoTempoChecagemInterface = agoraTempo
-        
-        -- 1. Método rápido direto (Tenta ler sem lag se o módulo estiver aberto)
-        if modules.game_skills and modules.game_skills.skillsWindow then
-            local castingSpeedWidget = modules.game_skills.skillsWindow:recursiveGetChildById('castingSpeed') or modules.game_skills.skillsWindow:recursiveGetChildById('casting_speed')
-            if castingSpeedWidget and castingSpeedWidget.getText then
-                local text = castingSpeedWidget:getText()
-                local match = text:match("(%d+)%%")
-                if match then 
-                    aPorcentagemFoiEncontrada = tonumber(match) 
-                end
-            end
-        end
+    -- Mantém a CPU super leve: checa a interface a cada 4 segundos
+    if agoraTempo - ultimoTempoChecagemInterface < 4000 then
+        return storage.smartCastData.menorCooldownSeguro or 957
+    end
+    ultimoTempoChecagemInterface = agoraTempo
 
-        -- 2. Se a aba estiver fechada, puxa a árvore de componentes completa que VOCÊ aprovou
-        if not aPorcentagemFoiEncontrada then
-            local rootWidget = g_ui.getRootWidget()
-            local searchBase = rootWidget:recursiveGetChildById('skillsWindow') or rootWidget:recursiveGetChildById('skillsPanel') or rootWidget:recursiveGetChildById('skills') or rootWidget
-            
-            -- Guarda a lista de componentes na memória para processar em pedaços pequenos
-            listaComponentesCache = searchBase:recursiveGetChildren()
-            indiceAtualVarredura = 1
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return storage.smartCastData.menorCooldownSeguro or 957 end
+
+    local porcentagemLida = nil
+
+    -- 1. Leitura rápida via módulo de Skills nativo
+    if modules.game_skills and modules.game_skills.skillsWindow then
+        local castingSpeedWidget = modules.game_skills.skillsWindow:recursiveGetChildById('castingSpeed') or modules.game_skills.skillsWindow:recursiveGetChildById('casting_speed')
+        if castingSpeedWidget and castingSpeedWidget.getText then
+            local text = castingSpeedWidget:getText()
+            local match = text:match("(%d+)%%")
+            if match then porcentagemLida = tonumber(match) end
         end
     end
 
-    -- SPREAD LOAD MOTOR (DISTRIBUIDOR DE CARGA): 
-    -- Em vez de ler 600 itens de uma vez só travando a tela, o bot lê apenas 25 itens por ciclo.
-    -- Isso consome 0% de CPU, elimina as travadinhas e garante que o valor mude com a janela fechada!
-    if #listaComponentesCache > 0 and not aPorcentagemFoiEncontrada then
-        local limiteDesteCiclo = math.min(indiceAtualVarredura + 25, #listaComponentesCache)
-        
-        for i = indiceAtualVarredura, limiteDesteCiclo do
-            local child = listaComponentesCache[i]
+    -- 2. Varre apenas o painel lateral para manter o lag em zero
+    if not porcentagemLida then
+        local sidePanel = rootWidget:getChildById('rightPanel') or rootWidget:getChildById('leftPanel') or rootWidget
+        local allChildren = sidePanel:recursiveGetChildren()
+        for i = 1, #allChildren do
+            local child = allChildren[i]
             if child and child.getText then
                 local text = child:getText()
                 if string.find(text, "Casting Speed") then
                     local match = text:match("(%d+)%%")
-                    if not match and listaComponentesCache[i+1] and listaComponentesCache[i+1].getText then
-                        match = listaComponentesCache[i+1]:getText():match("(%d+)%%")
+                    if not match and allChildren[i+1] and allChildren[i+1].getText then
+                        match = allChildren[i+1]:getText():match("(%d+)%%")
                     end
                     if match then
-                        aPorcentagemFoiEncontrada = tonumber(match)
+                        porcentagemLida = tonumber(match)
                         break
                     end
                 end
             end
         end
-        
-        indiceAtualVarredura = limiteDesteCiclo + 1
-        -- Se terminou de ler a lista toda e não achou ou se achou a porcentagem, limpa o cache da rodada
-        if indiceAtualVarredura > #listaComponentesCache or aPorcentagemFoiEncontrada then
-            listaComponentesCache = {}
-        end
     end
 
-    -- COOLDOWN REAL: Se o distribuidor de carga achou o valor novo na tela fechada, aplica a matemática
-    if aPorcentagemFoiEncontrada and aPorcentagemFoiEncontrada > 0 then
+    -- COOLDOWN REAL DO SERVIDOR:
+    if porcentagemLida and porcentagemLida > 0 then
         local baseCooldown = 2000 
-        local contaServidor = baseCooldown / (1 + (aPorcentagemFoiEncontrada / 100))
+        local contaServidor = baseCooldown / (1 + (porcentagemLida / 100))
+        local msCalculado = math.floor(contaServidor) + 10 -- Mantém os 10ms de segurança solicitados
         
-        ultimoCalculoMS = math.floor(contaServidor) + 10
-        if ultimoCalculoMS < 50 then ultimoCalculoMS = 50 end
-        storage.smartCastData.menorCooldownSeguro = ultimoCalculoMS
+        if msCalculado < 50 then msCalculado = 50 end
         
-        -- Reseta para a próxima varredura cíclica de 2 segundos
-        aPorcentagemFoiEncontrada = nil
+        -- CORREÇÃO CRÍTICA: Grava o valor direto na memória global compartilhada!
+        -- Isso obriga o Smart Cast a atualizar a velocidade no mesmo milissegundo.
+        storage.smartCastData.menorCooldownSeguro = msCalculado
     end
 
-    return ultimoCalculoMS
+    return storage.smartCastData.menorCooldownSeguro or 957
 end
 
 local painelIconesUI = setupUI([[
@@ -1232,8 +1212,6 @@ MainWindow
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 6
 ]], modules.game_interface.getMapPanel())
-
-
 
 painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
 painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
