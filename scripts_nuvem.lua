@@ -3025,7 +3025,7 @@ if TargetBot and TargetBot.Creature and TargetBot.Creature.calculateParams then
 end
 
 -- ----------------------------------------------------------------------------
--- [3/5] REGRAS DE PRIORIDADE E STOP PARA ELITES VIVOS (Filtra Corpos)
+-- [3/5] REGRAS DE PRIORIDADE E STOP PARA ELITES VIVOS (DISTÂNCIA COMPENSADA)
 -- ----------------------------------------------------------------------------
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 if TargetBot and TargetBot.Creature then
@@ -3078,19 +3078,30 @@ if TargetBot and TargetBot.Creature then
         return priority 
       end
 
+      -- CÓDIGO CORRIGIDO PARA CRIATURAS NORMAIS: FOCO TOTAL EM LIMPAR DE PERTO PRIMEIRO
       if g_game.getAttackingCreature() == creature then
-        priority = priority + 1
+        priority = priority + 5 -- Aumentado de +1 para +5 (Mantém o foco no que já está atacando)
       end
+      
       if #path > config.maxDistance then
         return priority
       end
+      
       priority = priority + (config.priority or 1)
+      
+      -- CALIBRAGEM CIRÚRGICA DE DISTÂNCIA (Garante ataque nos monstros colados primeiro)
       local path_length = #path
       if path_length == 1 then
-        priority = priority + 3
-      elseif path_length <= 3 then
-        priority = priority + 1
+        priority = priority + 50 -- Bônus massivo! Monstros colados (1 SQM) viram prioridade máxima absoluta
+      elseif path_length == 2 then
+        priority = priority + 30 -- Monstros a 2 SQMs ganham muita força de foco
+      elseif path_length == 3 then
+        priority = priority + 15 -- Monstros a 3 SQMs
+      else
+        priority = priority + 1  -- Monstros distantes perdem prioridade contra os de perto
       end
+
+      -- Bônus de vida baixa mantido como desempate, mas sem ultrapassar o bônus de distância
       if config.chase and creature:getHealthPercent() < 30 then
         priority = priority + 5
       elseif creature:getHealthPercent() < 20 then
@@ -3102,6 +3113,7 @@ if TargetBot and TargetBot.Creature then
       elseif creature:getHealthPercent() < 80 then
         priority = priority + 0.2
       end
+      
       return priority
     end
 end
