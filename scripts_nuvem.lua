@@ -2781,7 +2781,7 @@ end
 
 local isBossGuild = function(creatureName)
     if not creatureName then return false end
-    return creatureName:lower():find("boss guild", 1, true) ~= nil
+    return creatureName:lower():find("guild boss", 1, true) ~= nil
 end
 
 local isMonsterGluedToOtherPlayer = function(monster)
