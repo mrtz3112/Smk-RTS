@@ -802,48 +802,11 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 
 setDefaultTab("Fight")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Haste & Buff ~"):setColor('#EBDEF0')
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-buffs = macro(100, "Haste", "CTRL+4", function()
-    if isInPz() then 
-        return 
-    end
-    if not hasHaste() then
-        saySpell(storage.autobuff1)
-        delay(40000)
-    end
-end) 
-UI.TextEdit(storage.autobuff1 or "", function(widget, text)    
-    storage.autobuff1 = text
-end)
--- Buff
-local function hasStrengthened()
-    local rootWidget = g_ui.getRootWidget()
-    if rootWidget then
-        local buffIcon = rootWidget:recursiveGetChildById('condition_strengthened')
-        if buffIcon and buffIcon:isVisible() then
-            return true
-        end
-    end
-    return false
-end
-macro(100, "Buff", "CTRL+4", function()
-if isInPz() or not g_game.isAttacking() then return end
-    if not hasStrengthened() then
-        say(storage.buffskill01)
-	    say(storage.buffskill02)
-		delay(10000)
-	end
-end)
-UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
-    storage.buffskill01 = text
-end)
-UI.TextEdit(storage.buffskill02 or "", function(widget, text)    
-    storage.buffskill02 = text
-end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+-- ============================================================================
+-- Smart Cast
+-- ============================================================================
 local distance = 2
 local amountOfMonsters = 2
 
@@ -908,17 +871,22 @@ UI.Label("~ Others ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 --Spell at HP Target
 -- ============================================================================
--- [1/2] SPELL AT TARGET HP (Apenas em Players)
+-- [INICIALIZAÇÃO] CONFIGURAÇÃO DE MEMÓRIA DO PAINEL FIGHT
+-- ============================================================================
+if storage.painelSalvo == nil then storage.painelSalvo = {} end
+if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
+if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
+
+-- ============================================================================
+-- SPELL AT TARGET HP (Apenas em Players)
 -- ============================================================================
 local panelName = "hpbelowconfig"
 
 if storage[panelName] == nil then 
-    storage[panelName] = { hp = 80, enabled = false } 
+    storage[panelName] = { hp = 80 } 
 end
 
 lowhp = macro(100, function()
-    -- Executa apenas se o botão do painel local estiver ativo
-    if not storage[panelName].enabled then return end
     if not g_game.isOnline() or not g_game.isAttacking() then return end  
     
     local target = g_game.getAttackingCreature()
@@ -956,11 +924,14 @@ Panel
 
 uiHP:setId(panelName)
 
--- Gerencia o clique no botão local
-uiHP.title:setOn(storage[panelName].enabled)
 uiHP.title.onClick = function(widget)
-    storage[panelName].enabled = not storage[panelName].enabled
-    widget:setOn(storage[panelName].enabled)
+    if lowhp.isOn() then
+        lowhp.setOff()
+        storage.painelSalvo.special = false
+    else
+        lowhp.setOn()
+        storage.painelSalvo.special = true
+    end
 end
 
 local updateHpText = function()
@@ -978,21 +949,111 @@ updateHpText()
 UI.TextEdit(storage.hpspell or "", function(widget, text) 
     storage.hpspell = text 
 end)
+UI.Separator()
+-- ============================================================================
+-- SPELL AT SELF HP
+-- ============================================================================
+
+local panelName = "selfhpbelowconfig"
+
+if storage[panelName] == nil then 
+    storage[panelName] = { hp = 80 } 
+end
+
+-- Macro ajustada para verificar o HP do próprio jogador
+selflowhp = macro(100, function()
+    if not g_game.isOnline() then return end  
+    
+    -- hppercent() lê a porcentagem de vida do seu próprio personagem
+    if hppercent() <= storage[panelName].hp then
+        if storage.selfhpspell and storage.selfhpspell ~= "" then
+            say(storage.selfhpspell)
+        end
+    end
+end)
+
+-- Interface Gráfica (UI) - Spell at Self HP
+local uiSelfHP = setupUI([[
+Panel
+  height: 35
+  BotSwitch
+    id: title
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: parent.verticalCenter
+    text-align: center
+    !text: tr('Spell at Self HP')
+
+  HorizontalScrollBar
+    id: HP
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right
+    anchors.left: parent.left
+    margin-top: 3
+    minimum: 1
+    maximum: 100
+    step: 1
+]], parent)
+
+uiSelfHP:setId(panelName)
+
+-- Controla o estado nativo e salva na memória
+uiSelfHP.title.onClick = function(widget)
+    if selflowhp.isOn() then
+        selflowhp.setOff()
+        if storage.painelSalvo then storage.painelSalvo.selfSpecial = false end
+    else
+        selflowhp.setOn()
+        if storage.painelSalvo then storage.painelSalvo.selfSpecial = true end
+    end
+end
+
+local updateHpText = function()
+    uiSelfHP.HP:setText("My HP: < " .. storage[panelName].hp .. "%")
+end
+
+uiSelfHP.HP.onValueChange = function(scroll, value)
+    storage[panelName].hp = value
+    updateHpText()
+end
+
+uiSelfHP.HP:setValue(storage[panelName].hp)
+updateHpText()
+
+-- Armazena o texto da magia em uma chave separada (selfhpspell)
+UI.TextEdit(storage.selfhpspell or "", function(widget, text) 
+    storage.selfhpspell = text 
+end)
+
+-- ============================================================================
+-- [SINCRO] RESTAURADOR DE MEMÓRIA E ATUALIZADOR VISUAL LOCAL
+-- ============================================================================
+local jaSincronizouSelf = false
+
+macro(100, function()
+    if not g_game.isOnline() then return end
+    if not storage.painelSalvo then return end
+    
+    -- Inicializa respeitando o último estado salvo antes de deslogar
+    if not jaSincronizouSelf then
+        if storage.painelSalvo.selfSpecial then selflowhp.setOn() else selflowhp.setOff() end
+        jaSincronizouSelf = true
+    end
+    
+    -- Sincroniza a cor do botão com o motor real do bot
+    local ativo = selflowhp.isOn()
+    if uiSelfHP and uiSelfHP.title then uiSelfHP.title:setOn(ativo) end
+    storage.painelSalvo.selfSpecial = ativo
+end)
 
 UI.Separator()
 
 -- ============================================================================
--- [2/2] SPELL WAVE (Gira e Conjura na Reta)
+-- SPELL WAVE (Gira e Conjura na Reta)
 -- ============================================================================
 local panelWaveName = "waveconfig"
 
-if storage[panelWaveName] == nil then
-    storage[panelWaveName] = { enabled = false }
-end
-
 turnCombo = macro(50, function()
-    -- Executa apenas se o botão do painel local estiver ativo
-    if not storage[panelWaveName].enabled then return end
     if not g_game.isOnline() then return end
     
     local target = g_game.getAttackingCreature()
@@ -1033,52 +1094,56 @@ Panel
 
 uiWave:setId(panelWaveName)
 
--- Gerencia o clique no botão local da Wave
-uiWave.title:setOn(storage[panelWaveName].enabled)
 uiWave.title.onClick = function(widget)
-    storage[panelWaveName].enabled = not storage[panelWaveName].enabled
-    widget:setOn(storage[panelWaveName].enabled)
+    if turnCombo.isOn() then
+        turnCombo.setOff()
+        storage.painelSalvo.wave = false
+    else
+        turnCombo.setOn()
+        storage.painelSalvo.wave = true
+    end
 end
 
 addTextEdit("spellTurnConfig", storage.turnSpell or "", function(widget, text)
     storage.turnSpell = text:trim()
 end)
 
--- Esse bloco garante que o Painel Fight e os botões locais mudem juntos
+-- ============================================================================
+-- [SINCRO] RESTAURADOR DE MEMÓRIA E ATUALIZADOR VISUAL (Sem Loops Falsos)
+-- ============================================================================
+local jaSincronizouAoLigar = false
+
 macro(100, function()
     if not g_game.isOnline() then return end
-    if not storage.painelSalvo then return end
-
-    -- 1. Se o Painel Fight mudar, atualiza o botão local e a trava
-    if lowhp and type(lowhp) == "table" and type(lowhp.isOn) == "function" then
-        if lowhp.isOn() ~= storage[panelName].enabled then
-            storage[panelName].enabled = lowhp.isOn()
-            if uiHP and uiHP.title then uiHP.title:setOn(storage[panelName].enabled) end
-        end
+    
+    -- Executa apenas uma vez quando você loga para carregar o estado salvo antigo
+    if not jaSincronizouAoLigar then
+        if storage.painelSalvo.special then lowhp.setOn() else lowhp.setOff() end
+        if storage.painelSalvo.wave then turnCombo.setOn() else turnCombo.setOff() end
+        jaSincronizouAoLigar = true
     end
     
-    if turnCombo and type(turnCombo) == "table" and type(turnCombo.isOn) == "function" then
-        if turnCombo.isOn() ~= storage[panelWaveName].enabled then
-            storage[panelWaveName].enabled = turnCombo.isOn()
-            if uiWave and uiWave.title then uiWave.title:setOn(storage[panelWaveName].enabled) end
-        end
-    end
+    -- Atualiza as cores dos botões locais baseados no motor real do bot
+    local hpAtivo = lowhp.isOn()
+    if uiHP and uiHP.title then uiHP.title:setOn(hpAtivo) end
+    storage.painelSalvo.special = hpAtivo
 
-    -- 2. Garante que o storage global do Painel Fight saiba o estado real atual
-    storage.painelSalvo.special = storage[panelName].enabled
-    storage.painelSalvo.wave = storage[panelWaveName].enabled
+    local waveAtiva = turnCombo.isOn()
+    if uiWave and uiWave.title then uiWave.title:setOn(waveAtiva) end
+    storage.painelSalvo.wave = waveAtiva
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
+if storage.painelSalvo.selfSpecial == nil then storage.painelSalvo.selfSpecial = false end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 
 local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
-  !text: tr('Fight')
-  size: 98 180
+  !text: tr('Spell Caster')
+  size: 92 190
   focusable: false
   draggable: true
   phantom: false
@@ -1091,7 +1156,7 @@ MainWindow
     Button
       id: botaoSpells
       !text: tr('Area/Single')
-      size: 80 40
+      size: 78 30
       anchors.top: parent.top
       anchors.horizontalCenter: parent.horizontalCenter
       margin-left: 1
@@ -1099,8 +1164,17 @@ MainWindow
     Button
       id: botaoSpecial
       !text: tr('Target HP')
-      size: 80 40
+      size: 78 30
       anchors.top: botaoSpells.bottom
+      anchors.horizontalCenter: parent.horizontalCenter
+      margin-top: 8
+      margin-left: 1
+
+    Button
+      id: botaoSelfSpecial
+      !text: tr('Self HP')
+      size: 78 30
+      anchors.top: botaoSpecial.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 8
       margin-left: 1
@@ -1108,8 +1182,8 @@ MainWindow
     Button
       id: botaoWave
       !text: tr('Wave (Reta)')
-      size: 80 40
-      anchors.top: botaoSpecial.bottom
+      size: 78 30
+      anchors.top: botaoSelfSpecial.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 8
       margin-left: 1
@@ -1143,11 +1217,13 @@ if painelIconesUI then
     local container = painelIconesUI:getChildById("containerIcones")
     if container then
         local btnSpecial = container:getChildById("botaoSpecial")
+        local btnSelfSpecial = container:getChildById("botaoSelfSpecial")
         local btnSpells = container:getChildById("botaoSpells")
         local btnWave = container:getChildById("botaoWave")
         
         -- Configuração dos cliques usando os controladores nativos diretos das macros
         if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
+        if btnSelfSpecial then btnSelfSpecial.onClick = function() alternarEstadoMacro(selflowhp, "selfSpecial") end end
         if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
         if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
         
@@ -1161,6 +1237,9 @@ if painelIconesUI then
                 if lowhp and type(lowhp) == "table" and type(lowhp.setOn) == "function" then 
                     if storage.painelSalvo.special then lowhp.setOn() else lowhp.setOff() end 
                 end
+                if selflowhp and type(selflowhp) == "table" and type(selflowhp.setOn) == "function" then 
+                    if storage.painelSalvo.selfSpecial then selflowhp.setOn() else selflowhp.setOff() end 
+                end
                 if combo and type(combo) == "table" and type(combo.setOn) == "function" then 
                     if storage.painelSalvo.spells then combo.setOn() else combo.setOff() end 
                 end
@@ -1172,11 +1251,13 @@ if painelIconesUI then
             
             -- Atualiza as cores dos botões (Verde = Ativo, Vermelho = Inativo) em tempo real
             if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp) and "green" or "red") end
+            if btnSelfSpecial then btnSelfSpecial:setColor(isMacroActive(selflowhp) and "green" or "red") end
             if btnSpells then btnSpells:setColor(isMacroActive(combo) and "green" or "red") end
             if btnWave then btnWave:setColor(isMacroActive(turnCombo) and "green" or "red") end
         end)
     end
 end
+
 
 setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
@@ -1323,78 +1404,6 @@ macro(100, function()
         end
     end
   end
-end)
-UI.Separator()
---Eat Food
-local panelName = "AutoFood"
-storage[panelName] = storage[panelName] or {enabled = false}
-local config = storage[panelName]
-
-local ui = setupUI([[
-Panel
-  height: 58
-
-  BotSwitch
-    id: title
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    text: Auto Food
-
-  BotItem
-    id: item1
-    anchors.top: title.bottom
-    anchors.right: title.horizontalCenter
-    margin-top: 5
-    margin-right: 2
-    width: 34
-    height: 34
-
-  BotItem
-    id: item2
-    anchors.top: title.bottom
-    anchors.left: title.horizontalCenter
-    margin-top: 5
-    margin-left: 2
-    width: 34
-    height: 34
-]])
-
-storage.foodItem1 = storage.foodItem1 or 3577
-storage.foodItem2 = storage.foodItem2 or 0
-
-ui.item1:setItemId(storage.foodItem1)
-ui.item2:setItemId(storage.foodItem2)
-
-ui.item1.onItemChange = function(widget)
-    storage.foodItem1 = widget:getItemId()
-end
-ui.item2.onItemChange = function(widget)
-    storage.foodItem2 = widget:getItemId()
-end
-ui.title:setOn(config.enabled)
-ui.title.onClick = function(widget)
-    config.enabled = not config.enabled
-    widget:setOn(config.enabled)
-end
-local foodCooldowns = {0, 0}
-macro(100, function()
-    if not config.enabled or isInPz() then return end
-    
-    local currentTime = now
-    local foodIds = {storage.foodItem1, storage.foodItem2}
-    for index, id in ipairs(foodIds) do
-        if id and id > 0 then
-            if currentTime - foodCooldowns[index] >= 10000 then
-                local food = findItem(id)
-                if food then
-                    g_game.use(food)
-                    foodCooldowns[index] = currentTime
-                    break
-                end
-            end
-        end
-    end
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Potions & Pet ~"):setColor('#EBDEF0')
@@ -1690,10 +1699,123 @@ petMacro = macro(100, function()
     end
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Label("~ Haste & Buff ~"):setColor('#EBDEF0')
+UI.Label("-----------------------------------"):setColor('#C39BD3')
+buffs = macro(100, "Haste", "CTRL+4", function()
+    if isInPz() then 
+        return 
+    end
+    if not hasHaste() then
+        saySpell(storage.autobuff1)
+        delay(40000)
+    end
+end) 
+UI.TextEdit(storage.autobuff1 or "", function(widget, text)    
+    storage.autobuff1 = text
+end)
+-- Buff
+local function hasStrengthened()
+    local rootWidget = g_ui.getRootWidget()
+    if rootWidget then
+        local buffIcon = rootWidget:recursiveGetChildById('condition_strengthened')
+        if buffIcon and buffIcon:isVisible() then
+            return true
+        end
+    end
+    return false
+end
+macro(100, "Buff", "CTRL+4", function()
+if isInPz() or not g_game.isAttacking() then return end
+    if not hasStrengthened() then
+        say(storage.buffskill01)
+	    say(storage.buffskill02)
+		delay(10000)
+	end
+end)
+UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
+    storage.buffskill01 = text
+end)
+UI.TextEdit(storage.buffskill02 or "", function(widget, text)    
+    storage.buffskill02 = text
+end)
+UI.Label("-----------------------------------"):setColor('#C39BD3')
+
 setDefaultTab("Extra")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Items Upgrader ~"):setColor('#EBDEF0')
+UI.Label("~ Utility ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+--Eat Food
+local panelName = "AutoFood"
+storage[panelName] = storage[panelName] or {enabled = false}
+local config = storage[panelName]
+
+local ui = setupUI([[
+Panel
+  height: 58
+
+  BotSwitch
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: Auto Food
+
+  BotItem
+    id: item1
+    anchors.top: title.bottom
+    anchors.right: title.horizontalCenter
+    margin-top: 5
+    margin-right: 2
+    width: 34
+    height: 34
+
+  BotItem
+    id: item2
+    anchors.top: title.bottom
+    anchors.left: title.horizontalCenter
+    margin-top: 5
+    margin-left: 2
+    width: 34
+    height: 34
+]])
+
+storage.foodItem1 = storage.foodItem1 or 3577
+storage.foodItem2 = storage.foodItem2 or 0
+
+ui.item1:setItemId(storage.foodItem1)
+ui.item2:setItemId(storage.foodItem2)
+
+ui.item1.onItemChange = function(widget)
+    storage.foodItem1 = widget:getItemId()
+end
+ui.item2.onItemChange = function(widget)
+    storage.foodItem2 = widget:getItemId()
+end
+ui.title:setOn(config.enabled)
+ui.title.onClick = function(widget)
+    config.enabled = not config.enabled
+    widget:setOn(config.enabled)
+end
+local foodCooldowns = {0, 0}
+macro(100, function()
+    if not config.enabled or isInPz() then return end
+    
+    local currentTime = now
+    local foodIds = {storage.foodItem1, storage.foodItem2}
+    for index, id in ipairs(foodIds) do
+        if id and id > 0 then
+            if currentTime - foodCooldowns[index] >= 10000 then
+                local food = findItem(id)
+                if food then
+                    g_game.use(food)
+                    foodCooldowns[index] = currentTime
+                    break
+                end
+            end
+        end
+    end
+end)
+UI.Separator()
 --AutoRoll
 local panelName = "roll"
 storage[panelName] = storage[panelName] or {enabled = false}
