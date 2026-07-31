@@ -805,7 +805,7 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Haste & Buff ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 buffs = macro(100, "Haste", "CTRL+4", function()
-    if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) then 
+    if isInPz() then 
         return 
     end
     if not hasHaste() then
@@ -828,7 +828,7 @@ local function hasStrengthened()
     return false
 end
 macro(100, "Buff", "CTRL+4", function()
-if isInPz() or (storage.smartCastData and storage.smartCastData.calibrando) or not g_game.isAttacking() then return end
+if isInPz() or not g_game.isAttacking() then return end
     if not hasStrengthened() then
         say(storage.buffskill01)
 	    say(storage.buffskill02)
@@ -846,113 +846,52 @@ UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 local distance = 2
 local amountOfMonsters = 2
-local COOLDOWN_MINIMO_ABSOLUTO = 50
-local COOLDOWN_MAXIMO = 2000          
-if not storage.smartCastData then storage.smartCastData = {} end
-if not storage.smartCastData.menorCooldownSeguro then storage.smartCastData.menorCooldownSeguro = 2000 end 
-if storage.smartCastData.faseCalibracao == nil then storage.smartCastData.faseCalibracao = 1 end
-if storage.smartCastData.estadoAnteriorMacro == nil then storage.smartCastData.estadoAnteriorMacro = false end
-if storage.smartCastData.ultimoDisparoTime == nil then storage.smartCastData.ultimoDisparoTime = 0 end
-if storage.comboEnabled == nil then storage.comboEnabled = false end
 
-local function aplicarPenalidadeExhaust()
-    if storage.smartCastData.calibrando then
-        local cdAtual = storage.smartCastData.menorCooldownSeguro
-        
-        if storage.smartCastData.faseCalibracao == 1 then
-            local novoCd = math.min(COOLDOWN_MAXIMO, cdAtual + 200) -- Adiciona margem rápida
-            storage.smartCastData.faseCalibracao = 2
-            storage.smartCastData.menorCooldownSeguro = novoCd
-            print("[Smart Cast] Exhaust Detectado! Iniciando Calibracao Fina (-10ms).")
-        
-        elseif storage.smartCastData.faseCalibracao == 2 then
-            local valorFinal = math.min(COOLDOWN_MAXIMO, cdAtual + 30) -- Margem de segurança de 25ms sobre o exaust real
-            storage.smartCastData.calibrando = false
-            storage.smartCastData.faseCalibracao = 1 
-            storage.smartCastData.menorCooldownSeguro = valorFinal
-            print("[Smart Cast] Cooldown Perfeito Encontrado! Novo CD: " .. math.floor(valorFinal) .. "ms")
-        end
-    end
-end
-onTextMessage(function(mode, text)
-    local msg = text:lower()
-    if string.find(msg, "exha") or string.find(msg, "exhaust") then
-        aplicarPenalidadeExhaust()
-        return true 
-    end
-end)
-local indexArea = 1
-local indexSingle = 1
-combo = macro(20, "Smart Cast", function()
-    if not g_game.isOnline() then return end
-    if not storage.smartCastData.estadoAnteriorMacro then
-        storage.smartCastData.faseCalibracao = 1
-        storage.smartCastData.calibrando = true
-        storage.smartCastData.ultimoDisparoTime = os.clock() * 1000
-        storage.smartCastData.menorCooldownSeguro = 2000
-        print("[Smart Cast] Iniciando Calibracao rapida a partir de 2000ms.")
-        storage.smartCastData.estadoAnteriorMacro = true
-    end
-    if not g_game.isAttacking() then return end     
-    local agora = os.clock() * 1000 
-    local cdSeguroAtual = storage.smartCastData.menorCooldownSeguro
-    if (agora - storage.smartCastData.ultimoDisparoTime) < cdSeguroAtual then
-        return
-    end
+local indexArea, indexSingle = 1, 1
+
+combo = macro(100, "Smart Cast", function()
+    if not g_game.isOnline() or not g_game.isAttacking() then return end     
+    
     local target = g_game.getAttackingCreature()
     local atacandoPlayer = target and target:isPlayer()
     local specAmount = 0  
+    
+    -- Conta monstros ao redor apenas se o alvo atual não for um Player
     if not atacandoPlayer then
-        for i, mob in ipairs(getSpectators()) do
-            if (getDistanceBetween(pos(), mob:getPosition()) <= distance and mob:isMonster()) then
+        for _, mob in ipairs(getSpectators()) do
+            if mob:isMonster() and getDistanceBetween(pos(), mob:getPosition()) <= distance then
                 specAmount = specAmount + 1
             end
         end
     end
-    local enviouMagia = false
-    if (specAmount >= amountOfMonsters and not atacandoPlayer) then
+    
+    -- Condição 1: Se houver 2 ou mais monstros e o alvo não for Player -> Solta área
+    if specAmount >= amountOfMonsters and not atacandoPlayer then
         local areaSpells = {}
         if storage.areaspell01 and storage.areaspell01 ~= "" then table.insert(areaSpells, storage.areaspell01) end
         if storage.areaspell02 and storage.areaspell02 ~= "" then table.insert(areaSpells, storage.areaspell02) end
+        
         if #areaSpells > 0 then
             if indexArea > #areaSpells then indexArea = 1 end
             say(areaSpells[indexArea])
             indexArea = indexArea + 1
-            enviouMagia = true
         end
+    -- Condição 2: Caso contrário (apenas 1 monstro ou atacando um Player) -> Solta Single
     else
         local singleSpells = {}
         if storage.spell01 and storage.spell01 ~= "" then table.insert(singleSpells, storage.spell01) end
         if storage.spell02 and storage.spell02 ~= "" then table.insert(singleSpells, storage.spell02) end
         if storage.spell03 and storage.spell03 ~= "" then table.insert(singleSpells, storage.spell03) end
+        
         if #singleSpells > 0 then
             if indexSingle > #singleSpells then indexSingle = 1 end
             say(singleSpells[indexSingle])
             indexSingle = indexSingle + 1
-            enviouMagia = true
-        end
-    end
-    -- Pós-disparo: Ajusta calibração se necessário
-    if enviouMagia then
-        storage.smartCastData.ultimoDisparoTime = agora
-        if storage.smartCastData.calibrando then
-            if cdSeguroAtual > COOLDOWN_MINIMO_ABSOLUTO then
-                local redutor = 10 -- Redução fina ajustada para 5ms
-                if storage.smartCastData.faseCalibracao == 1 then
-                    redutor = 50 -- Redução rápida ajustada para 50ms
-                end
-                local novoCd = math.max(COOLDOWN_MINIMO_ABSOLUTO, cdSeguroAtual - redutor)
-                storage.smartCastData.menorCooldownSeguro = novoCd
-            end
         end
     end
 end)
-macro(250, function()
-    if combo and not combo.isOn() then
-        storage.smartCastData.estadoAnteriorMacro = false
-    end
-end)
-if storage.comboEnabled then combo.setOn() else combo.setOff() end
+
+-- Interface Gráfica (UI)
 UI.Separator()
 UI.Label("Area Spells (2+ Mobs)"):setColor('#FFEA99')
 UI.Separator()
@@ -964,44 +903,30 @@ UI.Separator()
 UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text end)
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text end)
-
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Others ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+--Spell at HP Target
 local panelName = "hpbelowconfig"
-if not storage[panelName] then
-  storage[panelName] = {
-      setting = true,
-      hp = 80,
-      enabled = false
-  }
+
+if storage[panelName] == nil then 
+    storage[panelName] = { hp = 80, enabled = false } 
 end
-local ultimoDisparoEspecial = 0
-local cooldownFixoEspecial = 50000 
+-- Removido o nome em texto da macro para sumir o botão nativo duplicado
 lowhp = macro(100, function()
-    if storage.smartCastData and storage.smartCastData.calibrando then 
-        return 
-    end
-    if not g_game.isAttacking() then
-        return
-    end  
-    local target = g_game.getAttackingCreature()
-    if not target or not target:isPlayer() then 
-        return 
-    end
+    if not storage[panelName].enabled then return end
+    if not g_game.isAttacking() then return end  
     
-    local agora = os.clock() * 1000
-    if (agora - ultimoDisparoEspecial) < cooldownFixoEspecial then
-        return
-    end
+    local target = g_game.getAttackingCreature()
+    if not target or not target:isPlayer() then return end
+    
     if target:getHealthPercent() <= storage[panelName].hp then
         if storage.hpspell and storage.hpspell ~= "" then
             say(storage.hpspell)
-            ultimoDisparoEspecial = agora -- Registra o momento exato do disparo
         end
     end
 end)
-if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
+-- Interface Gráfica (UI) com apenas um Botão ON/OFF personalizado
 local ui = setupUI([[
 Panel
   height: 35
@@ -1017,100 +942,49 @@ Panel
     id: HP
     anchors.bottom: parent.bottom
     anchors.right: parent.right
-    anchors.left:parent.left
+    anchors.left: parent.left
     margin-top: 3
     minimum: 1
     maximum: 100
     step: 1
 ]], parent)
+
 ui:setId(panelName)
+-- Configuração do Clique do Botão ON/OFF único
 ui.title:setOn(storage[panelName].enabled)
 ui.title.onClick = function(widget)
-  storage[panelName].enabled = not storage[panelName].enabled
-  widget:setOn(storage[panelName].enabled)
-  if storage.painelSalvo then
-      storage.painelSalvo.special = storage[panelName].enabled
-  end
-  if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
-end
-local updateHpText = function()
-    if storage[panelName].setting then
-        ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
+    storage[panelName].enabled = not storage[panelName].enabled
+    widget:setOn(storage[panelName].enabled)
+    
+    -- Sincroniza com o Painel Fight externo
+    if storage.painelSalvo then
+        storage.painelSalvo.special = storage[panelName].enabled
     end
 end
+local updateHpText = function()
+    ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
+end
+
 ui.HP.onValueChange = function(scroll, value)
-  storage[panelName].hp = value
-  updateHpText()
+    storage[panelName].hp = value
+    updateHpText()
 end
 ui.HP:setValue(storage[panelName].hp)
 updateHpText()
 UI.TextEdit(storage.hpspell or "", function(widget, text) 
     storage.hpspell = text 
 end)
-macro(200, function()
-    if lowhp and storage.painelSalvo and storage.painelSalvo.special ~= nil then
-        if storage[panelName].enabled ~= storage.painelSalvo.special then
-            storage[panelName].enabled = storage.painelSalvo.special
-            if ui and ui.title then
-                ui.title:setOn(storage[panelName].enabled)
-            end
-            if storage[panelName].enabled then lowhp.setOn() else lowhp.setOff() end
-        end
-    end
-end)
 UI.Separator()
 --Spell Wave
 if storage.turnComboEnabled == nil then
     storage.turnComboEnabled = false
 end
-local COOLDOWN_MINIMO_ABSOLUTO = 100
--- 1. ESTRUTURAÇÃO DO BANCO DE DADOS (Garante que as tabelas existam em sincronia)
-if not storage.smartCastData then storage.smartCastData = {} end
-if not storage.smartCastData.cdPvE then storage.smartCastData.cdPvE = 2000 end 
-if not storage.smartCastData.cdPvP then storage.smartCastData.cdPvP = 2000 end 
--- Função de suporte para ler qual botão de combate nativo está marcado no client
-local function obterModoAtaqueNativo()
-    local root = g_ui.getRootWidget()
-    if root then
-        local boxOffensive = root:recursiveGetChildById('fightOffensiveBox')
-        if boxOffensive and boxOffensive:isChecked() then
-            return "offensive"
-        end
-    end
-    return "balanced"
-end
--- Função para ler o valor de CD do modo que está ativo AGORA
-local function obterCooldownAtivo()
-    local modo = obterModoAtaqueNativo()
-    if modo == "offensive" then
-        return storage.smartCastData.cdPvE
-    else
-        return storage.smartCastData.cdPvP
-    end
-end
--- Função para salvar o novo valor calibrado de forma isolada no respectivo set
-local function salvarCooldownCalibrado(novoCd)
-    local modo = obterModoAtaqueNativo()
-    if modo == "offensive" then
-        storage.smartCastData.cdPvE = novoCd
-    else
-        storage.smartCastData.cdPvP = novoCd
-    end
-    -- Sincroniza o valor de leitura do painel de botões
-    storage.smartCastData.menorCooldownSeguro = novoCd
-end
 
-local ultimoDisparoTurnWave = 0
-turnCombo = macro(50, "Spell Wave (Reta)", function()
+-- Removido o nome em texto da macro para não criar botão duplicado
+turnCombo = macro(50, "Wave (Reta)",function()
     local target = g_game.getAttackingCreature()
     if not target then return end
     
-    local agora = os.clock() * 1000
-    local delaySmartCast = obterCooldownAtivo()
-    
-    if (agora - ultimoDisparoTurnWave) < delaySmartCast then
-        return
-    end
     local targetPos = target:getPosition()
     local myPos = pos()
     if not targetPos or not myPos then return end
@@ -1118,6 +992,7 @@ turnCombo = macro(50, "Spell Wave (Reta)", function()
     local diffX = targetPos.x - myPos.x
     local diffY = targetPos.y - myPos.y
     
+    -- Vira o personagem na direção correta do alvo instantaneamente
     if math.abs(diffX) >= math.abs(diffY) then
         if diffX > 0 then
             g_game.turn(1)
@@ -1131,23 +1006,18 @@ turnCombo = macro(50, "Spell Wave (Reta)", function()
             g_game.turn(0)
         end
     end   
-    delay(30)
+    
+    delay(30) -- Pequena pausa para o servidor registrar o giro antes da magia
+    
     if storage.turnSpell and storage.turnSpell ~= "" then
         say(storage.turnSpell)
-        ultimoDisparoTurnWave = agora
-        if storage.smartCastData and storage.smartCastData.calibrando then
-            if delaySmartCast > COOLDOWN_MINIMO_ABSOLUTO then
-                local novoCd = math.max(COOLDOWN_MINIMO_ABSOLUTO, delaySmartCast - 5)
-                salvarCooldownCalibrado(novoCd)
-            end
-        end
     end
 end)
 
+-- Mantém a sincronização básica de inicialização
 if storage.turnComboEnabled then turnCombo.setOn() else turnCombo.setOff() end
-macro(200, function()
-    if turnCombo then storage.turnComboEnabled = turnCombo.isOn() end
-end)
+
+-- Campo de configuração de texto simples
 addTextEdit("spellTurnConfig", storage.turnSpell or "", function(widget, text)
     storage.turnSpell = text:trim()
 end)
@@ -1156,21 +1026,12 @@ if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
-if not storage.smartCastData then
-    storage.smartCastData = {}
-end
-if storage.painelSalvo == nil then storage.painelSalvo = {} end
-if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
-if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
-if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
-if not storage.smartCastData then
-    storage.smartCastData = {}
-end
+
 local painelIconesUI = setupUI([[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Fight')
-  size: 98 200
+  size: 98 180
   focusable: false
   draggable: true
   phantom: false
@@ -1205,20 +1066,11 @@ MainWindow
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 8
       margin-left: 1
-
-    Label
-      id: labelCdAtual
-      text: Cast: 0.00s
-      size: 80 16
-      font: verdana-11px-rounded
-      color: #FFEA99
-      text-align: center
-      anchors.top: botaoWave.bottom
-      anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 6
 ]], modules.game_interface.getMapPanel())
+
 painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
 painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
+
 local function isMacroActive(macroRef, storageKey)
     if macroRef and type(macroRef) == "table" and macroRef.isOn and type(macroRef.isOn) == "function" then
         local success, result = pcall(function() return macroRef.isOn() end)
@@ -1226,6 +1078,7 @@ local function isMacroActive(macroRef, storageKey)
     end
     return storage.painelSalvo and storage.painelSalvo[storageKey] or false
 end
+
 local function alternarEstadoMacro(macroRef, storageKey)
     if not storage.painelSalvo then storage.painelSalvo = {} end
     local novoEstado = not storage.painelSalvo[storageKey]
@@ -1236,96 +1089,38 @@ local function alternarEstadoMacro(macroRef, storageKey)
         pcall(macroRef)
     end
 end
+
 if painelIconesUI then
     local container = painelIconesUI:getChildById("containerIcones")
     if container then
         local btnSpecial = container:getChildById("botaoSpecial")
         local btnSpells = container:getChildById("botaoSpells")
         local btnWave = container:getChildById("botaoWave")
-        local lblCdAtual = container:getChildById("labelCdAtual")
+        
         if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
         if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
         if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
+        
         local jaSincronizou = false
         local hooksConfigurados = false
-        local ultimoEstadoBot = false
-        if TargetBot and TargetBot.isEnabled then ultimoEstadoBot = TargetBot.isEnabled() end     
+        
         macro(100, function()
             if not g_game.isOnline() then return end
+            
             if not jaSincronizou then
                 if lowhp and type(lowhp) == "table" and lowhp.setOn then pcall(function() lowhp.setOn(storage.painelSalvo.special) end) end
                 if combo and type(combo) == "table" and combo.setOn then pcall(function() combo.setOn(storage.painelSalvo.spells) end) end
                 if turnCombo and type(turnCombo) == "table" and turnCombo.setOn then pcall(function() turnCombo.setOn(storage.painelSalvo.wave) end) end
                 jaSincronizou = true
             end
+            
             if not hooksConfigurados then
                 hooksConfigurados = true
             end       
+            
             if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp, "special") and "green" or "red") end
             if btnSpells then btnSpells:setColor(isMacroActive(combo, "spells") and "green" or "red") end
             if btnWave then btnWave:setColor(isMacroActive(turnCombo, "wave") and "green" or "red") end
-            if lblCdAtual then
-                local cdSalvoMilissegundos = storage.smartCastData and storage.smartCastData.menorCooldownSeguro or 0
-                local cdEmSegundos = cdSalvoMilissegundos / 1000
-                local sufixo = (storage.smartCastData and storage.smartCastData.calibrando) and "s [C]" or "s"
-                lblCdAtual:setText("Cast: " .. string.format("%.2f", cdEmSegundos) .. sufixo)
-            end
-        end)
-    end
-end
-painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
-painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
-local function isMacroActive(macroRef, storageKey)
-    if macroRef and type(macroRef) == "table" and macroRef.isOn and type(macroRef.isOn) == "function" then
-        local success, result = pcall(function() return macroRef.isOn() end)
-        if success then return result end
-    end
-    return storage.painelSalvo and storage.painelSalvo[storageKey] or false
-end
-local function alternarEstadoMacro(macroRef, storageKey)
-    if not storage.painelSalvo then storage.painelSalvo = {} end
-    local novoEstado = not storage.painelSalvo[storageKey]
-    storage.painelSalvo[storageKey] = novoEstado
-    if macroRef and type(macroRef) == "table" and macroRef.setOn then
-        pcall(function() macroRef.setOn(novoEstado) end)
-    elseif macroRef and type(macroRef) == "function" then
-        pcall(macroRef)
-    end
-end
-if painelIconesUI then
-    local container = painelIconesUI:getChildById("containerIcones")
-    if container then
-        local btnSpecial = container:getChildById("botaoSpecial")
-        local btnSpells = container:getChildById("botaoSpells")
-        local btnWave = container:getChildById("botaoWave")
-        local lblCdAtual = container:getChildById("labelCdAtual")
-        if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
-        if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
-        if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
-        local jaSincronizou = false
-        local hooksConfigurados = false
-        local ultimoEstadoBot = false
-        if TargetBot and TargetBot.isEnabled then ultimoEstadoBot = TargetBot.isEnabled() end     
-        macro(100, function()
-            if not g_game.isOnline() then return end
-            if not jaSincronizou then
-                if lowhp and type(lowhp) == "table" and lowhp.setOn then pcall(function() lowhp.setOn(storage.painelSalvo.special) end) end
-                if combo and type(combo) == "table" and combo.setOn then pcall(function() combo.setOn(storage.painelSalvo.spells) end) end
-                if turnCombo and type(turnCombo) == "table" and turnCombo.setOn then pcall(function() turnCombo.setOn(storage.painelSalvo.wave) end) end
-                jaSincronizou = true
-            end
-            if not hooksConfigurados then
-                hooksConfigurados = true
-            end       
-            if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp, "special") and "green" or "red") end
-            if btnSpells then btnSpells:setColor(isMacroActive(combo, "spells") and "green" or "red") end
-            if btnWave then btnWave:setColor(isMacroActive(turnCombo, "wave") and "green" or "red") end
-            if lblCdAtual then
-                local cdSalvoMilissegundos = storage.smartCastData and storage.smartCastData.menorCooldownSeguro or 0
-                local cdEmSegundos = cdSalvoMilissegundos / 1000
-                local sufixo = (storage.smartCastData and storage.smartCastData.calibrando) and "s [C]" or "s"
-                lblCdAtual:setText("Cast: " .. string.format("%.2f", cdEmSegundos) .. sufixo)
-            end
         end)
     end
 end
@@ -1387,7 +1182,7 @@ ui.HP:setValue(storage[panelName].hp)
 UI.TextEdit(storage.autohealspell1 or "regeneration", function(widget, text)    
   storage.autohealspell1 = text
 end)
-macro(1100, function()
+macro(500, function()
  if not storage[panelName].enabled then return end
 
  if storage[panelName].setting then
@@ -1423,6 +1218,7 @@ Panel
     
 ]], parent)
 ui:setId(panelName)
+
 if not storage[panelName] then
   storage[panelName] = {
       title = enabled,
@@ -1431,35 +1227,40 @@ if not storage[panelName] then
       hp = 70
   }
 end
+
 ui.title:setOn(storage[panelName].enabled)
 ui.title.onClick = function(widget)
   storage[panelName].enabled = not storage[panelName].enabled
   widget:setOn(storage[panelName].enabled)
 end
+
 local updateHpText = function()
     if storage[panelName].setting then
-    ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
+        ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
     end
 end
 updateHpText()
+
 ui.HP.onValueChange = function(scroll, value)
   storage[panelName].hp = value
   updateHpText()
 end
 ui.HP:setValue(storage[panelName].hp)
+
 UI.TextEdit(storage.autobarrier or "reiatsu barrier", function(widget, text)    
   storage.autobarrier = text
 end)
+
 local ultimoUsoBarreira = 0
 local DELAY_SEGUNDOS = 46
+
 macro(100, function()
   if not storage[panelName].enabled then return end
-  if storage.smartCastData and storage.smartCastData.calibrando then 
-    return 
-  end
+  
   if storage[panelName].setting then
     if hppercent() <= storage[panelName].hp then
         local tempoAgora = os.time()
+        -- Executa puramente com base no delay estático de 46 segundos
         if (tempoAgora - ultimoUsoBarreira) >= DELAY_SEGUNDOS then
             say(storage.autobarrier)
             ultimoUsoBarreira = tempoAgora
@@ -2200,7 +2001,7 @@ if dash and dash.setOff then dash.setOff() end
 local MW_ID = 10571
 local ultimoUso = 0
 
-mwall = macro(100, "MWall on Target", "SHIFT+1", function()
+mwall = macro(100, "MWall on Target", "ALT+1", function()
     if os.time() - ultimoUso < 5 then return end
     local player = g_game.getLocalPlayer()
     local target = g_game.getAttackingCreature()
@@ -2230,7 +2031,7 @@ if mwall and mwall.setOff then
     mwall.setOff()
 end
 --HoldAttack
-chaseatk = macro(100, "Hold Target", "SHIFT+2", function()
+chaseatk = macro(100, "Hold Target", "ALT+2", function()
   if g_game.isAttacking() 
 then
  oldTarget = g_game.getAttackingCreature()
@@ -2265,7 +2066,7 @@ local function definirModoAtaque(modo)
     end
 end
 local estadoAnteriorMacro = false
-enemy = macro(30, 'Enemy', "SHIFT+3", function()
+enemy = macro(30, 'Enemy', "ALT+3", function()
     if not estadoAnteriorMacro then
         definirModoAtaque("balanced")
         estadoAnteriorMacro = true
@@ -2317,7 +2118,7 @@ end)
 if type(storage.Sense) ~= "string" then
     storage.Sense = ""
 end
-xsense = macro(30, "xSense", "SHIFT+4", function()
+xsense = macro(30, "xSense", "ALT+4", function()
     local target = g_game.getAttackingCreature()
     if target and target:isPlayer() then
         storage.Sense = target:getName()
@@ -2645,40 +2446,40 @@ macro(100, function()
 
   if pvehud.mwallinfo then
     if mwall.isOn() then
-      pvehud.mwallinfo:setText("~ MWall on Target: [Shift+1]")
+      pvehud.mwallinfo:setText("~ MWall on Target: [Alt+1]")
       pvehud.mwallinfo:setColor("#33ff99")
     else
-      pvehud.mwallinfo:setText("~ MWall on Target: [Shift+1]")
+      pvehud.mwallinfo:setText("~ MWall on Target: [Alt+1]")
       pvehud.mwallinfo:setColor("#ff6666")
     end
   end
 
   if pvehud.chaseatk then
     if chaseatk.isOn() then
-      pvehud.chaseatk:setText("~ Hold Attack: [Shift+2]")
+      pvehud.chaseatk:setText("~ Hold Attack: [Alt+2]")
       pvehud.chaseatk:setColor("#33ff99")
     else
-      pvehud.chaseatk:setText("~ Hold Attack: [Shift+2]")
+      pvehud.chaseatk:setText("~ Hold Attack: [Alt+2]")
       pvehud.chaseatk:setColor("#ff6666")
     end
   end
 
   if pvehud.enemy then
     if enemy.isOn() then
-      pvehud.enemy:setText("~ Enemy: [Shift+3]")
+      pvehud.enemy:setText("~ Enemy: [Alt+3]")
       pvehud.enemy:setColor("#33ff99")
     else
-      pvehud.enemy:setText("~ Enemy: [Shift+3]")
+      pvehud.enemy:setText("~ Enemy: [Alt+3]")
       pvehud.enemy:setColor("#ff6666")
     end
   end
 
   if pvehud.xsense then
     if xsense.isOn() then
-      pvehud.xsense:setText("~ Auto xSense: [Shift+4]")
+      pvehud.xsense:setText("~ Auto xSense: [Alt+4]")
       pvehud.xsense:setColor("#33ff99")
     else
-      pvehud.xsense:setText("~ Auto xSense: [Shift+4]")
+      pvehud.xsense:setText("~ Auto xSense: [Alt+4]")
       pvehud.xsense:setColor("#ff6666")
     end
   end
