@@ -3125,7 +3125,7 @@ end
 -- [4/5] INTERCEPTAÇÃO CAVEBOT: MOTOR DE RAIO E APROXIMAÇÃO DE ESCADA (V4)
 -- ----------------------------------------------------------------------------
 if CaveBot and type(CaveBot.walkTo) == "function" then
-    -- Salva a função original de andar para usar em caminhos longos
+    -- Salva as funções originais para usar em caminhos normais
     local originalWalkTo = CaveBot.walkTo
 
     -- SUBSTITUIÇÃO DA FUNÇÃO DO WALKING.LUA DIRETO PELO LOADER
@@ -3135,12 +3135,53 @@ if CaveBot and type(CaveBot.walkTo) == "function" then
         
         local posAtual = player:getPosition()
 
-        -- INTERCEPTADOR CIRÚRGICO DE ESCADAS E BUEIROS
+        -- ====================================================================
+        -- SENSOR DE COMBATE CORRIGIDO
+        -- ====================================================================
+        local atacandoAlvo = g_game.getAttackingCreature()
+        local estaEmCombate = false
+
+        if atacandoAlvo then
+            estaEmCombate = true
+        else
+            local spectators = g_map.getSpectators(posAtual, false)
+            for _, spec in ipairs(spectators) do
+                if spec:isMonster() and spec:getHealthPercent() > 0 then
+                    local name = spec:getName():lower()
+                    if not name:find("trainer") and not name:find("guild boss") then
+                        local mPos = spec:getPosition()
+                        if mPos and mPos.z == posAtual.z then
+                            local mDist = math.max(math.abs(posAtual.x - mPos.x), math.abs(posAtual.y - mPos.y))
+                            
+                            local mTargetId = 0
+                            if type(spec.getTargetId) == "function" then
+                                mTargetId = spec:getTargetId() or 0
+                            elseif spec.targetId then
+                                mTargetId = spec.targetId
+                            elseif type(spec.getTarget) == "function" then
+                                local tgt = spec:getTarget()
+                                if tgt then mTargetId = tgt:getId() end
+                            end
+
+                            if mDist <= 4 or mTargetId == player:getId() then
+                                estaEmCombate = true
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        if estaEmCombate then
+            return originalWalkTo(dest, maxDist, params)
+        end
+
+        -- INTERCEPTADOR CIRÚRGICO DE ESCADAS E BUEIROS (ÁREA LIMPA)
         if dest and dest.z == posAtual.z then
             local distX = math.abs(posAtual.x - dest.x)
             local distY = math.abs(posAtual.y - dest.y)
             
-            -- Se o destino do bot for o bueiro e você já estiver colado nele (1 SQM)
             if distX <= 1 and distY <= 1 then
                 local tile = g_map.getTile(dest)
                 local ehEscadaMecanica = false
@@ -3151,50 +3192,62 @@ if CaveBot and type(CaveBot.walkTo) == "function" then
                                         or (type(tile.isDownUp) == "function" and tile:isDownUp())
                 end
                 
-                -- Se o quadrado for uma escada ou for o ponto travado do bueiro
                 if ehEscadaMecanica or (distX == 1 or distY == 1) then
-                    
                     local direcao = 8 
                     local diffX = dest.x - posAtual.x
                     local diffY = dest.y - posAtual.y
 
-                    -- CORREÇÃO: Força apenas movimentos retos. Se estiver na diagonal, resolve com passo reto primeiro.
                     if diffX == 0 and diffY == -1 then direcao = 0     -- Norte puro
                     elseif diffX == 1 and diffY == 0 then direcao = 1    -- Leste puro
                     elseif diffX == 0 and diffY == 1 then direcao = 2     -- Sul puro
                     elseif diffX == -1 and diffY == 0 then direcao = 3    -- Oeste puro
-                    
-                    -- Se estiver nas diagonais, força o alinhamento reto primeiro (Evita andar de lado na escada)
-                    elseif diffX == 1 and diffY == -1 then direcao = 0   -- Em vez de Nordeste, vai para o Norte
-                    elseif diffX == -1 and diffY == -1 then direcao = 0  -- Em vez de Noroeste, vai para o Norte
-                    elseif diffX == 1 and diffY == 1 then direcao = 2    -- Em vez de Sudeste, vai para o Sul
-                    elseif diffX == -1 and diffY == 1 then direcao = 2   -- Em vez de Sudoeste, vai para o Sul
+                    elseif diffX == 1 and diffY == -1 then direcao = 0   
+                    elseif diffX == -1 and diffY == -1 then direcao = 0  
+                    elseif diffX == 1 and diffY == 1 then direcao = 2    
+                    elseif diffX == -1 and diffY == 1 then direcao = 2   
                     end
 
                     if direcao ~= 8 then
-                        -- Dá o passo reto físico do teclado no SQM, sem usar cliques e sem diagonal
+                        -- CORREÇÃO PRINCIPAL: Salva o estado atual do bot e simula um desligamento lógico falso
+                        -- Isso congela instantaneamente as ações do arquivo walking.lua original
+                        local originalIsOn = CaveBot.isOn
+                        CaveBot.isOn = function() return false end
+                        
+                        -- Limpa buffers de rota nativos agressivamente
+                        if type(CaveBot.resetWalking) == "function" then CaveBot.resetWalking() end
+                        CaveBot.walkPath = {}
+                        CaveBot.expectedDirs = {}
+                        if type(CaveBot.stop) == "function" then CaveBot.stop() end
+
+                        -- Dá o passo mecânico reto puro pelo teclado
                         g_game.walk(direcao, false)
-                        
-                        -- Preenche as variáveis que o motor do bot usa no walking.lua para fingir sucesso
-                        if CaveBot.walkPath then CaveBot.walkPath = { direcao } end
-                        if CaveBot.expectedDirs then CaveBot.expectedDirs = { direcao } end
-                        
-                        -- Avança o waypoint para o bot ler os comandos do novo andar imediatamente
-                        if type(CaveBot.nextWaypoint) == "function" then
-                            CaveBot.nextWaypoint()
-                        elseif type(CaveBot.nextAction) == "function" then
-                            CaveBot.nextAction()
+
+                        -- Restaura o motor original do bot e pula o waypoint após a mudança de andar (200ms)
+                        if type(scheduleEvent) == "function" then
+                            scheduleEvent(function()
+                                -- Restaura a função original de checar se o bot está ligado
+                                CaveBot.isOn = originalIsOn
+                                
+                                -- Pula para o próximo Waypoint
+                                if type(CaveBot.nextWaypoint) == "function" then
+                                    CaveBot.nextWaypoint()
+                                elseif type(CaveBot.nextAction) == "function" then
+                                    CaveBot.nextAction()
+                                end
+                            end, 200)
+                        else
+                            CaveBot.isOn = originalIsOn
+                            if type(CaveBot.nextWaypoint) == "function" then CaveBot.nextWaypoint() end
                         end
                         
-                        -- Aplica um delay confortável para a transição de andar acontecer
-                        CaveBot.delay(350)
+                        -- Aplica um delay geral para o motor não tentar recalcular nada no frame atual
+                        CaveBot.delay(400)
                         return true
                     end
                 end
             end
         end
 
-        -- Se estiver longe de escadas, roda o funcionamento normal original do walking.lua
         return originalWalkTo(dest, maxDist, params)
     end
 end
@@ -3204,9 +3257,9 @@ end
 -- ====================================================================
 if CaveBot and CaveBot.Config and CaveBot.Actions then
     if type(CaveBot.Config.set) == "function" then
-        CaveBot.Config.set("walkDelay", 250)       
-        CaveBot.Config.set("ping", 250)            
-        CaveBot.Config.set("mapClickDelay", 250)   
+        CaveBot.Config.set("walkDelay", 500)       
+        CaveBot.Config.set("ping", 500)            
+        CaveBot.Config.set("mapClickDelay", 500)   
     end
     
     local oldCaveBotDelay = CaveBot.delay
@@ -3248,8 +3301,9 @@ if CaveBot and CaveBot.Config and CaveBot.Actions then
             return oldRegisterAction(name, color, newCallback)
         end
     end
-    print("[Loader] CaveBot injetado com sucesso.")
+    print("[Loader] CaveBot otimizado com sucesso.")
 end
+
 
 
 
