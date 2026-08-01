@@ -3122,173 +3122,79 @@ if TargetBot and TargetBot.Creature then
     end
 end
 
--- ----------------------------------------------------------------------------
--- [4/5] INTERCEPTAÇÃO CAVEBOT: MOTOR DE RAIO E APROXIMAÇÃO DE ESCADA (V4)
--- ----------------------------------------------------------------------------
+--NewCaveBot
 if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and CaveBot.Actions then
+    -- 1. FORÇA AS CONFIGURAÇÕES DE PASSO FLUIDO NO MOTOR NATIVO
     if type(CaveBot.Config.set) == "function" then
-        CaveBot.Config.set("walkDelay", 250)       
-        CaveBot.Config.set("ping", 250)            
-        CaveBot.Config.set("mapClickDelay", 250)   
+        CaveBot.Config.set("walkDelay", 10)       -- Zera o tempo de espera do bot entre passos
+        CaveBot.Config.set("ping", 50)            -- Ajusta para um tempo de resposta de rede veloz
+        CaveBot.Config.set("mapClickDelay", 10)   -- Zera o atraso ao recalcular alvos no mini-mapa
     end
     
+    -- 2. ACELERA OS AGENDADORES INTERNOS DO CLIENT DE JOGO
     if type(schedule) == "function" then
         local oldSchedule = schedule
         schedule = function(time, callback)
-            if time == 3000 then return oldSchedule(500, callback) end
+            -- Se o bot tentar forçar uma pausa longa (ex: 3 segundos ou 1 segundo de espera)
+            if time and time >= 500 then
+                return oldSchedule(10, callback) -- Reduz a pausa para quase zero, mantendo a corrida contínua
+            end
             return oldSchedule(time, callback)
         end
     end
 
-    local oldDoWalking = CaveBot.doWalking
-    local lastKnownPathCount = 0
-    local ultimoAndarZ = g_game.getLocalPlayer() and g_game.getLocalPlayer():getPosition().z or 7
-    local tempoEsperaEscada = 0
-    
-    CaveBot.doWalking = function()
-        local player = g_game.getLocalPlayer()
-        if not player then return oldDoWalking() end
-        
-        local posAtual = player:getPosition()
-        local agora = now or (os.clock() * 1000)
-
-        -- DETECTOR REAL DE MUDANÇA DE ANDAR (CORTA INSTANTANEAMENTE O RECALCULO ANTERIOR)
-        if posAtual.z ~= ultimoAndarZ then
-            ultimoAndarZ = posAtual.z
-            tempoEsperaEscada = agora + 400 
-            
-            if type(CaveBot.resetWalking) == "function" then CaveBot.resetWalking() end
-            CaveBot.walkPath = {}
-            lastKnownPathCount = 0
-            if type(CaveBot.stop) == "function" then CaveBot.stop() end
-            
-            if CaveBot.Actions and type(CaveBot.Actions.clear) == "function" then CaveBot.Actions.clear() end
-            if CaveBot.clearQueue and type(CaveBot.clearQueue) == "function" then CaveBot.clearQueue() end
-            
-            if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = agora + 600 end
-            if CaveBot.macro and type(CaveBot.macro) == "table" then CaveBot.macro.delay = agora + 600 end
-            
-            if type(CaveBot.nextWaypoint) == "function" then CaveBot.nextWaypoint()
-            elseif type(CaveBot.nextAction) == "function" then CaveBot.nextAction() end
-            return true
-        end
-
-        if agora < tempoEsperaEscada then return true end
-
-        -- ====================================================================
-        -- INTERCEPTADOR MASTER: SEGUIDOR COM FILTRO DE LATÊNCIA DE REDE
-        -- ====================================================================
-        local currentAction = CaveBot.action or CaveBot.currentAction
-        local waypointPos = nil
-        
-        if currentAction and type(currentAction) == "table" then 
-            waypointPos = currentAction.position or currentAction.pos
-        elseif CaveBot.currentNode and type(CaveBot.currentNode) == "table" then 
-            waypointPos = CaveBot.currentNode.position or CaveBot.currentNode.pos 
-        end
-
-        if waypointPos and waypointPos.z == posAtual.z then
-            local distX = math.abs(posAtual.x - waypointPos.x)
-            local distY = math.abs(posAtual.y - waypointPos.y)
-            
-            -- Se estiver colado a exatamente 1 quadrado da escada/bueiro ativo
-            if distX <= 1 and distY <= 1 then
-                local tile = g_map.getTile(waypointPos)
-                local ehEscada = false
-                if tile then 
-                    ehEscada = (type(tile.isStairs) == "function" and tile:isStairs()) 
-                                or (type(tile.isLadder) == "function" and tile:isLadder()) 
-                                or (type(tile.isDownUp) == "function" and tile:isDownUp()) 
-                end
-
-                if ehEscada or (currentAction and (currentAction.type == "use" or currentAction.type == "goto")) then
-                    local diffX = waypointPos.x - posAtual.x
-                    local diffY = waypointPos.y - posAtual.y
-                    local direcao = 8
-
-                    if diffX == 0 and diffY == -1 then direcao = 0     
-                    elseif diffX == 1 and diffY == 0 then direcao = 1    
-                    elseif diffX == 0 and diffY == 1 then direcao = 2     
-                    elseif diffX == -1 and diffY == 0 then direcao = 3    
-                    elseif diffX == 1 and diffY == -1 then direcao = 0   
-                    elseif diffX == -1 and diffY == -1 then direcao = 0  
-                    elseif diffX == 1 and diffY == 1 then direcao = 2    
-                    elseif diffX == -1 and diffY == 1 then direcao = 2 end
-
-                    if direcao ~= 8 then
-                        -- BLINDAGEM DE REDE: Altera a coordenada antes e joga um micro-congelamento.
-                        -- Se houver lag, o bot é obrigado a esperar o pacote do passo reto responder.
-                        waypointPos.x = posAtual.x
-                        waypointPos.y = posAtual.y
-                        
-                        if type(CaveBot.resetWalking) == "function" then CaveBot.resetWalking() end
-                        CaveBot.walkPath = {}
-                        lastKnownPathCount = 0
-                        if type(CaveBot.stop) == "function" then CaveBot.stop() end
-
-                        g_game.walk(direcao, true)
-                        
-                        if type(CaveBot.nextWaypoint) == "function" then CaveBot.nextWaypoint()
-                        elseif type(CaveBot.nextAction) == "function" then CaveBot.nextAction() end
-
-                        -- Aumentado para 450ms apenas na quina da escada para segurar oscilações de ping
-                        if type(CaveBot.setWalkingDelay) == "function" then
-                            CaveBot.setWalkingDelay(450)
-                        end
-                        return true
-                    end
-                end
-            end
-        end
-
-        -- LÓGICA DE CORRIDA E SEGUIDOR DE WAYPOINTS ORIGINAL INTACTA
-        if storage and (storage.clearing or storage.blockMonster) then
-            if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = agora + 100 end
-            return oldDoWalking()
-        end
-        
-        if player:isWalking() then
-            if CaveBot.walkPath and #CaveBot.walkPath == 0 and lastKnownPathCount > 0 then
-                lastKnownPathCount = 0
-                if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = agora + 10 end
-                return true
-            end
-        end
-        
-        if CaveBot.walkPath then lastKnownPathCount = #CaveBot.walkPath
-        else lastKnownPathCount = 0 end
-        
-        if CaveBot.walkingDelay then CaveBot.walkingDelay = 0 end
-        if type(CaveBot.setWalkingDelay) == "function" then CaveBot.setWalkingDelay(0) end
-        
-        local isWalking = oldDoWalking()
-        if isWalking then
-            local safeDelay = 100 
-            local currentDelay = (cavebotMacro and cavebotMacro.delay) or (CaveBot.macro and CaveBot.macro.delay) or 0
-            if currentDelay - agora >= 500 then return isWalking end
-            if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = agora + safeDelay
-            elseif CaveBot.macro and type(CaveBot.macro) == "table" then CaveBot.macro.delay = agora + safeDelay end
-        end
-        return isWalking
-    end
-
+    -- 3. INTERCEPTADOR REESCRITO DO CAVEBOT DELAY (FIM DO CONGELAMENTO DE 1 SEGUNDO)
     local oldCaveBotDelay = CaveBot.delay
     if oldCaveBotDelay then
         CaveBot.delay = function(value)
-            if value and value >= 500 then
+            -- Toda vez que o bot tentar travar o personagem por 1 segundo (500ms+), nós ignoramos 
+            -- e aplicamos um micro delay de apenas 10ms para manter a corrida ultra fluida
+            if value and value >= 300 then
                 if cavebotMacro and type(cavebotMacro) == "table" then
                     local cNow = now or (os.clock() * 1000)
-                    cavebotMacro.delay = math.max(cavebotMacro.delay or 0, cNow + value)
+                    cavebotMacro.delay = cNow + 10
                 elseif CaveBot.macro and type(CaveBot.macro) == "table" then
                     local cNow = now or (os.clock() * 1000)
-                    cavebotMacro.delay = math.max(CaveBot.macro.delay or 0, cNow + value)
-                else return oldCaveBotDelay(value) end
+                    CaveBot.macro.delay = cNow + 10
+                else
+                    return oldCaveBotDelay(10)
+                end
                 return
             end
-            return oldCaveBotDelay(50)
+            return oldCaveBotDelay(10)
         end
     end
 
+-- 4. BYPASS DE PERFORMANCE NO TARGET (FIM DA LENTIDÃO COM MOBS TE ATACANDO)
+    if TargetBot and TargetBot.Creature and TargetBot.Creature.calculateParams then
+        local originalCalculateParams = TargetBot.Creature.calculateParams
+        TargetBot.Creature.calculateParams = function(creature, path)
+            local params = originalCalculateParams(creature, path)
+            
+            -- Se o motor do Target estiver analisando um monstro enquanto você corre
+            if params and type(params) == "table" and creature:isMonster() then
+                local localPlayer = g_game.getLocalPlayer()
+                if localPlayer then
+                    local myId = localPlayer:getId()
+                    
+                    -- Captura rápida do alvo do monstro de forma universal e super leve
+                    local mTargetId = 0
+                    if creature.targetId then mTargetId = creature.targetId
+                    elseif type(creature.getTargetId) == "function" then mTargetId = creature:getTargetId() or 0 end
+                    
+                    -- Se o monstro já está focado em você ou te atacando no lure, pula instantaneamente 
+                    -- qualquer checagem pesada do anti-ks. Isso devolve 100% da fluidez original!
+                    if mTargetId == myId or g_game.getAttackingCreature() == creature then
+                        if params.priority then params.priority = 100 end -- Mantém a prioridade correta de ataque
+                        return params
+                    end
+                end
+            end
+            return params
+        end
+    end
+
+    -- 5. PRESERVAÇÃO DO REGISTRO DE AÇÕES SEM COOLDOWNS EXAGERADOS
     local oldRegisterAction = CaveBot.registerAction
     if oldRegisterAction then
         CaveBot.registerAction = function(name, color, callback)
@@ -3298,10 +3204,10 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
                 if ret == true or ret == nil then
                     if cavebotMacro and type(cavebotMacro) == "table" then
                         local cNow = now or (os.clock() * 1000)
-                        cavebotMacro.delay = cNow + 5
+                        cavebotMacro.delay = cNow + 1
                     elseif CaveBot.macro and type(CaveBot.macro) == "table" then
                         local cNow = now or (os.clock() * 1000)
-                        CaveBot.macro.delay = cNow + 5
+                        CaveBot.macro.delay = cNow + 1
                     end
                 end
                 return ret
@@ -3311,9 +3217,3 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
     end
     print("[Loader] CaveBot otimizado com sucesso.")
 end
-
-
-
-
-
-
