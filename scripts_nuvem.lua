@@ -812,7 +812,7 @@ local amountOfMonsters = 2
 
 local indexArea, indexSingle = 1, 1
 
-combo = macro(10, "Smart Cast", function()
+combo = macro(100, "Smart Cast", function()
     if not g_game.isOnline() or not g_game.isAttacking() then return end     
     
     local target = g_game.getAttackingCreature()
@@ -2685,7 +2685,7 @@ if player:getBlessings() == 0 then
   say("!bless")
   schedule(1000, function()
     if player:getBlessings() == 0 then
-      print("[PvE] Auto Bless injetado com sucesso.")
+      print("[Loader] Bless habilitada com sucesso.")
     end
   end)
 end
@@ -2753,7 +2753,7 @@ macro(200, function()
                 pcall(function() g_game.setSafeFight(false) end) 
             end
             ultimoEstadoSeguro = true
-            print("[PvP] SafeFight LIGADO.")
+            print("[Loader] PvP ativado.")
         end
     else
         if ultimoEstadoSeguro ~= false then
@@ -2761,7 +2761,7 @@ macro(200, function()
                 pcall(function() g_game.setSafeFight(true) end) 
             end
             ultimoEstadoSeguro = false
-            print("[PvP] SafeFight DESLIGADO.")
+            print("[Loader] PvP desativado.")
         end
     end
 end)
@@ -3023,7 +3023,7 @@ if TargetBot and TargetBot.Creature and TargetBot.Creature.calculateParams then
         
         return params
     end
-    print("[Loader] Anti KS injetado com sucesso.")
+    print("[Loader] Anti KS habilitado com sucesso.")
 end
 
 
@@ -3152,7 +3152,7 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
         local posAtual = player:getPosition()
         local agora = now or (os.clock() * 1000)
 
-        -- DETECTOR SAUDÁVEL DE MUDANÇA DE ANDAR (ZEBRA AS VOLTAS AO MUDAR O EIXO Z)
+        -- DETECTOR REAL DE MUDANÇA DE ANDAR (CORTA INSTANTANEAMENTE O RECALCULO ANTERIOR)
         if posAtual.z ~= ultimoAndarZ then
             ultimoAndarZ = posAtual.z
             tempoEsperaEscada = agora + 400 
@@ -3176,7 +3176,7 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
         if agora < tempoEsperaEscada then return true end
 
         -- ====================================================================
-        -- INTERCEPTADOR POR MANIPULAÇÃO DE ALVO FALSO (MATA O RECALCULO DE ROTA)
+        -- INTERCEPTADOR MASTER: SEGUIDOR COM FILTRO DE LATÊNCIA DE REDE
         -- ====================================================================
         local currentAction = CaveBot.action or CaveBot.currentAction
         local waypointPos = nil
@@ -3191,7 +3191,7 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
             local distX = math.abs(posAtual.x - waypointPos.x)
             local distY = math.abs(posAtual.y - waypointPos.y)
             
-            -- Só age se estiver colado a exatamente 1 quadrado do bueiro/escada
+            -- Se estiver colado a exatamente 1 quadrado da escada/bueiro ativo
             if distX <= 1 and distY <= 1 then
                 local tile = g_map.getTile(waypointPos)
                 local ehEscada = false
@@ -3206,7 +3206,6 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
                     local diffY = waypointPos.y - posAtual.y
                     local direcao = 8
 
-                    -- Converte para a direção reta mecânica pura
                     if diffX == 0 and diffY == -1 then direcao = 0     
                     elseif diffX == 1 and diffY == 0 then direcao = 1    
                     elseif diffX == 0 and diffY == 1 then direcao = 2     
@@ -3217,9 +3216,8 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
                     elseif diffX == -1 and diffY == 1 then direcao = 2 end
 
                     if direcao ~= 8 then
-                        -- CORREÇÃO DEFINITIVA: Reescreve a tabela interna do waypoint temporariamente.
-                        -- Faz o bot achar que o objetivo final é onde o seu corpo já está parado.
-                        -- Distância vira zero, o walking.lua desativa as voltas e o walk(direcao) te desce liso!
+                        -- BLINDAGEM DE REDE: Altera a coordenada antes e joga um micro-congelamento.
+                        -- Se houver lag, o bot é obrigado a esperar o pacote do passo reto responder.
                         waypointPos.x = posAtual.x
                         waypointPos.y = posAtual.y
                         
@@ -3233,8 +3231,9 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
                         if type(CaveBot.nextWaypoint) == "function" then CaveBot.nextWaypoint()
                         elseif type(CaveBot.nextAction) == "function" then CaveBot.nextAction() end
 
+                        -- Aumentado para 450ms apenas na quina da escada para segurar oscilações de ping
                         if type(CaveBot.setWalkingDelay) == "function" then
-                            CaveBot.setWalkingDelay(400)
+                            CaveBot.setWalkingDelay(450)
                         end
                         return true
                     end
@@ -3310,7 +3309,7 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
             return oldRegisterAction(name, color, newCallback)
         end
     end
-    print("[Loader] CaveBot otimizado com Sucesso.")
+    print("[Loader] CaveBot otimizado com sucesso.")
 end
 
 
