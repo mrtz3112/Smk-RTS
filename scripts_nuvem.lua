@@ -812,7 +812,7 @@ local amountOfMonsters = 2
 
 local indexArea, indexSingle = 1, 1
 
-combo = macro(100, "Smart Cast", function()
+combo = macro(10, "Smart Cast", function()
     if not g_game.isOnline() or not g_game.isAttacking() then return end     
     
     local target = g_game.getAttackingCreature()
@@ -2960,45 +2960,40 @@ local isBossGuild = function(creatureName)
     return creatureName:lower():find("guild boss", 1, true) ~= nil
 end
 
-local isMonsterGluedToOtherPlayer = function(monster)
-    if isTrainerMonster(monster:getName()) or isBossGuild(monster:getName()) then return false end
-    local localPlayer = g_game.getLocalPlayer()
-    if not localPlayer then return false end
-    local myId = localPlayer:getId()
-    local monsterPos = monster:getPosition()
-    if not monsterPos then return false end
-    
-    local spectators = g_map.getSpectators(monsterPos, false)
-    for _, spec in ipairs(spectators) do
-        if spec:isPlayer() and spec:getId() ~= myId then
-            local pPos = spec:getPosition()
-            if pPos then
-                if math.abs(monsterPos.x - pPos.x) <= 1 and math.abs(monsterPos.y - pPos.y) <= 1 then
-                    return true
-                end
-            end
-        end
-    end
-    return false
-end
-
 if TargetBot and TargetBot.Creature and TargetBot.Creature.calculateParams then
     local originalCalculateParams = TargetBot.Creature.calculateParams
     TargetBot.Creature.calculateParams = function(creature, path)
         local params = originalCalculateParams(creature, path)
         
-        -- Garante que 'params' exista antes de qualquer modificação para evitar erros de indexação
         if params and type(params) == "table" and creature:isMonster() then
             local localPlayer = g_game.getLocalPlayer()
             if localPlayer then
-                -- MODIFICAÇÃO PRINCIPAL: Se o jogador estiver em PARTY, ignora o Anti-KS e ataca o monstro
+                -- 1. BYPASS DE PARTY: Se estiver em grupo, libera na hora (0ms de lag)
                 if localPlayer:isPartyMember() then
                     return params
                 end
 
                 local myId = localPlayer:getId()
+                local posAtual = localPlayer:getPosition()
+                local creaturePos = creature:getPosition()
+                local playerTarget = g_game.getAttackingCreature()
                 
-                -- Captura avançada de Target
+                -- 2. BYPASS DE ALVO SELECIONADO: Se for o seu alvo vermelho, ignora o Anti-KS
+                if playerTarget and playerTarget:getId() == creature:getId() then
+                    return params
+                end
+
+                -- 3. BYPASS DE PROXIMIDADE RÍGIDA (ANTI-LAG MASTER): Se o monstro estiver em um raio 
+                -- de até 3 quadrados de você, assume que o mob é seu e libera o CaveBot sem checar mais nada.
+                if posAtual and creaturePos and posAtual.z == creaturePos.z then
+                    local distX = math.abs(posAtual.x - creaturePos.x)
+                    local distY = math.abs(posAtual.y - creaturePos.y)
+                    if distX <= 3 and distY <= 3 then
+                        return params
+                    end
+                end
+                
+                -- 4. CAPTURA SEGURA DE ALVO DO MONSTRO
                 local mTargetId = 0
                 if type(creature.getTargetId) == "function" then
                     mTargetId = creature:getTargetId() or 0
@@ -3009,23 +3004,29 @@ if TargetBot and TargetBot.Creature and TargetBot.Creature.calculateParams then
                     if tgt then mTargetId = tgt:getId() end
                 end
                 
+                -- Se o monstro já está focado em você, ignora o resto
+                if mTargetId == myId then
+                    return params
+                end
+                
+                -- 5. SÓ APLICA ANTI-KS SE O MONSTRO ESTIVER EXPLICITAMENTE BATENDO EM OUTRO JOGADOR
                 local cName = creature:getName()
                 if not isTrainerMonster(cName) and not isBossGuild(cName) then
-                    -- Se o monstro tem como alvo outro jogador OU está colado em outro jogador
-                    if (mTargetId > 0 and mTargetId ~= myId) or isMonsterGluedToOtherPlayer(creature) then
-                        -- Modifica a tabela interna em vez de retornar nil
-                        params.priority = -999999  -- Prioridade extremamente negativa força o descarte
-                        params.invalid = true      -- Sinaliza invalidez para motores que aceitam essa flag
+                    -- Se o monstro tem como alvo outro jogador (ID válido e diferente do seu)
+                    if mTargetId > 0 and mTargetId ~= myId then
+                        params.priority = -999999  
+                        params.invalid = true      
                     end
                 end
             end
         end
         
-        -- Sempre retorna a tabela params original (mesmo que modificada) para não quebrar a linha 60 do target.lua
         return params
     end
     print("[Loader] Anti KS injetado com sucesso.")
 end
+
+
 
 -- ----------------------------------------------------------------------------
 -- [3/5] REGRAS DE PRIORIDADE E STOP PARA ELITES VIVOS (Filtra Corpos)
@@ -3134,9 +3135,7 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
     if type(schedule) == "function" then
         local oldSchedule = schedule
         schedule = function(time, callback)
-            if time == 3000 then
-                return oldSchedule(500, callback) 
-            end
+            if time == 3000 then return oldSchedule(500, callback) end
             return oldSchedule(time, callback)
         end
     end
@@ -3153,83 +3152,89 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
         local posAtual = player:getPosition()
         local agora = now or (os.clock() * 1000)
 
-        -- 1. DETECTOR E AMORTECEDOR DE TROCA DE ANDAR
+        -- DETECTOR SAUDÁVEL DE MUDANÇA DE ANDAR (ZEBRA AS VOLTAS AO MUDAR O EIXO Z)
         if posAtual.z ~= ultimoAndarZ then
             ultimoAndarZ = posAtual.z
-            tempoEsperaEscada = agora + 250 -- Apenas 300ms para o novo mapa carregar (Fim da lentidão)
+            tempoEsperaEscada = agora + 400 
             
             if type(CaveBot.resetWalking) == "function" then CaveBot.resetWalking() end
             CaveBot.walkPath = {}
+            lastKnownPathCount = 0
             if type(CaveBot.stop) == "function" then CaveBot.stop() end
+            
+            if CaveBot.Actions and type(CaveBot.Actions.clear) == "function" then CaveBot.Actions.clear() end
+            if CaveBot.clearQueue and type(CaveBot.clearQueue) == "function" then CaveBot.clearQueue() end
+            
+            if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = agora + 600 end
+            if CaveBot.macro and type(CaveBot.macro) == "table" then CaveBot.macro.delay = agora + 600 end
+            
+            if type(CaveBot.nextWaypoint) == "function" then CaveBot.nextWaypoint()
+            elseif type(CaveBot.nextAction) == "function" then CaveBot.nextAction() end
+            return true
         end
 
-        if agora < tempoEsperaEscada then
-            return true -- Segura o frame de forma limpa enquanto muda de andar
-        end
+        if agora < tempoEsperaEscada then return true end
 
         -- ====================================================================
-        -- INTERCEPTADOR DE ESCADAS ADJACENTES POR COORDENADAS REAIS DO MAPA
+        -- INTERCEPTADOR POR MANIPULAÇÃO DE ALVO FALSO (MATA O RECALCULO DE ROTA)
         -- ====================================================================
         local currentAction = CaveBot.action or CaveBot.currentAction
         local waypointPos = nil
         
-        if currentAction and type(currentAction) == "table" then
+        if currentAction and type(currentAction) == "table" then 
             waypointPos = currentAction.position or currentAction.pos
-        elseif CaveBot.currentNode and type(CaveBot.currentNode) == "table" then
-            waypointPos = CaveBot.currentNode.position or CaveBot.currentNode.pos
+        elseif CaveBot.currentNode and type(CaveBot.currentNode) == "table" then 
+            waypointPos = CaveBot.currentNode.position or CaveBot.currentNode.pos 
         end
 
-        -- Se houver um destino ativo mapeado no mesmo andar do jogador
         if waypointPos and waypointPos.z == posAtual.z then
             local distX = math.abs(posAtual.x - waypointPos.x)
             local distY = math.abs(posAtual.y - waypointPos.y)
             
-            -- Se você estiver a 1 quadrado de distância do bueiro/escada final
+            -- Só age se estiver colado a exatamente 1 quadrado do bueiro/escada
             if distX <= 1 and distY <= 1 then
                 local tile = g_map.getTile(waypointPos)
                 local ehEscada = false
-                if tile then
+                if tile then 
                     ehEscada = (type(tile.isStairs) == "function" and tile:isStairs()) 
-                                or (type(tile.isLadder) == "function" and tile:isLadder())
-                                or (type(tile.isDownUp) == "function" and tile:isDownUp())
+                                or (type(tile.isLadder) == "function" and tile:isLadder()) 
+                                or (type(tile.isDownUp) == "function" and tile:isDownUp()) 
                 end
 
-                -- Se for mecanicamente um ponto de transição ou a Action gravada pelo recorder
                 if ehEscada or (currentAction and (currentAction.type == "use" or currentAction.type == "goto")) then
-                    
                     local diffX = waypointPos.x - posAtual.x
                     local diffY = waypointPos.y - posAtual.y
                     local direcao = 8
 
-                    -- Converte para a direção reta exata para evitar diagonais na quina
-                    if diffX == 0 and diffY == -1 then direcao = 0     -- North
-                    elseif diffX == 1 and diffY == 0 then direcao = 1    -- East
-                    elseif diffX == 0 and diffY == 1 then direcao = 2     -- South
-                    elseif diffX == -1 and diffY == 0 then direcao = 3    -- West
+                    -- Converte para a direção reta mecânica pura
+                    if diffX == 0 and diffY == -1 then direcao = 0     
+                    elseif diffX == 1 and diffY == 0 then direcao = 1    
+                    elseif diffX == 0 and diffY == 1 then direcao = 2     
+                    elseif diffX == -1 and diffY == 0 then direcao = 3    
                     elseif diffX == 1 and diffY == -1 then direcao = 0   
                     elseif diffX == -1 and diffY == -1 then direcao = 0  
                     elseif diffX == 1 and diffY == 1 then direcao = 2    
-                    elseif diffX == -1 and diffY == 1 then direcao = 2   
-                    end
+                    elseif diffX == -1 and diffY == 1 then direcao = 2 end
 
                     if direcao ~= 8 then
-                        -- Força a limpeza de passos nativos para o bot não tentar dar passos falsos
+                        -- CORREÇÃO DEFINITIVA: Reescreve a tabela interna do waypoint temporariamente.
+                        -- Faz o bot achar que o objetivo final é onde o seu corpo já está parado.
+                        -- Distância vira zero, o walking.lua desativa as voltas e o walk(direcao) te desce liso!
+                        waypointPos.x = posAtual.x
+                        waypointPos.y = posAtual.y
+                        
                         if type(CaveBot.resetWalking) == "function" then CaveBot.resetWalking() end
                         CaveBot.walkPath = {}
+                        lastKnownPathCount = 0
+                        if type(CaveBot.stop) == "function" then CaveBot.stop() end
 
-                        -- Injeta o passo reto direto através do comando automatizado de caminhada
                         g_game.walk(direcao, true)
-
-                        -- Avisa o bot para avançar e esquecer este node
-                        if type(CaveBot.nextWaypoint) == "function" then
-                            CaveBot.nextWaypoint()
-                        elseif type(CaveBot.nextAction) == "function" then
-                            CaveBot.nextAction()
-                        end
                         
-                        -- Pequeno delay de recarga mecânica (150ms) apenas para o frame atual não duplicar
+                        if type(CaveBot.nextWaypoint) == "function" then CaveBot.nextWaypoint()
+                        elseif type(CaveBot.nextAction) == "function" then CaveBot.nextAction() end
+
                         if type(CaveBot.setWalkingDelay) == "function" then
-                            CaveBot.setWalkingDelay(150)
+                            CaveBot.setWalkingDelay(400)
                         end
                         return true
                     end
@@ -3237,28 +3242,22 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
             end
         end
 
-        -- ====================================================================
-        -- CONTINUAÇÃO DA SUA LÓGICA ORIGINAL FLUIDA (MATOU A SAMBADA NOS CORREDORES)
-        -- ====================================================================
+        -- LÓGICA DE CORRIDA E SEGUIDOR DE WAYPOINTS ORIGINAL INTACTA
         if storage and (storage.clearing or storage.blockMonster) then
-            if cavebotMacro and type(cavebotMacro) == "table" then
-                cavebotMacro.delay = agora + 100 
-            end
+            if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = agora + 100 end
             return oldDoWalking()
         end
         
         if player:isWalking() then
             if CaveBot.walkPath and #CaveBot.walkPath == 0 and lastKnownPathCount > 0 then
-                if cavebotMacro and type(cavebotMacro) == "table" then
-                    cavebotMacro.delay = agora + 100
-                end
+                lastKnownPathCount = 0
+                if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = agora + 10 end
                 return true
             end
         end
         
-        if CaveBot.walkPath then
-            lastKnownPathCount = #CaveBot.walkPath
-        end
+        if CaveBot.walkPath then lastKnownPathCount = #CaveBot.walkPath
+        else lastKnownPathCount = 0 end
         
         if CaveBot.walkingDelay then CaveBot.walkingDelay = 0 end
         if type(CaveBot.setWalkingDelay) == "function" then CaveBot.setWalkingDelay(0) end
@@ -3267,14 +3266,9 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
         if isWalking then
             local safeDelay = 100 
             local currentDelay = (cavebotMacro and cavebotMacro.delay) or (CaveBot.macro and CaveBot.macro.delay) or 0
-            if currentDelay - agora >= 500 then
-                return isWalking
-            end
-            if cavebotMacro and type(cavebotMacro) == "table" then
-                cavebotMacro.delay = agora + safeDelay
-            elseif CaveBot.macro and type(CaveBot.macro) == "table" then
-                CaveBot.macro.delay = agora + safeDelay
-            end
+            if currentDelay - agora >= 500 then return isWalking end
+            if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = agora + safeDelay
+            elseif CaveBot.macro and type(CaveBot.macro) == "table" then CaveBot.macro.delay = agora + safeDelay end
         end
         return isWalking
     end
@@ -3289,9 +3283,7 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
                 elseif CaveBot.macro and type(CaveBot.macro) == "table" then
                     local cNow = now or (os.clock() * 1000)
                     cavebotMacro.delay = math.max(CaveBot.macro.delay or 0, cNow + value)
-                else
-                    return oldCaveBotDelay(value)
-                end
+                else return oldCaveBotDelay(value) end
                 return
             end
             return oldCaveBotDelay(50)
@@ -3318,12 +3310,8 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
             return oldRegisterAction(name, color, newCallback)
         end
     end
-    print("[Loader] CaveBot Otimizado com Sucesso.")
+    print("[Loader] CaveBot otimizado com Sucesso.")
 end
-
-
-
-
 
 
 
