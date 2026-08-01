@@ -3029,7 +3029,7 @@ end
 
 
 -- ----------------------------------------------------------------------------
--- [3/5] REGRAS DE PRIORIDADE E STOP PARA ELITES VIVOS (Filtra Corpos)
+-- [3/4] REGRAS DE PRIORIDADE E STOP PARA ELITES VIVOS (Filtra Corpos)
 -- ----------------------------------------------------------------------------
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 if TargetBot and TargetBot.Creature then
@@ -3046,13 +3046,22 @@ if TargetBot and TargetBot.Creature then
       end
 
       if isSpecial then
-        priority = 1000 
+        priority = 10000 -- Sobe a base dos especiais para ficar acima de qualquer monstro normal
+        
+        -- Especial mais próximo continua sendo prioridade máxima
+        local path_length = #path
+        if path_length == 1 then priority = priority + 5000
+        elseif path_length <= 3 then priority = priority + 2000 end
+        
+        -- Desempate entre especiais pela menor vida
+        local hpEspecial = creature:getHealthPercent() or 100
+        priority = priority + (100 - hpEspecial) * 10
+
         if config.stopForElites then
           local localPlayer = g_game.getLocalPlayer()
           local playerPos = localPlayer:getPosition()
           local specialCount = 0
           
-          -- Puxa todas as criaturas visíveis no andar atual
           local spectators = g_map.getSpectators(playerPos, false)
           local maxDist = config.maxDistance or 7
           
@@ -3060,7 +3069,6 @@ if TargetBot and TargetBot.Creature then
             if spec:isMonster() and spec:getHealthPercent() > 0 then
               local specPos = spec:getPosition()
               
-              -- Validação matemática de distância (X e Y no mesmo andar Z)
               if specPos and specPos.z == playerPos.z then
                 local distX = math.abs(playerPos.x - specPos.x)
                 local distY = math.abs(playerPos.y - specPos.y)
@@ -3070,7 +3078,6 @@ if TargetBot and TargetBot.Creature then
                   
                   for _, name in ipairs(specialMonsters) do
                     if string.find(specName, name, 1, true) then
-                      -- Removeu qualquer trava de targetId para contar TODO elite na tela sem exceção
                       specialCount = specialCount + 1
                       break 
                     end
@@ -3080,7 +3087,6 @@ if TargetBot and TargetBot.Creature then
             end
           end
           
-          -- Compara com o valor exato vindo da janela do bot
           local minToStop = config.minElitesToStop or 1
           if specialCount >= minToStop then
             if CaveBot and type(CaveBot.delay) == "function" then
@@ -3093,36 +3099,47 @@ if TargetBot and TargetBot.Creature then
         return priority 
       end
 
-      -- Lógica padrão para monstros normais
-      if g_game.getAttackingCreature() == creature then
-        priority = priority + 1
-      end
+      -- ====================================================================
+      -- LÓGICA DE MONSTROS NORMAS: DISTÂNCIA MÁXIMA + MENOR VIDA DESEMPATE
+      -- ====================================================================
       if #path > config.maxDistance then
         return priority
       end
+      
       priority = priority + (config.priority or 1)
+      
+      -- 1. REGRA SUPREMA: Bônus massivos por proximidade (A distância manda no target)
       local path_length = #path
       if path_length == 1 then
-        priority = priority + 3
-      elseif path_length <= 3 then
-        priority = priority + 1
+        priority = priority + 2000   -- Colado em você (Prioridade Total)
+      elseif path_length == 2 then
+        priority = priority + 1000   -- A 2 blocos de distância
+      elseif path_length == 3 then
+        priority = priority + 500    -- A 3 blocos de distância
+      elseif path_length <= 5 then
+        priority = priority + 200
       end
-      if config.chase and creature:getHealthPercent() < 30 then
-        priority = priority + 5
-      elseif creature:getHealthPercent() < 20 then
-        priority = priority + 2.5
-      elseif creature:getHealthPercent() < 40 then
-        priority = priority + 1.5
-      elseif creature:getHealthPercent() < 60 then
-        priority = priority + 0.5
-      elseif creature:getHealthPercent() < 80 then
-        priority = priority + 0.2
+      
+      -- 2. TRAVA DE ALVO ATUAL: Impede o bot de trocar de monstro na mesma distância
+      if g_game.getAttackingCreature() == creature then
+        priority = priority + 150
       end
+      
+      -- 3. CRITÉRIO DE DESEMPATE (MENOR VIDA): Se tiver dois monstros na mesma distância,
+      -- o bônus de vida define o alvo e foca no que vai morrer primeiro.
+      local currentHealth = creature:getHealthPercent() or 100
+      if currentHealth > 0 then
+        local healthBonus = (100 - currentHealth) * 2 -- Multiplicador equilibrado para não quebrar a regra de distância
+        priority = priority + healthBonus
+      end
+      
       return priority
     end
 end
 
---NewCaveBot
+-- ----------------------------------------------------------------------------
+-- [4/4] CAVEBOT OTIMIZADO
+-- ----------------------------------------------------------------------------
 if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and CaveBot.Actions then
     -- 1. FORÇA AS CONFIGURAÇÕES DE PASSO FLUIDO NO MOTOR NATIVO
     if type(CaveBot.Config.set) == "function" then
