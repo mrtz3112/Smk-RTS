@@ -3124,83 +3124,88 @@ end
 -- ----------------------------------------------------------------------------
 -- [4/5] INTERCEPTAÇÃO CAVEBOT: MOTOR DE RAIO E APROXIMAÇÃO DE ESCADA (V4)
 -- ----------------------------------------------------------------------------
-if CaveBot and type(CaveBot.walkTo) == "function" then
-    -- Salva as funções originais para usar em caminhos normais
-    local originalWalkTo = CaveBot.walkTo
+if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and CaveBot.Actions then
+    if type(CaveBot.Config.set) == "function" then
+        CaveBot.Config.set("walkDelay", 250)       
+        CaveBot.Config.set("ping", 250)            
+        CaveBot.Config.set("mapClickDelay", 250)   
+    end
+    
+    if type(schedule) == "function" then
+        local oldSchedule = schedule
+        schedule = function(time, callback)
+            if time == 3000 then
+                return oldSchedule(500, callback) 
+            end
+            return oldSchedule(time, callback)
+        end
+    end
 
-    -- SUBSTITUIÇÃO DA FUNÇÃO DO WALKING.LUA DIRETO PELO LOADER
-    CaveBot.walkTo = function(dest, maxDist, params)
+    local oldDoWalking = CaveBot.doWalking
+    local lastKnownPathCount = 0
+    local ultimoAndarZ = g_game.getLocalPlayer() and g_game.getLocalPlayer():getPosition().z or 7
+    local tempoEsperaEscada = 0
+    
+    CaveBot.doWalking = function()
         local player = g_game.getLocalPlayer()
-        if not player then return originalWalkTo(dest, maxDist, params) end
+        if not player then return oldDoWalking() end
         
         local posAtual = player:getPosition()
+        local agora = now or (os.clock() * 1000)
 
-        -- ====================================================================
-        -- SENSOR DE COMBATE CORRIGIDO
-        -- ====================================================================
-        local atacandoAlvo = g_game.getAttackingCreature()
-        local estaEmCombate = false
-
-        if atacandoAlvo then
-            estaEmCombate = true
-        else
-            local spectators = g_map.getSpectators(posAtual, false)
-            for _, spec in ipairs(spectators) do
-                if spec:isMonster() and spec:getHealthPercent() > 0 then
-                    local name = spec:getName():lower()
-                    if not name:find("trainer") and not name:find("guild boss") then
-                        local mPos = spec:getPosition()
-                        if mPos and mPos.z == posAtual.z then
-                            local mDist = math.max(math.abs(posAtual.x - mPos.x), math.abs(posAtual.y - mPos.y))
-                            
-                            local mTargetId = 0
-                            if type(spec.getTargetId) == "function" then
-                                mTargetId = spec:getTargetId() or 0
-                            elseif spec.targetId then
-                                mTargetId = spec.targetId
-                            elseif type(spec.getTarget) == "function" then
-                                local tgt = spec:getTarget()
-                                if tgt then mTargetId = tgt:getId() end
-                            end
-
-                            if mDist <= 4 or mTargetId == player:getId() then
-                                estaEmCombate = true
-                                break
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        if estaEmCombate then
-            return originalWalkTo(dest, maxDist, params)
-        end
-
-        -- INTERCEPTADOR CIRÚRGICO DE ESCADAS E BUEIROS (ÁREA LIMPA)
-        if dest and dest.z == posAtual.z then
-            local distX = math.abs(posAtual.x - dest.x)
-            local distY = math.abs(posAtual.y - dest.y)
+        -- 1. DETECTOR E AMORTECEDOR DE TROCA DE ANDAR
+        if posAtual.z ~= ultimoAndarZ then
+            ultimoAndarZ = posAtual.z
+            tempoEsperaEscada = agora + 250 -- Apenas 300ms para o novo mapa carregar (Fim da lentidão)
             
-            if distX <= 1 and distY <= 1 then
-                local tile = g_map.getTile(dest)
-                local ehEscadaMecanica = false
-                
-                if tile then
-                    ehEscadaMecanica = (type(tile.isStairs) == "function" and tile:isStairs()) 
-                                        or (type(tile.isLadder) == "function" and tile:isLadder())
-                                        or (type(tile.isDownUp) == "function" and tile:isDownUp())
-                end
-                
-                if ehEscadaMecanica or (distX == 1 or distY == 1) then
-                    local direcao = 8 
-                    local diffX = dest.x - posAtual.x
-                    local diffY = dest.y - posAtual.y
+            if type(CaveBot.resetWalking) == "function" then CaveBot.resetWalking() end
+            CaveBot.walkPath = {}
+            if type(CaveBot.stop) == "function" then CaveBot.stop() end
+        end
 
-                    if diffX == 0 and diffY == -1 then direcao = 0     -- Norte puro
-                    elseif diffX == 1 and diffY == 0 then direcao = 1    -- Leste puro
-                    elseif diffX == 0 and diffY == 1 then direcao = 2     -- Sul puro
-                    elseif diffX == -1 and diffY == 0 then direcao = 3    -- Oeste puro
+        if agora < tempoEsperaEscada then
+            return true -- Segura o frame de forma limpa enquanto muda de andar
+        end
+
+        -- ====================================================================
+        -- INTERCEPTADOR DE ESCADAS ADJACENTES POR COORDENADAS REAIS DO MAPA
+        -- ====================================================================
+        local currentAction = CaveBot.action or CaveBot.currentAction
+        local waypointPos = nil
+        
+        if currentAction and type(currentAction) == "table" then
+            waypointPos = currentAction.position or currentAction.pos
+        elseif CaveBot.currentNode and type(CaveBot.currentNode) == "table" then
+            waypointPos = CaveBot.currentNode.position or CaveBot.currentNode.pos
+        end
+
+        -- Se houver um destino ativo mapeado no mesmo andar do jogador
+        if waypointPos and waypointPos.z == posAtual.z then
+            local distX = math.abs(posAtual.x - waypointPos.x)
+            local distY = math.abs(posAtual.y - waypointPos.y)
+            
+            -- Se você estiver a 1 quadrado de distância do bueiro/escada final
+            if distX <= 1 and distY <= 1 then
+                local tile = g_map.getTile(waypointPos)
+                local ehEscada = false
+                if tile then
+                    ehEscada = (type(tile.isStairs) == "function" and tile:isStairs()) 
+                                or (type(tile.isLadder) == "function" and tile:isLadder())
+                                or (type(tile.isDownUp) == "function" and tile:isDownUp())
+                end
+
+                -- Se for mecanicamente um ponto de transição ou a Action gravada pelo recorder
+                if ehEscada or (currentAction and (currentAction.type == "use" or currentAction.type == "goto")) then
+                    
+                    local diffX = waypointPos.x - posAtual.x
+                    local diffY = waypointPos.y - posAtual.y
+                    local direcao = 8
+
+                    -- Converte para a direção reta exata para evitar diagonais na quina
+                    if diffX == 0 and diffY == -1 then direcao = 0     -- North
+                    elseif diffX == 1 and diffY == 0 then direcao = 1    -- East
+                    elseif diffX == 0 and diffY == 1 then direcao = 2     -- South
+                    elseif diffX == -1 and diffY == 0 then direcao = 3    -- West
                     elseif diffX == 1 and diffY == -1 then direcao = 0   
                     elseif diffX == -1 and diffY == -1 then direcao = 0  
                     elseif diffX == 1 and diffY == 1 then direcao = 2    
@@ -3208,60 +3213,72 @@ if CaveBot and type(CaveBot.walkTo) == "function" then
                     end
 
                     if direcao ~= 8 then
-                        -- CORREÇÃO PRINCIPAL: Salva o estado atual do bot e simula um desligamento lógico falso
-                        -- Isso congela instantaneamente as ações do arquivo walking.lua original
-                        local originalIsOn = CaveBot.isOn
-                        CaveBot.isOn = function() return false end
-                        
-                        -- Limpa buffers de rota nativos agressivamente
+                        -- Força a limpeza de passos nativos para o bot não tentar dar passos falsos
                         if type(CaveBot.resetWalking) == "function" then CaveBot.resetWalking() end
                         CaveBot.walkPath = {}
-                        CaveBot.expectedDirs = {}
-                        if type(CaveBot.stop) == "function" then CaveBot.stop() end
 
-                        -- Dá o passo mecânico reto puro pelo teclado
-                        g_game.walk(direcao, false)
+                        -- Injeta o passo reto direto através do comando automatizado de caminhada
+                        g_game.walk(direcao, true)
 
-                        -- Restaura o motor original do bot e pula o waypoint após a mudança de andar (200ms)
-                        if type(scheduleEvent) == "function" then
-                            scheduleEvent(function()
-                                -- Restaura a função original de checar se o bot está ligado
-                                CaveBot.isOn = originalIsOn
-                                
-                                -- Pula para o próximo Waypoint
-                                if type(CaveBot.nextWaypoint) == "function" then
-                                    CaveBot.nextWaypoint()
-                                elseif type(CaveBot.nextAction) == "function" then
-                                    CaveBot.nextAction()
-                                end
-                            end, 200)
-                        else
-                            CaveBot.isOn = originalIsOn
-                            if type(CaveBot.nextWaypoint) == "function" then CaveBot.nextWaypoint() end
+                        -- Avisa o bot para avançar e esquecer este node
+                        if type(CaveBot.nextWaypoint) == "function" then
+                            CaveBot.nextWaypoint()
+                        elseif type(CaveBot.nextAction) == "function" then
+                            CaveBot.nextAction()
                         end
                         
-                        -- Aplica um delay geral para o motor não tentar recalcular nada no frame atual
-                        CaveBot.delay(400)
+                        -- Pequeno delay de recarga mecânica (150ms) apenas para o frame atual não duplicar
+                        if type(CaveBot.setWalkingDelay) == "function" then
+                            CaveBot.setWalkingDelay(150)
+                        end
                         return true
                     end
                 end
             end
         end
 
-        return originalWalkTo(dest, maxDist, params)
+        -- ====================================================================
+        -- CONTINUAÇÃO DA SUA LÓGICA ORIGINAL FLUIDA (MATOU A SAMBADA NOS CORREDORES)
+        -- ====================================================================
+        if storage and (storage.clearing or storage.blockMonster) then
+            if cavebotMacro and type(cavebotMacro) == "table" then
+                cavebotMacro.delay = agora + 100 
+            end
+            return oldDoWalking()
+        end
+        
+        if player:isWalking() then
+            if CaveBot.walkPath and #CaveBot.walkPath == 0 and lastKnownPathCount > 0 then
+                if cavebotMacro and type(cavebotMacro) == "table" then
+                    cavebotMacro.delay = agora + 100
+                end
+                return true
+            end
+        end
+        
+        if CaveBot.walkPath then
+            lastKnownPathCount = #CaveBot.walkPath
+        end
+        
+        if CaveBot.walkingDelay then CaveBot.walkingDelay = 0 end
+        if type(CaveBot.setWalkingDelay) == "function" then CaveBot.setWalkingDelay(0) end
+        
+        local isWalking = oldDoWalking()
+        if isWalking then
+            local safeDelay = 100 
+            local currentDelay = (cavebotMacro and cavebotMacro.delay) or (CaveBot.macro and CaveBot.macro.delay) or 0
+            if currentDelay - agora >= 500 then
+                return isWalking
+            end
+            if cavebotMacro and type(cavebotMacro) == "table" then
+                cavebotMacro.delay = agora + safeDelay
+            elseif CaveBot.macro and type(CaveBot.macro) == "table" then
+                CaveBot.macro.delay = agora + safeDelay
+            end
+        end
+        return isWalking
     end
-end
 
--- ====================================================================
--- PRESERVAÇÃO INTEGRAL DA OTIMIZAÇÃO DE ATRASOS DO SCRIPT ORIGINAL
--- ====================================================================
-if CaveBot and CaveBot.Config and CaveBot.Actions then
-    if type(CaveBot.Config.set) == "function" then
-        CaveBot.Config.set("walkDelay", 500)       
-        CaveBot.Config.set("ping", 500)            
-        CaveBot.Config.set("mapClickDelay", 500)   
-    end
-    
     local oldCaveBotDelay = CaveBot.delay
     if oldCaveBotDelay then
         CaveBot.delay = function(value)
@@ -3301,8 +3318,10 @@ if CaveBot and CaveBot.Config and CaveBot.Actions then
             return oldRegisterAction(name, color, newCallback)
         end
     end
-    print("[Loader] CaveBot otimizado com sucesso.")
+    print("[Loader] CaveBot Otimizado com Sucesso.")
 end
+
+
 
 
 
