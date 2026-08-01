@@ -1,75 +1,76 @@
 -- ====================================================================
--- HIGIENIZAÇÃO DE STORAGE COM WHITELIST 100% AUTOMÁTICA VIA LEITURA DE TEXTO
+-- SISTEMA DE LIMPEZA INTELIGENTE DE STORAGE (ENTRADA E SALVAMENTO BLINDADOS)
 -- ====================================================================
-local originalConfigSetup = nil
 if type(Config) == "table" and type(Config.setup) == "function" then
-    originalConfigSetup = Config.setup
+    local originalConfigSetup = Config.setup
     
     Config.setup = function(configName, widget, typeFormat, callback, ...)
-        -- 1. CAPTURA SE É UM ARQUIVO DO BOT (TARGET/CAVEBOT): Se for, ignora a limpeza para proteger as listas
         local cName = tostring(configName or ""):lower()
         local ehArquivoDoBot = cName:find("target") or cName:find("cave") or cName:find("creature")
 
+        -- 1. DETECTA QUAIS CHAVES EXISTEM TEXTUALMENTE NO LOADER.LUA PARA MONTAR A WHITELIST
+        local chavesPermitidasLoader = {}
         if not ehArquivoDoBot then
-            -- Tabela que guardará a lista de permissões gerada dinamicamente
-            local chavesPermitidasLoader = {}
-
-            -- 2. LEITURA DINÂMICA DO SEU ARQUIVO LOADER.LUA
-            -- Procura e abre o seu arquivo loader para ler os scripts ativos e inativos
             pcall(function()
                 local file = io.open("loader.lua", "r") or io.open("modules/client_macros/loader.lua", "r")
                 if file then
-                    local content = file:read("*a") -- Lê o arquivo texto inteiro
+                    local content = file:read("*a")
                     file:close()
-
-                    -- Expressão regular (Regex) para capturar tudo o que parece uma chave de storage:
-                    -- Padrão A: Chaves entre aspas simples ou duplas dentro de tabelas ou checagens (ex: ["minhaStorage"] ou "minhaStorage")
-                    for word in content:gmatch('["\']([%a%d_%s%-]+)["\']') do
-                        chavesPermitidasLoader[word] = true
-                    end
-                    
-                    -- Padrão B: Chaves brutas com pontos em variáveis ou tabelas de storage (ex: storage.minhaChave)
-                    for word in content:gmatch('%.([%a%d_]+)') do
-                        chavesPermitidasLoader[word] = true
-                    end
+                    for word in content:gmatch('["\']([%a%d_%s%-]+)["\']') do chavesPermitidasLoader[word] = true end
+                    for word in content:gmatch('%.([%a%d_]+)') do chavesPermitidasLoader[word] = true end
                 end
             end)
-
-            -- Chaves estruturais globais que o próprio bot cria nativamente e não podem ser apagadas
             chavesPermitidasLoader["alarms"] = true
             chavesPermitidasLoader["_macros"] = true
             chavesPermitidasLoader["_configs"] = true
             chavesPermitidasLoader["painelSalvo"] = true
             chavesPermitidasLoader["petItemCooldowns"] = true
-
-            -- 3. INTERCEPTAÇÃO E FILTRAGEM DO CARREGAMENTO DO JSON
-            local originalCallback = callback
-            local cleanCallback = function(name, enabled, data)
-                if data and type(data) == "table" then
-                    local chavesRemovidas = 0
-                    
-                    -- Varre todas as chaves carregadas do JSON do personagem atual
-                    for key, _ in pairs(data) do
-                        -- Se a chave existe no arquivo salvo do personagem, mas NÃO foi encontrada 
-                        -- em nenhum texto/linha (ativa ou inativa) do seu loader.lua, ela é limpa!
-                        if not chavesPermitidasLoader[key] then
-                            data[key] = nil
-                            chavesRemovidas = chavesRemovidas + 1
-                        end
-                    end
-                    
-                    if chavesRemovidas > 0 then
-                        print("[Auto Cleaner] Escaneamento concluído. Removidas " .. chavesRemovidas .. " chaves que não existem no loader.lua.")
-                    end
-                end
-                
-                return originalCallback(name, enabled, data)
-            end
-
-            return originalConfigSetup(configName, widget, typeFormat, cleanCallback, ...)
         end
 
-        return originalConfigSetup(configName, widget, typeFormat, callback, ...)
+        -- 2. GANCHO DE CARREGAMENTO (ENTRADA DO BOT)
+        local originalCallback = callback
+        local cleanCallback = function(name, enabled, data)
+            if not ehArquivoDoBot and data and type(data) == "table" then
+                local chavesRemovidas = 0
+                for key, _ in pairs(data) do
+                    if not chavesPermitidasLoader[key] then
+                        data[key] = nil
+                        chavesRemovidas = chavesRemovidas + 1
+                    end
+                end
+                if chavesRemovidas > 0 then
+                    print("[Cleaner] Escaneamento completo: Removidas " .. chavesRemovidas .. " chaves que não estão no seu loader.")
+                end
+            end
+            return originalCallback(name, enabled, data)
+        end
+
+        -- Executa o setup padrão obtendo o objeto de configuração que o bot gerou
+        local configObject = originalConfigSetup(configName, widget, typeFormat, cleanCallback, ...)
+
+        -- 3. TRAVA SUPREMA DE ENGENHARIA REVERSA: GANCHO NO SALVAMENTO (FIM DO LOG DE USERDATA)
+        if configObject and type(configObject.save) == "function" and not ehArquivoDoBot then
+            local originalSave = configObject.save
+            configObject.save = function(saveData, ...)
+                if saveData and type(saveData) == "table" then
+                    -- Função recursiva profunda para caçar e estripar qualquer 'userdata' ou função no JSON
+                    local function limparLixoPrimitivo(tabela)
+                        for k, v in pairs(tabela) do
+                            local t = type(v)
+                            if t == "userdata" or t == "function" or t == "thread" then
+                                tabela[k] = nil -- Deleta o lixo incompatível com JSON imediatamente
+                            elseif t == "table" then
+                                limparLixoPrimitivo(v) -- Entra em sub-tabelas (ex: alarmes, configs internas)
+                            end
+                        end
+                    end
+                    limparLixoPrimitivo(saveData)
+                end
+                return originalSave(saveData, ...)
+            end
+        end
+
+        return configObject
     end
     print("[Loader] Cleaner de storages obsoletas habilitado.")
 end
@@ -2898,10 +2899,10 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
     local player = g_game.getLocalPlayer()
     if player then lastZ = player:getPosition().z end
 
-    -- 1. CALIBRAÇÃO CRÍTICA: EQUILÍBRIO DE FLUIDEZ EM 40MS
+    -- 1. CALIBRAÇÃO CRÍTICA: CORRIDA EM 40MS COM PING ADAPTADO PARA GRANDES OSCILAÇÕES DE LAG
     if type(CaveBot.Config.set) == "function" then
-        CaveBot.Config.set("walkDelay", 40)         -- Passo firme e fluido a 40ms pela cave inteira
-        CaveBot.Config.set("ping", 50)              -- Resposta rápida de rede
+        CaveBot.Config.set("walkDelay", 40)         -- Passo fluido a 40ms pelas retas da cave
+        CaveBot.Config.set("ping", 1000)            -- Teto de 1000ms para absorver picos severos de lag do servidor
     end
 
     -- ====================================================================
@@ -2917,12 +2918,12 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
             -- Detectou mudança de andar (subiu ou desceu)
             if lastZ and currentZ ~= lastZ then
                 lastZ = currentZ
-                blockMovementUntil = cNow + 600 -- ALTERADO: Barreira de tempo de 600ms para carregar o mapa
+                blockMovementUntil = cNow + 500 -- ALTERADO: Barreira de tempo reduzida para 500ms pós-escada
                 return false -- Aborta o passo imediatamente no novo andar
             end
             lastZ = currentZ
 
-            -- Se ainda estiver dentro do tempo de bloqueio dos 600ms, impede o movimento
+            -- Se ainda estiver dentro do tempo de bloqueio dos 500ms, impede o movimento
             if cNow < blockMovementUntil then
                 return false
             end
@@ -2938,7 +2939,7 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
             if localPlayer then
                 local cNow = now or (os.clock() * 1000)
                 if cNow < blockMovementUntil then
-                    return oldSchedule(600, callback) -- Segura o agendador pelos 600ms da escada
+                    return oldSchedule(500, callback) -- Segura o agendador pelos 500ms da escada
                 end
             end
 
@@ -2950,7 +2951,7 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
         end
     end
 
-    -- 3. INTERCEPTADOR DO CAVEBOT DELAY (CONECTADO ÀS REGRAS DE 40MS E 600MS)
+    -- 3. INTERCEPTADOR DO CAVEBOT DELAY (CONECTADO ÀS REGRAS DE 40MS E 500MS)
     local oldCaveBotDelay = CaveBot.delay
     if oldCaveBotDelay then
         CaveBot.delay = function(value)
@@ -2962,15 +2963,15 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
                 if (lastZ and currentZ ~= lastZ) or cNow < blockMovementUntil then
                     if lastZ and currentZ ~= lastZ then
                         lastZ = currentZ
-                        blockMovementUntil = cNow + 600
+                        blockMovementUntil = cNow + 500
                     end
                     
                     if cavebotMacro and type(cavebotMacro) == "table" then
-                        cavebotMacro.delay = cNow + 600
+                        cavebotMacro.delay = cNow + 500
                     elseif CaveBot.macro and type(CaveBot.macro) == "table" then
-                        CaveBot.macro.delay = cNow + 600
+                        CaveBot.macro.delay = cNow + 500
                     else
-                        return oldCaveBotDelay(600)
+                        return oldCaveBotDelay(500)
                     end
                     return
                 end
@@ -3039,8 +3040,6 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
     end
     print("[Loader] CaveBot otimizado com sucesso.")
 end
-
-
 
 -- ----------------------------------------------------------------------------
 -- CUSTOMIZAÇÃO DO EDITOR DE CRIATURAS (TargetBot.Creature.edit)
