@@ -1,3 +1,79 @@
+-- ====================================================================
+-- HIGIENIZAÇÃO DE STORAGE COM WHITELIST 100% AUTOMÁTICA VIA LEITURA DE TEXTO
+-- ====================================================================
+local originalConfigSetup = nil
+if type(Config) == "table" and type(Config.setup) == "function" then
+    originalConfigSetup = Config.setup
+    
+    Config.setup = function(configName, widget, typeFormat, callback, ...)
+        -- 1. CAPTURA SE É UM ARQUIVO DO BOT (TARGET/CAVEBOT): Se for, ignora a limpeza para proteger as listas
+        local cName = tostring(configName or ""):lower()
+        local ehArquivoDoBot = cName:find("target") or cName:find("cave") or cName:find("creature")
+
+        if not ehArquivoDoBot then
+            -- Tabela que guardará a lista de permissões gerada dinamicamente
+            local chavesPermitidasLoader = {}
+
+            -- 2. LEITURA DINÂMICA DO SEU ARQUIVO LOADER.LUA
+            -- Procura e abre o seu arquivo loader para ler os scripts ativos e inativos
+            pcall(function()
+                local file = io.open("loader.lua", "r") or io.open("modules/client_macros/loader.lua", "r")
+                if file then
+                    local content = file:read("*a") -- Lê o arquivo texto inteiro
+                    file:close()
+
+                    -- Expressão regular (Regex) para capturar tudo o que parece uma chave de storage:
+                    -- Padrão A: Chaves entre aspas simples ou duplas dentro de tabelas ou checagens (ex: ["minhaStorage"] ou "minhaStorage")
+                    for word in content:gmatch('["\']([%a%d_%s%-]+)["\']') do
+                        chavesPermitidasLoader[word] = true
+                    end
+                    
+                    -- Padrão B: Chaves brutas com pontos em variáveis ou tabelas de storage (ex: storage.minhaChave)
+                    for word in content:gmatch('%.([%a%d_]+)') do
+                        chavesPermitidasLoader[word] = true
+                    end
+                end
+            end)
+
+            -- Chaves estruturais globais que o próprio bot cria nativamente e não podem ser apagadas
+            chavesPermitidasLoader["alarms"] = true
+            chavesPermitidasLoader["_macros"] = true
+            chavesPermitidasLoader["_configs"] = true
+            chavesPermitidasLoader["painelSalvo"] = true
+            chavesPermitidasLoader["petItemCooldowns"] = true
+
+            -- 3. INTERCEPTAÇÃO E FILTRAGEM DO CARREGAMENTO DO JSON
+            local originalCallback = callback
+            local cleanCallback = function(name, enabled, data)
+                if data and type(data) == "table" then
+                    local chavesRemovidas = 0
+                    
+                    -- Varre todas as chaves carregadas do JSON do personagem atual
+                    for key, _ in pairs(data) do
+                        -- Se a chave existe no arquivo salvo do personagem, mas NÃO foi encontrada 
+                        -- em nenhum texto/linha (ativa ou inativa) do seu loader.lua, ela é limpa!
+                        if not chavesPermitidasLoader[key] then
+                            data[key] = nil
+                            chavesRemovidas = chavesRemovidas + 1
+                        end
+                    end
+                    
+                    if chavesRemovidas > 0 then
+                        print("[Auto Cleaner] Escaneamento concluído. Removidas " .. chavesRemovidas .. " chaves que não existem no loader.lua.")
+                    end
+                end
+                
+                return originalCallback(name, enabled, data)
+            end
+
+            return originalConfigSetup(configName, widget, typeFormat, cleanCallback, ...)
+        end
+
+        return originalConfigSetup(configName, widget, typeFormat, callback, ...)
+    end
+    print("[Loader] Limpeza de storages obsoletas concluida com sucesso.")
+end
+
 setDefaultTab("Main")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("      Smk Custom: v4.1      "):setColor('#C39BD3')
@@ -739,7 +815,6 @@ macro(100, 'Revide PK', function()
             definirModoAtaque("balanced")
             
             definirSafeFightBox(true)       
-            if g_game.setChaseMode then pcall(function() g_game.setChaseMode(1) end) end
 
             botsDesligadosPeloPVP = true
         end
@@ -755,7 +830,6 @@ macro(100, 'Revide PK', function()
                 definirSafeFightBox(false)           
                 definirModoAtaque("offensive")
                 
-                if g_game.setChaseMode then pcall(function() g_game.setChaseMode(0) end) end
                 if CaveBot and CaveBot.setOn then CaveBot.setOn() end
                 if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
                 
@@ -764,6 +838,7 @@ macro(100, 'Revide PK', function()
         end
     end
 end)
+
 UI.Separator()
 UI.Button("Screen: +  Zoom", function() zoomIn() end)
 UI.Button("Screen: -  Zoom", function() zoomOut() end)
@@ -2817,68 +2892,103 @@ end)
 -- NOVO CAVEBOT
 -- ----------------------------------------------------------------------------
 if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and CaveBot.Actions then
-    -- VARIÁVEIS DE CONTROLE PARA ESCADAS (SEM LIMPEZA FORÇADA)
+    -- VARIÁVEIS DE CONTROLE ESTÁVEIS
     local lastZ = nil
+    local blockMovementUntil = 0 -- Guarda o tempo (timestamp) de até quando o bot está congelado
     local player = g_game.getLocalPlayer()
     if player then lastZ = player:getPosition().z end
 
-    -- 1. FORÇA PASSO FLUIDO DIRETO E SEGURO (SEM ALTERAR MAPCLICK PARA VALORES ABUSIVOS)
+    -- 1. CALIBRAÇÃO CRÍTICA: EQUILÍBRIO DE FLUIDEZ EM 40MS
     if type(CaveBot.Config.set) == "function" then
-        CaveBot.Config.set("walkDelay", 250)         -- Deixa o passo direcional (walk) ultra responsivo
+        CaveBot.Config.set("walkDelay", 40)         -- Passo firme e fluido a 40ms pela cave inteira
+        CaveBot.Config.set("ping", 50)              -- Resposta rápida de rede
+    end
+
+    -- ====================================================================
+    -- TRAVA ABSOLUTA: INTERCEPTAÇÃO DIRETA NO MOTOR DE ANDAR DO CAVEBOT
+    -- ====================================================================
+    local oldDoWalking = CaveBot.doWalking
+    CaveBot.doWalking = function(...)
+        local localPlayer = g_game.getLocalPlayer()
+        if localPlayer then
+            local currentZ = localPlayer:getPosition().z
+            local cNow = now or (os.clock() * 1000)
+
+            -- Detectou mudança de andar (subiu ou desceu)
+            if lastZ and currentZ ~= lastZ then
+                lastZ = currentZ
+                blockMovementUntil = cNow + 600 -- ALTERADO: Barreira de tempo de 600ms para carregar o mapa
+                return false -- Aborta o passo imediatamente no novo andar
+            end
+            lastZ = currentZ
+
+            -- Se ainda estiver dentro do tempo de bloqueio dos 600ms, impede o movimento
+            if cNow < blockMovementUntil then
+                return false
+            end
+        end
+        return oldDoWalking(...)
     end
     
-    -- 2. ACELERA OS AGENDADORES INTERNOS / PREVINE PASSOS FANTASMAS
+    -- 2. AGENDADORES INTERNOS SINCRONIZADOS
     if type(schedule) == "function" then
         local oldSchedule = schedule
         schedule = function(time, callback)
             local localPlayer = g_game.getLocalPlayer()
             if localPlayer then
-                local currentZ = localPlayer:getPosition().z
-                
-                -- Se o andar mudou neste exato frame
-                if lastZ and currentZ ~= lastZ then
-                    lastZ = currentZ 
-                    -- Ignora agendamentos muito curtos acumulados da escada para evitar os passos extras
-                    if time and time < 50 then
-                        return oldSchedule(500, callback) -- Dá um micro fôlego para o mapa carregar
-                    end
+                local cNow = now or (os.clock() * 1000)
+                if cNow < blockMovementUntil then
+                    return oldSchedule(600, callback) -- Segura o agendador pelos 600ms da escada
                 end
-                lastZ = currentZ
             end
 
+            -- Passos normais da cave na fluidez calibrada de 40ms
             if time and time >= 500 then
-                return oldSchedule(10, callback)
+                return oldSchedule(40, callback)
             end
             return oldSchedule(time, callback)
         end
     end
 
-    -- 3. INTERCEPTADOR REESCRITO DO CAVEBOT DELAY
+    -- 3. INTERCEPTADOR DO CAVEBOT DELAY (CONECTADO ÀS REGRAS DE 40MS E 600MS)
     local oldCaveBotDelay = CaveBot.delay
     if oldCaveBotDelay then
         CaveBot.delay = function(value)
             local localPlayer = g_game.getLocalPlayer()
             if localPlayer then
                 local currentZ = localPlayer:getPosition().z
-                if lastZ and currentZ ~= lastZ then
-                    lastZ = currentZ
-                    -- Apenas atualiza o eixo Z sem resetar ou parar o macro de caminhada
+                local cNow = now or (os.clock() * 1000)
+
+                if (lastZ and currentZ ~= lastZ) or cNow < blockMovementUntil then
+                    if lastZ and currentZ ~= lastZ then
+                        lastZ = currentZ
+                        blockMovementUntil = cNow + 600
+                    end
+                    
+                    if cavebotMacro and type(cavebotMacro) == "table" then
+                        cavebotMacro.delay = cNow + 600
+                    elseif CaveBot.macro and type(CaveBot.macro) == "table" then
+                        CaveBot.macro.delay = cNow + 600
+                    else
+                        return oldCaveBotDelay(600)
+                    end
+                    return
                 end
             end
 
             if value and value >= 300 then
                 if cavebotMacro and type(cavebotMacro) == "table" then
                     local cNow = now or (os.clock() * 1000)
-                    cavebotMacro.delay = cNow + 10
+                    cavebotMacro.delay = cNow + 40
                 elseif CaveBot.macro and type(CaveBot.macro) == "table" then
                     local cNow = now or (os.clock() * 1000)
-                    CaveBot.macro.delay = cNow + 10
+                    CaveBot.macro.delay = cNow + 40
                 else
-                    return oldCaveBotDelay(10)
+                    return oldCaveBotDelay(40)
                 end
                 return
             end
-            return oldCaveBotDelay(10)
+            return oldCaveBotDelay(40)
         end
     end
 
@@ -2906,7 +3016,7 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
         end
     end
 
-    -- 5. PRESERVAÇÃO DO REGISTRO DE AÇÕES
+    -- 5. PRESERVAÇÃO DO REGISTRO DE AÇÕES EM 40MS
     local oldRegisterAction = CaveBot.registerAction
     if oldRegisterAction then
         CaveBot.registerAction = function(name, color, callback)
@@ -2916,10 +3026,10 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
                 if ret == true or ret == nil then
                     if cavebotMacro and type(cavebotMacro) == "table" then
                         local cNow = now or (os.clock() * 1000)
-                        cavebotMacro.delay = cNow + 1
+                        cavebotMacro.delay = cNow + 40
                     elseif CaveBot.macro and type(CaveBot.macro) == "table" then
                         local cNow = now or (os.clock() * 1000)
-                        CaveBot.macro.delay = cNow + 1
+                        CaveBot.macro.delay = cNow + 40
                     end
                 end
                 return ret
@@ -2929,6 +3039,8 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
     end
     print("[Loader] CaveBot otimizado com sucesso.")
 end
+
+
 
 -- ----------------------------------------------------------------------------
 -- CUSTOMIZAÇÃO DO EDITOR DE CRIATURAS (TargetBot.Creature.edit)
@@ -2947,9 +3059,9 @@ TargetBot.Creature.edit = function(config, callback)
     end
     widget.scroll:setRange(min, max)
     if max-min > 1000 then
-      widget.scroll:setStep(100)
-    elseif max-min > 100 then
       widget.scroll:setStep(10)
+    elseif max-min > 100 then
+      widget.scroll:setStep(5)
     end
     widget.scroll:setValue(config[id] or defaultValue)
     widget.scroll.onValueChange(widget.scroll, widget.scroll:getValue())
@@ -2991,15 +3103,15 @@ TargetBot.Creature.edit = function(config, callback)
   
   editor.ok.onClick = function()
     local newConfig = {}
+    
+    -- CORREÇÃO DO LAÇO: Lê corretamente a chave string [1] e executa a função primitiva [2]
     for _, value in ipairs(values) do
       newConfig[value[1]] = value[2]()
     end
     
     newConfig.danger = 1
     newConfig.priority = 1
-    
-    -- TRAVA INTERNA DE SEGURANÇA: Força o salvamento como falso
-    newConfig.chase = false 
+    newConfig.chase = false -- Trava permanente de chase desativado para evitar perseguição
     
     if newConfig.name:len() < 1 then return end
     newConfig.regex = "^" .. newConfig.name:trim():lower():gsub("%*", ".*"):gsub("%?", ".?") .. "$"
@@ -3012,11 +3124,11 @@ TargetBot.Creature.edit = function(config, callback)
   addScrollBar("keepDistanceRange", "Keep Distance", 1, 4, 1)
   addScrollBar("lureCount", "Lure", 0, 8, 1)
 
-  -- LINHA DO "Follow Attack" (chase) COMPLETAMENTE REMOVIDA DAQUI
   addCheckBox("keepDistance", "Keep Distance", false)
   addCheckBox("lureCavebot", "CaveBot Lure", false)
   addCheckBox("avoidAttacks", "Avoid Monster Spells", false)
 end
+
 
 -- ====================================================================
 -- ANTI KS
@@ -3085,6 +3197,10 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
     print("[Anti-KS] Filtro invisível ativado. Alvos alheios removidos com segurança.")
 end
 
+
+-- ====================================================================
+-- NOVO CREATURE_PRIORITY
+-- ====================================================================
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 
 -- SISTEMA DE MONITORAMENTO DE CAVEBOT (PAUSA SE HOUVER 2+ ESPECIAIS EM VOCÊ)
@@ -3145,9 +3261,6 @@ local function checkSpecialMonstersLure()
     end
 end
 
--- ====================================================================
--- SUA FUNÇÃO DE PRIORIDADE TOTALMENTE LIMPA SEM VARIÁVEL CHASE
--- ====================================================================
 TargetBot.Creature.calculatePriority = function(creature, config, path)
   -- Roda a checagem de pausa de waypoints em segundo plano
   checkSpecialMonstersLure()
@@ -3206,7 +3319,7 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
     priority = priority + 1
   end
 
-  -- extra priority for low health (CHASE REMOVIDO DAQUI)
+  -- extra priority for low health
   local hp = creature:getHealthPercent() or 100
   if hp < 20 then
     priority = priority + 5 -- Mesclado o maior bônus de vida baixa direto aqui
