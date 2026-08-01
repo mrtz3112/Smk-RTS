@@ -71,7 +71,7 @@ if type(Config) == "table" and type(Config.setup) == "function" then
 
         return originalConfigSetup(configName, widget, typeFormat, callback, ...)
     end
-    print("[Loader] Limpeza de storages obsoletas concluida com sucesso.")
+    print("[Loader] Cleaner de storages obsoletas habilitado.")
 end
 
 setDefaultTab("Main")
