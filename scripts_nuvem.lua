@@ -528,7 +528,6 @@ end
 onWalk(function(direction)
     storage.trainerMacroPauseUntil = os.time() + 1
 end)
-
 local trainerMacro = macro(100, "House Trainer", function(macroObj)
   if os.time() < storage.trainerMacroPauseUntil then
     return
@@ -538,49 +537,19 @@ local trainerMacro = macro(100, "House Trainer", function(macroObj)
   end
   local myPos = player:getPosition()
   if not myPos then return end
-  local hasTrainer = false
-  for _, creature in ipairs(getSpectators()) do
-    if creature:getName():lower() == "house trainer" then
-      hasTrainer = true
-      break
-    end
-  end
-  if not hasTrainer then 
-    return 
-  end
+  -- Se já estiver atacando qualquer criatura, o macro apenas pausa para não interromper o combate
   if g_game.isAttacking() then
-    local currentTarget = g_game.getAttackingCreature()
-    
-    if currentTarget and currentTarget:getName():lower() == "house trainer" then
-      local targetPos = currentTarget:getPosition()
-      if targetPos then
-        local currentDistance = math.max(math.abs(myPos.x - targetPos.x), math.abs(myPos.y - targetPos.y))
-        if currentDistance > 1 and currentDistance <= 2 then
-          g_game.setChaseMode(0) 
-          
-          local diffX = targetPos.x - myPos.x
-          local diffY = targetPos.y - myPos.y
-          
-          if diffX ~= 0 and math.abs(diffX) >= math.abs(diffY) then
-              if diffX > 0 then g_game.walk(1) else g_game.walk(3) end
-          elseif diffY ~= 0 then
-              if diffY > 0 then g_game.walk(2) else g_game.walk(0) end
-          end
-        elseif currentDistance > 2 then
-          g_game.cancelAttack()
-        end
-      end
-    end
     return 
   end
   local closestTrainer = nil
-  local shortestDistance = 7
-  
+  local shortestDistance = 3 -- Filtro de raio máximo de 2 SQMs (raio menor que 3)
+  -- Varre os arredores para encontrar o Trainer mais próximo colado em você
   for _, creature in ipairs(getSpectators()) do
     if creature:getName():lower() == "house trainer" then
       local trainerPos = creature:getPosition()
       if trainerPos then
         local distance = math.max(math.abs(myPos.x - trainerPos.x), math.abs(myPos.y - trainerPos.y))
+        -- Garante o ataque apenas se o Trainer estiver a no máximo 2 blocos de distância
         if distance <= 2 and distance < shortestDistance then
           shortestDistance = distance
           closestTrainer = creature
@@ -2946,9 +2915,12 @@ TargetBot.Creature.edit = function(config, callback)
   addCheckBox("stopForElites", "Stop for Elites", false)
 end
 
--- ----------------------------------------------------------------------------
--- [2/5] SISTEMA DE ANTI-KS SEGURO COM EXCEÇÕES (Trainers e Boss Guild) - CORRIGIDO SEM ERROS
--- ----------------------------------------------------------------------------
+
+-- ====================================================================
+-- NOVO CREATURE_PRIORITY
+-- ====================================================================
+local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
+
 local isTrainerMonster = function(creatureName)
     if not creatureName then return false end
     local name = creatureName:lower()
@@ -2960,6 +2932,56 @@ local isBossGuild = function(creatureName)
     return creatureName:lower():find("guild boss", 1, true) ~= nil
 end
 
+-- FUNÇÃO AUXILIAR PARA DETERMINAR SE O MONSTRO PERTENCE A OUTRO JOGADOR (KS)
+local function isMonsterOfOtherPlayer(creature, myId)
+    if not creature or not creature:isMonster() then return false end
+    
+    -- Captura com segurança o ID do alvo do monstro
+    local mTargetId = 0
+    if type(creature.getTargetId) == "function" then
+        mTargetId = creature:getTargetId() or 0
+    elseif creature.targetId then
+        mTargetId = creature.targetId
+    elseif type(creature.getTarget) == "function" then
+        local tgt = creature:getTarget()
+        if tgt then mTargetId = tgt:getId() end
+    end
+
+    -- Se o monstro tem um alvo válido que NÃO é você, ele pertence a outro jogador
+    if mTargetId > 0 and mTargetId ~= myId then
+        local cName = creature:getName()
+        if not isTrainerMonster(cName) and not isBossGuild(cName) then
+            return true
+        end
+    end
+    return false
+end
+
+-- ====================================================================
+-- SOLUÇÃO DEFINITIVA DO LURE: INTERCEPTAÇÃO DE TABELAS DE CRIATURAS
+-- ====================================================================
+if TargetBot and type(TargetBot.creatures) == "table" then
+    local oldGetCreatures = TargetBot.getCreatures
+    if type(oldGetCreatures) == "function" then
+        TargetBot.getCreatures = function(...)
+            local list = oldGetCreatures(...)
+            local localPlayer = g_game.getLocalPlayer()
+            if not localPlayer or localPlayer:isPartyMember() then return list end
+            
+            local myId = localPlayer:getId()
+            local filteredList = {}
+            
+            for _, creature in ipairs(list) do
+                if not isMonsterOfOtherPlayer(creature, myId) then
+                    table.insert(filteredList, creature)
+                end
+            end
+            return filteredList
+        end
+    end
+end
+
+-- INTERCEPTADOR COMPLEMENTAR DE PARÂMETROS (EVITA ATACAR)
 if TargetBot and TargetBot.Creature and TargetBot.Creature.calculateParams then
     local originalCalculateParams = TargetBot.Creature.calculateParams
     TargetBot.Creature.calculateParams = function(creature, path)
@@ -2968,204 +2990,157 @@ if TargetBot and TargetBot.Creature and TargetBot.Creature.calculateParams then
         if params and type(params) == "table" and creature:isMonster() then
             local localPlayer = g_game.getLocalPlayer()
             if localPlayer then
-                -- 1. BYPASS DE PARTY: Se estiver em grupo, libera na hora (0ms de lag)
-                if localPlayer:isPartyMember() then
-                    return params
-                end
+                if localPlayer:isPartyMember() then return params end
 
                 local myId = localPlayer:getId()
-                local posAtual = localPlayer:getPosition()
-                local creaturePos = creature:getPosition()
                 local playerTarget = g_game.getAttackingCreature()
-                
-                -- 2. BYPASS DE ALVO SELECIONADO: Se for o seu alvo vermelho, ignora o Anti-KS
+
+                -- Se for o seu alvo vermelho atual, ignora a checagem e mantém focado
                 if playerTarget and playerTarget:getId() == creature:getId() then
+                    params.invalid = false
                     return params
                 end
 
-                -- 3. BYPASS DE PROXIMIDADE RÍGIDA (ANTI-LAG MASTER): Se o monstro estiver em um raio 
-                -- de até 3 quadrados de você, assume que o mob é seu e libera o CaveBot sem checar mais nada.
-                if posAtual and creaturePos and posAtual.z == creaturePos.z then
-                    local distX = math.abs(posAtual.x - creaturePos.x)
-                    local distY = math.abs(posAtual.y - creaturePos.y)
-                    if distX <= 3 and distY <= 3 then
-                        return params
-                    end
-                end
-                
-                -- 4. CAPTURA SEGURA DE ALVO DO MONSTRO
-                local mTargetId = 0
-                if type(creature.getTargetId) == "function" then
-                    mTargetId = creature:getTargetId() or 0
-                elseif creature.targetId then
-                    mTargetId = creature.targetId
-                elseif type(creature.getTarget) == "function" then
-                    local tgt = creature:getTarget()
-                    if tgt then mTargetId = tgt:getId() end
-                end
-                
-                -- Se o monstro já está focado em você, ignora o resto
-                if mTargetId == myId then
+                -- Se for detectado que o monstro é de outro player, sabota os parâmetros
+                if isMonsterOfOtherPlayer(creature, myId) then
+                    params.invalid = true
+                    params.priority = -999999
+                    params.ignore = true
+                    params.attack = false
+                    params.danger = 0 
                     return params
-                end
-                
-                -- 5. SÓ APLICA ANTI-KS SE O MONSTRO ESTIVER EXPLICITAMENTE BATENDO EM OUTRO JOGADOR
-                local cName = creature:getName()
-                if not isTrainerMonster(cName) and not isBossGuild(cName) then
-                    -- Se o monstro tem como alvo outro jogador (ID válido e diferente do seu)
-                    if mTargetId > 0 and mTargetId ~= myId then
-                        params.priority = -999999  
-                        params.invalid = true      
-                    end
                 end
             end
         end
         
         return params
     end
-    print("[Loader] Anti KS habilitado com sucesso.")
 end
+print("[Loader] Anti KS habilitado com sucesso.")
 
+-- ====================================================================
+-- SEU SCRIPT DE PRIORITY (BLINDADO DIRETAMENTE CONTRA KS)
+-- ====================================================================
+TargetBot.Creature.calculatePriority = function(creature, config, path)
+  local localPlayer = g_game.getLocalPlayer()
+  if localPlayer and not localPlayer:isPartyMember() then
+    local myId = localPlayer:getId()
+    local playerTarget = g_game.getAttackingCreature()
 
-
--- ----------------------------------------------------------------------------
--- [3/4] REGRAS DE PRIORIDADE E STOP PARA ELITES VIVOS (Filtra Corpos)
--- ----------------------------------------------------------------------------
-local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
-if TargetBot and TargetBot.Creature then
-    TargetBot.Creature.calculatePriority = function(creature, config, path)
-      local priority = 0
-      local creatureName = string.lower(creature:getName() or "")
-      local isSpecial = false
-      
-      for _, name in ipairs(specialMonsters) do
-        if string.find(creatureName, name, 1, true) then
-          isSpecial = true
-          break
-        end
+    -- SE O MONSTRO FOR DE OUTRO JOGADOR: Força prioridade negativa na hora.
+    -- Isso impede o motor de calcular o bônus de vida e proximidade e bugar o Lure.
+    if isMonsterOfOtherPlayer(creature, myId) then
+      -- Se NÃO for o seu alvo vermelho atual, descarta completamente
+      if not (playerTarget and playerTarget:getId() == creature:getId()) then
+        return -999999
       end
-
-      if isSpecial then
-        priority = 10000 -- Sobe a base dos especiais para ficar acima de qualquer monstro normal
-        
-        -- Especial mais próximo continua sendo prioridade máxima
-        local path_length = #path
-        if path_length == 1 then priority = priority + 5000
-        elseif path_length <= 3 then priority = priority + 2000 end
-        
-        -- Desempate entre especiais pela menor vida
-        local hpEspecial = creature:getHealthPercent() or 100
-        priority = priority + (100 - hpEspecial) * 10
-
-        if config.stopForElites then
-          local localPlayer = g_game.getLocalPlayer()
-          local playerPos = localPlayer:getPosition()
-          local specialCount = 0
-          
-          local spectators = g_map.getSpectators(playerPos, false)
-          local maxDist = config.maxDistance or 7
-          
-          for _, spec in ipairs(spectators) do
-            if spec:isMonster() and spec:getHealthPercent() > 0 then
-              local specPos = spec:getPosition()
-              
-              if specPos and specPos.z == playerPos.z then
-                local distX = math.abs(playerPos.x - specPos.x)
-                local distY = math.abs(playerPos.y - specPos.y)
-                
-                if distX <= maxDist and distY <= maxDist then
-                  local specName = string.lower(spec:getName() or "")
-                  
-                  for _, name in ipairs(specialMonsters) do
-                    if string.find(specName, name, 1, true) then
-                      specialCount = specialCount + 1
-                      break 
-                    end
-                  end
-                end
-              end
-            end
-          end
-          
-          local minToStop = config.minElitesToStop or 1
-          if specialCount >= minToStop then
-            if CaveBot and type(CaveBot.delay) == "function" then
-              CaveBot.delay(1000)
-            elseif CaveBot and type(CaveBot.setWalkingDelay) == "function" then
-              CaveBot.setWalkingDelay(1000)
-            end
-          end
-        end
-        return priority 
-      end
-
-      -- ====================================================================
-      -- LÓGICA DE MONSTROS NORMAS: DISTÂNCIA MÁXIMA + MENOR VIDA DESEMPATE
-      -- ====================================================================
-      if #path > config.maxDistance then
-        return priority
-      end
-      
-      priority = priority + (config.priority or 1)
-      
-      -- 1. REGRA SUPREMA: Bônus massivos por proximidade (A distância manda no target)
-      local path_length = #path
-      if path_length == 1 then
-        priority = priority + 2000   -- Colado em você (Prioridade Total)
-      elseif path_length == 2 then
-        priority = priority + 1000   -- A 2 blocos de distância
-      elseif path_length == 3 then
-        priority = priority + 500    -- A 3 blocos de distância
-      elseif path_length <= 5 then
-        priority = priority + 200
-      end
-      
-      -- 2. TRAVA DE ALVO ATUAL: Impede o bot de trocar de monstro na mesma distância
-      if g_game.getAttackingCreature() == creature then
-        priority = priority + 150
-      end
-      
-      -- 3. CRITÉRIO DE DESEMPATE (MENOR VIDA): Se tiver dois monstros na mesma distância,
-      -- o bônus de vida define o alvo e foca no que vai morrer primeiro.
-      local currentHealth = creature:getHealthPercent() or 100
-      if currentHealth > 0 then
-        local healthBonus = (100 - currentHealth) * 2 -- Multiplicador equilibrado para não quebrar a regra de distância
-        priority = priority + healthBonus
-      end
-      
-      return priority
     end
+  end
+
+  -- Daqui para baixo, roda a sua configuração nativa original intacta:
+  local priority = 0
+
+  -- extra priority if it's current target
+  if g_game.getAttackingCreature() == creature then
+    priority = priority + 1
+  end
+
+  -- VERIFICAÇÃO ISOLADA DE MONSTROS ESPECIAIS
+  local creatureName = string.lower(creature:getName() or "")
+  for _, name in ipairs(specialMonsters) do
+    if string.find(creatureName, name, 1, true) then
+      priority = priority + 100
+      break
+    end
+  end
+
+  -- check if distance is fine, if not then attack only if already attacked
+  if #path > config.maxDistance then
+    return priority
+  end
+
+  -- add config priority
+  priority = priority + config.priority
+  
+  -- extra priority for close distance
+  local path_length = #path
+  if path_length == 1 then
+    priority = priority + 5
+  elseif path_length <= 3 then
+    priority = priority + 1
+  end
+
+  -- extra priority for low health
+  if config.chase and creature:getHealthPercent() < 30 then
+    priority = priority + 5
+  elseif creature:getHealthPercent() < 20 then
+    priority = priority + 2.5
+  elseif creature:getHealthPercent() < 40 then
+    priority = priority + 1.5
+  elseif creature:getHealthPercent() < 60 then
+    priority = priority + 0.5
+  elseif creature:getHealthPercent() < 80 then
+    priority = priority + 0.2
+  end
+
+  return priority
 end
 
 -- ----------------------------------------------------------------------------
--- [4/4] CAVEBOT OTIMIZADO
+-- NOVO CAVEBOT
 -- ----------------------------------------------------------------------------
 if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and CaveBot.Actions then
-    -- 1. FORÇA AS CONFIGURAÇÕES DE PASSO FLUIDO NO MOTOR NATIVO
+    -- VARIÁVEIS DE CONTROLE PARA ESCADAS (SEM LIMPEZA FORÇADA)
+    local lastZ = nil
+    local player = g_game.getLocalPlayer()
+    if player then lastZ = player:getPosition().z end
+
+    -- 1. CONFIGURADOR ESTRITO: INVIABILIZA O CLICK E FORÇA O WALK
     if type(CaveBot.Config.set) == "function" then
-        CaveBot.Config.set("walkDelay", 10)       -- Zera o tempo de espera do bot entre passos
-        CaveBot.Config.set("ping", 50)            -- Ajusta para um tempo de resposta de rede veloz
-        CaveBot.Config.set("mapClickDelay", 10)   -- Zera o atraso ao recalcular alvos no mini-mapa
+        CaveBot.Config.set("walkDelay", 250)         -- Deixa o passo direcional (walk) ultra responsivo
+        CaveBot.Config.set("ping", 250)              -- Ajusta o tempo de resposta geral
+        CaveBot.Config.set("mapClickDelay", 999999) -- Inutiliza o clique de mapa aumentando o delay ao infinito
     end
     
-    -- 2. ACELERA OS AGENDADORES INTERNOS DO CLIENT DE JOGO
+    -- 2. ACELERA OS AGENDADORES INTERNOS / PREVINE PASSOS FANTASMAS
     if type(schedule) == "function" then
         local oldSchedule = schedule
         schedule = function(time, callback)
-            -- Se o bot tentar forçar uma pausa longa (ex: 3 segundos ou 1 segundo de espera)
+            local localPlayer = g_game.getLocalPlayer()
+            if localPlayer then
+                local currentZ = localPlayer:getPosition().z
+                
+                -- Se o andar mudou neste exato frame
+                if lastZ and currentZ ~= lastZ then
+                    lastZ = currentZ 
+                    -- Ignora agendamentos muito curtos acumulados da escada para evitar os passos extras
+                    if time and time < 50 then
+                        return oldSchedule(30, callback) -- Dá um micro fôlego para o mapa carregar
+                    end
+                end
+                lastZ = currentZ
+            end
+
             if time and time >= 500 then
-                return oldSchedule(10, callback) -- Reduz a pausa para quase zero, mantendo a corrida contínua
+                return oldSchedule(10, callback)
             end
             return oldSchedule(time, callback)
         end
     end
 
-    -- 3. INTERCEPTADOR REESCRITO DO CAVEBOT DELAY (FIM DO CONGELAMENTO DE 1 SEGUNDO)
+    -- 3. INTERCEPTADOR REESCRITO DO CAVEBOT DELAY
     local oldCaveBotDelay = CaveBot.delay
     if oldCaveBotDelay then
         CaveBot.delay = function(value)
-            -- Toda vez que o bot tentar travar o personagem por 1 segundo (500ms+), nós ignoramos 
-            -- e aplicamos um micro delay de apenas 10ms para manter a corrida ultra fluida
+            local localPlayer = g_game.getLocalPlayer()
+            if localPlayer then
+                local currentZ = localPlayer:getPosition().z
+                if lastZ and currentZ ~= lastZ then
+                    lastZ = currentZ
+                    -- Apenas atualiza o eixo Z sem resetar ou parar o macro de caminhada
+                end
+            end
+
             if value and value >= 300 then
                 if cavebotMacro and type(cavebotMacro) == "table" then
                     local cNow = now or (os.clock() * 1000)
@@ -3182,27 +3157,22 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
         end
     end
 
--- 4. BYPASS DE PERFORMANCE NO TARGET (FIM DA LENTIDÃO COM MOBS TE ATACANDO)
+    -- 4. BYPASS DE PERFORMANCE NO TARGET
     if TargetBot and TargetBot.Creature and TargetBot.Creature.calculateParams then
         local originalCalculateParams = TargetBot.Creature.calculateParams
         TargetBot.Creature.calculateParams = function(creature, path)
             local params = originalCalculateParams(creature, path)
             
-            -- Se o motor do Target estiver analisando um monstro enquanto você corre
             if params and type(params) == "table" and creature:isMonster() then
                 local localPlayer = g_game.getLocalPlayer()
                 if localPlayer then
                     local myId = localPlayer:getId()
-                    
-                    -- Captura rápida do alvo do monstro de forma universal e super leve
                     local mTargetId = 0
                     if creature.targetId then mTargetId = creature.targetId
                     elseif type(creature.getTargetId) == "function" then mTargetId = creature:getTargetId() or 0 end
                     
-                    -- Se o monstro já está focado em você ou te atacando no lure, pula instantaneamente 
-                    -- qualquer checagem pesada do anti-ks. Isso devolve 100% da fluidez original!
                     if mTargetId == myId or g_game.getAttackingCreature() == creature then
-                        if params.priority then params.priority = 100 end -- Mantém a prioridade correta de ataque
+                        if params.priority then params.priority = 100 end
                         return params
                     end
                 end
@@ -3211,7 +3181,7 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
         end
     end
 
-    -- 5. PRESERVAÇÃO DO REGISTRO DE AÇÕES SEM COOLDOWNS EXAGERADOS
+    -- 5. PRESERVAÇÃO DO REGISTRO DE AÇÕES
     local oldRegisterAction = CaveBot.registerAction
     if oldRegisterAction then
         CaveBot.registerAction = function(name, color, callback)
@@ -3234,3 +3204,6 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
     end
     print("[Loader] CaveBot otimizado com sucesso.")
 end
+
+
+
