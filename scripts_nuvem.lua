@@ -2813,279 +2813,6 @@ macro(100, function()
     updateTargetWidget(name, percent, hasTarget)
 end)
 
--- ============================================================================
--- LINHA 2869: COMPILADO MASTER DE PERFORMANCE (PARTE 1)
--- PROPRIEDADES: Editor Customizado, Anti-KS, Stop Elites Vivos & Silenciador
--- ============================================================================
-
-if warn and type(warn) == "function" then
-    local oldWarn = warn
-    warn = function(message, ...)
-        if message and (string.find(message, "Duplicated config key") or string.find(message, "ping") or string.find(message, "walkDelay")) then
-            return 
-        end
-        return oldWarn(message, ...)
-    end
-end
-
--- ----------------------------------------------------------------------------
--- [1/5] CUSTOMIZAÇÃO DO EDITOR DE CRIATURAS (TargetBot.Creature.edit)
--- ----------------------------------------------------------------------------
-TargetBot.Creature.edit = function(config, callback)
-  config = config or {}
-  local editor = UI.createWindow('TargetBotCreatureEditorWindow')
-  local values = {}
-  editor.name:setText(config.name or "")
-  table.insert(values, {"name", function() return editor.name:getText() end})
-  
-  local addScrollBar = function(id, title, min, max, defaultValue)
-    local widget = UI.createWidget('TargetBotCreatureEditorScrollBar', editor.left)
-    widget.scroll.onValueChange = function(scroll, value)
-      widget.text:setText(title .. ": " .. value)
-    end
-    widget.scroll:setRange(min, max)
-    if max-min > 1000 then
-      widget.scroll:setStep(100)
-    elseif max-min > 100 then
-      widget.scroll:setStep(10)
-    end
-    widget.scroll:setValue(config[id] or defaultValue)
-    widget.scroll.onValueChange(widget.scroll, widget.scroll:getValue())
-    table.insert(values, {id, function() return widget.scroll:getValue() end})
-  end
-  
-  local addTextEdit = function(id, title, defaultValue)
-    local widget = UI.createWidget('TargetBotCreatureEditorTextEdit', editor.right)
-    widget.text:setText(title)
-    widget.textEdit:setText(config[id] or defaultValue or "")
-    table.insert(values, {id, function() return widget.textEdit:getText() end})
-  end
-  
-  local addCheckBox = function(id, title, defaultValue)
-    local widget = UI.createWidget('TargetBotCreatureEditorCheckBox', editor.right)
-    widget.onClick = function()
-      widget:setOn(not widget:isOn())
-    end
-    widget:setText(title)
-    if config[id] == nil then
-      widget:setOn(defaultValue)
-    else
-      widget:setOn(config[id])
-    end
-    table.insert(values, {id, function() return widget:isOn() end})
-  end
-  
-  local addItem = function(id, title, defaultItem)
-    local widget = UI.createWidget('TargetBotCreatureEditorItem', editor.right)
-    widget.text:setText(title)
-    widget.item:setItemId(config[id] or defaultItem)
-    table.insert(values, {id, function() return widget.item:getItemId() end})
-  end
-  
-  editor.cancel.onClick = function()
-    editor:destroy()
-  end
-  editor.onEscape = editor.cancel.onClick
-  
-  editor.ok.onClick = function()
-    local newConfig = {}
-    for _, value in ipairs(values) do
-      newConfig[value[1]] = value[2]()
-    end
-    
-    newConfig.danger = 1
-    newConfig.priority = 1
-    
-    if newConfig.name:len() < 1 then return end
-    newConfig.regex = "^" .. newConfig.name:trim():lower():gsub("%*", ".*"):gsub("%?", ".?") .. "$"
-
-    editor:destroy()
-    callback(newConfig)
-  end
-  
-  addScrollBar("maxDistance", "Max Distance", 1, 7, 1)
-  addScrollBar("keepDistanceRange", "Keep Distance", 1, 4, 1)
-  addScrollBar("lureCount", "Lure", 0, 8, 1)
-  addScrollBar("minElitesToStop", "Min Elites to Stop", 1, 5, 1)
-
-  addCheckBox("chase", "Follow Attack", true)
-  addCheckBox("keepDistance", "Keep Distance", false)
-  addCheckBox("lureCavebot", "CaveBot Lure", false)
-  addCheckBox("avoidAttacks", "Avoid Monster Spells", false)
-  addCheckBox("stopForElites", "Stop for Elites", false)
-end
-
-
--- ====================================================================
--- NOVO CREATURE_PRIORITY
--- ====================================================================
-local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
-
-local isTrainerMonster = function(creatureName)
-    if not creatureName then return false end
-    local name = creatureName:lower()
-    return name:find("house trainer", 1, true) or name == "trainer"
-end
-
-local isBossGuild = function(creatureName)
-    if not creatureName then return false end
-    return creatureName:lower():find("guild boss", 1, true) ~= nil
-end
-
--- FUNÇÃO AUXILIAR PARA DETERMINAR SE O MONSTRO PERTENCE A OUTRO JOGADOR (KS)
-local function isMonsterOfOtherPlayer(creature, myId)
-    if not creature or not creature:isMonster() then return false end
-    
-    -- Captura com segurança o ID do alvo do monstro
-    local mTargetId = 0
-    if type(creature.getTargetId) == "function" then
-        mTargetId = creature:getTargetId() or 0
-    elseif creature.targetId then
-        mTargetId = creature.targetId
-    elseif type(creature.getTarget) == "function" then
-        local tgt = creature:getTarget()
-        if tgt then mTargetId = tgt:getId() end
-    end
-
-    -- Se o monstro tem um alvo válido que NÃO é você, ele pertence a outro jogador
-    if mTargetId > 0 and mTargetId ~= myId then
-        local cName = creature:getName()
-        if not isTrainerMonster(cName) and not isBossGuild(cName) then
-            return true
-        end
-    end
-    return false
-end
-
--- ====================================================================
--- SOLUÇÃO DEFINITIVA DO LURE: INTERCEPTAÇÃO DE TABELAS DE CRIATURAS
--- ====================================================================
-if TargetBot and type(TargetBot.creatures) == "table" then
-    local oldGetCreatures = TargetBot.getCreatures
-    if type(oldGetCreatures) == "function" then
-        TargetBot.getCreatures = function(...)
-            local list = oldGetCreatures(...)
-            local localPlayer = g_game.getLocalPlayer()
-            if not localPlayer or localPlayer:isPartyMember() then return list end
-            
-            local myId = localPlayer:getId()
-            local filteredList = {}
-            
-            for _, creature in ipairs(list) do
-                if not isMonsterOfOtherPlayer(creature, myId) then
-                    table.insert(filteredList, creature)
-                end
-            end
-            return filteredList
-        end
-    end
-end
-
--- INTERCEPTADOR COMPLEMENTAR DE PARÂMETROS (EVITA ATACAR)
-if TargetBot and TargetBot.Creature and TargetBot.Creature.calculateParams then
-    local originalCalculateParams = TargetBot.Creature.calculateParams
-    TargetBot.Creature.calculateParams = function(creature, path)
-        local params = originalCalculateParams(creature, path)
-        
-        if params and type(params) == "table" and creature:isMonster() then
-            local localPlayer = g_game.getLocalPlayer()
-            if localPlayer then
-                if localPlayer:isPartyMember() then return params end
-
-                local myId = localPlayer:getId()
-                local playerTarget = g_game.getAttackingCreature()
-
-                -- Se for o seu alvo vermelho atual, ignora a checagem e mantém focado
-                if playerTarget and playerTarget:getId() == creature:getId() then
-                    params.invalid = false
-                    return params
-                end
-
-                -- Se for detectado que o monstro é de outro player, sabota os parâmetros
-                if isMonsterOfOtherPlayer(creature, myId) then
-                    params.invalid = true
-                    params.priority = -999999
-                    params.ignore = true
-                    params.attack = false
-                    params.danger = 0 
-                    return params
-                end
-            end
-        end
-        
-        return params
-    end
-end
-print("[Loader] Anti KS habilitado com sucesso.")
-
--- ====================================================================
--- SEU SCRIPT DE PRIORITY (BLINDADO DIRETAMENTE CONTRA KS)
--- ====================================================================
-TargetBot.Creature.calculatePriority = function(creature, config, path)
-  local localPlayer = g_game.getLocalPlayer()
-  if localPlayer and not localPlayer:isPartyMember() then
-    local myId = localPlayer:getId()
-    local playerTarget = g_game.getAttackingCreature()
-
-    -- SE O MONSTRO FOR DE OUTRO JOGADOR: Força prioridade negativa na hora.
-    -- Isso impede o motor de calcular o bônus de vida e proximidade e bugar o Lure.
-    if isMonsterOfOtherPlayer(creature, myId) then
-      -- Se NÃO for o seu alvo vermelho atual, descarta completamente
-      if not (playerTarget and playerTarget:getId() == creature:getId()) then
-        return -999999
-      end
-    end
-  end
-
-  -- Daqui para baixo, roda a sua configuração nativa original intacta:
-  local priority = 0
-
-  -- extra priority if it's current target
-  if g_game.getAttackingCreature() == creature then
-    priority = priority + 1
-  end
-
-  -- VERIFICAÇÃO ISOLADA DE MONSTROS ESPECIAIS
-  local creatureName = string.lower(creature:getName() or "")
-  for _, name in ipairs(specialMonsters) do
-    if string.find(creatureName, name, 1, true) then
-      priority = priority + 100
-      break
-    end
-  end
-
-  -- check if distance is fine, if not then attack only if already attacked
-  if #path > config.maxDistance then
-    return priority
-  end
-
-  -- add config priority
-  priority = priority + config.priority
-  
-  -- extra priority for close distance
-  local path_length = #path
-  if path_length == 1 then
-    priority = priority + 5
-  elseif path_length <= 3 then
-    priority = priority + 1
-  end
-
-  -- extra priority for low health
-  if config.chase and creature:getHealthPercent() < 30 then
-    priority = priority + 5
-  elseif creature:getHealthPercent() < 20 then
-    priority = priority + 2.5
-  elseif creature:getHealthPercent() < 40 then
-    priority = priority + 1.5
-  elseif creature:getHealthPercent() < 60 then
-    priority = priority + 0.5
-  elseif creature:getHealthPercent() < 80 then
-    priority = priority + 0.2
-  end
-
-  return priority
-end
-
 -- ----------------------------------------------------------------------------
 -- NOVO CAVEBOT
 -- ----------------------------------------------------------------------------
@@ -3095,11 +2822,9 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
     local player = g_game.getLocalPlayer()
     if player then lastZ = player:getPosition().z end
 
-    -- 1. CONFIGURADOR ESTRITO: INVIABILIZA O CLICK E FORÇA O WALK
+    -- 1. FORÇA PASSO FLUIDO DIRETO E SEGURO (SEM ALTERAR MAPCLICK PARA VALORES ABUSIVOS)
     if type(CaveBot.Config.set) == "function" then
         CaveBot.Config.set("walkDelay", 250)         -- Deixa o passo direcional (walk) ultra responsivo
-        CaveBot.Config.set("ping", 250)              -- Ajusta o tempo de resposta geral
-        CaveBot.Config.set("mapClickDelay", 999999) -- Inutiliza o clique de mapa aumentando o delay ao infinito
     end
     
     -- 2. ACELERA OS AGENDADORES INTERNOS / PREVINE PASSOS FANTASMAS
@@ -3115,7 +2840,7 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
                     lastZ = currentZ 
                     -- Ignora agendamentos muito curtos acumulados da escada para evitar os passos extras
                     if time and time < 50 then
-                        return oldSchedule(30, callback) -- Dá um micro fôlego para o mapa carregar
+                        return oldSchedule(500, callback) -- Dá um micro fôlego para o mapa carregar
                     end
                 end
                 lastZ = currentZ
@@ -3205,5 +2930,293 @@ if CaveBot and CaveBot.Config and type(CaveBot.doWalking) == "function" and Cave
     print("[Loader] CaveBot otimizado com sucesso.")
 end
 
+-- ----------------------------------------------------------------------------
+-- CUSTOMIZAÇÃO DO EDITOR DE CRIATURAS (TargetBot.Creature.edit)
+-- ----------------------------------------------------------------------------
+TargetBot.Creature.edit = function(config, callback)
+  config = config or {}
+  local editor = UI.createWindow('TargetBotCreatureEditorWindow')
+  local values = {}
+  editor.name:setText(config.name or "")
+  table.insert(values, {"name", function() return editor.name:getText() end})
+  
+  local addScrollBar = function(id, title, min, max, defaultValue)
+    local widget = UI.createWidget('TargetBotCreatureEditorScrollBar', editor.left)
+    widget.scroll.onValueChange = function(scroll, value)
+      widget.text:setText(title .. ": " .. value)
+    end
+    widget.scroll:setRange(min, max)
+    if max-min > 1000 then
+      widget.scroll:setStep(100)
+    elseif max-min > 100 then
+      widget.scroll:setStep(10)
+    end
+    widget.scroll:setValue(config[id] or defaultValue)
+    widget.scroll.onValueChange(widget.scroll, widget.scroll:getValue())
+    table.insert(values, {id, function() return widget.scroll:getValue() end})
+  end
+  
+  local addTextEdit = function(id, title, defaultValue)
+    local widget = UI.createWidget('TargetBotCreatureEditorTextEdit', editor.right)
+    widget.text:setText(title)
+    widget.textEdit:setText(config[id] or defaultValue or "")
+    table.insert(values, {id, function() return widget.textEdit:getText() end})
+  end
+  
+  local addCheckBox = function(id, title, defaultValue)
+    local widget = UI.createWidget('TargetBotCreatureEditorCheckBox', editor.right)
+    widget.onClick = function()
+      widget:setOn(not widget:isOn())
+    end
+    widget:setText(title)
+    if config[id] == nil then
+      widget:setOn(defaultValue)
+    else
+      widget:setOn(config[id])
+    end
+    table.insert(values, {id, function() return widget:isOn() end})
+  end
+  
+  local addItem = function(id, title, defaultItem)
+    local widget = UI.createWidget('TargetBotCreatureEditorItem', editor.right)
+    widget.text:setText(title)
+    widget.item:setItemId(config[id] or defaultItem)
+    table.insert(values, {id, function() return widget.item:getItemId() end})
+  end
+  
+  editor.cancel.onClick = function()
+    editor:destroy()
+  end
+  editor.onEscape = editor.cancel.onClick
+  
+  editor.ok.onClick = function()
+    local newConfig = {}
+    for _, value in ipairs(values) do
+      newConfig[value[1]] = value[2]()
+    end
+    
+    newConfig.danger = 1
+    newConfig.priority = 1
+    
+    -- TRAVA INTERNA DE SEGURANÇA: Força o salvamento como falso
+    newConfig.chase = false 
+    
+    if newConfig.name:len() < 1 then return end
+    newConfig.regex = "^" .. newConfig.name:trim():lower():gsub("%*", ".*"):gsub("%?", ".?") .. "$"
 
+    editor:destroy()
+    callback(newConfig)
+  end
+  
+  addScrollBar("maxDistance", "Max Distance", 1, 7, 1)
+  addScrollBar("keepDistanceRange", "Keep Distance", 1, 4, 1)
+  addScrollBar("lureCount", "Lure", 0, 8, 1)
 
+  -- LINHA DO "Follow Attack" (chase) COMPLETAMENTE REMOVIDA DAQUI
+  addCheckBox("keepDistance", "Keep Distance", false)
+  addCheckBox("lureCavebot", "CaveBot Lure", false)
+  addCheckBox("avoidAttacks", "Avoid Monster Spells", false)
+end
+
+-- ====================================================================
+-- ANTI KS
+-- ====================================================================
+-- FUNÇÃO AUXILIAR PARA DETERMINAR SE O MONSTRO PERTENCE A OUTRO JOGADOR
+local function isMonsterOfOtherPlayer(creature, myId)
+    if not creature or not creature:isMonster() then return false end
+    
+    -- Captura com segurança o ID do alvo do monstro
+    local mTargetId = 0
+    if type(creature.getTargetId) == "function" then
+        mTargetId = creature:getTargetId() or 0
+    elseif creature.targetId then
+        mTargetId = creature.targetId
+    elseif type(creature.getTarget) == "function" then
+        local tgt = creature:getTarget()
+        if tgt then mTargetId = tgt:getId() end
+    end
+
+    -- CASO 1: O monstro está com alvo explícito em outro jogador
+    local hasOtherTarget = (mTargetId > 0 and mTargetId ~= myId)
+    
+    -- CASO 2: O monstro perdeu vida mas o alvo dele NÃO é você (Anti-atraso de rede)
+    local isDamagedByOthers = (creature:getHealthPercent() < 100 and mTargetId ~= myId)
+
+    if hasOtherTarget or isDamagedByOthers then
+        -- Permite atacar se o nome contiver "trainer" ou "guild boss"
+        local cName = creature:getName() or ""
+        local cNameLower = cName:lower()
+        if cNameLower:find("trainer") or cNameLower:find("guild boss") then
+            return false
+        end
+        return true
+    end
+    return false
+end
+
+-- FILTRO SEGURO NA LISTA DE CRIATURAS DO TARGETBOT (SISTEMA INVISÍVEL)
+if TargetBot and type(TargetBot.getCreatures) == "function" then
+    local oldGetCreatures = TargetBot.getCreatures
+    TargetBot.getCreatures = function(...)
+        local list = oldGetCreatures(...)
+        local localPlayer = g_game.getLocalPlayer()
+        
+        -- Se o player não existir ou estiver em grupo (Party), libera todos os monstros
+        if not localPlayer or localPlayer:isPartyMember() then 
+            return list 
+        end
+        
+        local myId = localPlayer:getId()
+        local playerTarget = g_game.getAttackingCreature()
+        local filteredList = {}
+        
+        for _, creature in ipairs(list) do
+            local isTargetAlheio = isMonsterOfOtherPlayer(creature, myId)
+            local isMeuTargetManual = (playerTarget and playerTarget:getId() == creature:getId())
+            
+            -- Se o monstro NÃO for de outro player OU se for o bicho que eu cliquei manualmente
+            if not isTargetAlheio or isMeuTargetManual then
+                table.insert(filteredList, creature) -- Mantém o monstro na lista do bot
+            end
+        end
+        
+        return filteredList -- Entrega para o TargetBot apenas os monstros legítimos
+    end
+    print("[Anti-KS] Filtro invisível ativado. Alvos alheios removidos com segurança.")
+end
+
+local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
+
+-- SISTEMA DE MONITORAMENTO DE CAVEBOT (PAUSA SE HOUVER 2+ ESPECIAIS EM VOCÊ)
+local lastCheck = 0
+local function checkSpecialMonstersLure()
+    local cNow = now or (os.clock() * 1000)
+    if cNow - lastCheck < 100 then return end
+    lastCheck = cNow
+
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer then return end
+
+    local myId = localPlayer:getId()
+    local playerPos = localPlayer:getPosition()
+    if not playerPos then return end
+
+    local specialAttackingMe = 0
+    local spectators = g_map.getSpectators(playerPos, false)
+
+    for _, spec in ipairs(spectators) do
+        if spec:isMonster() and spec:getHealthPercent() > 0 then
+            local creatureName = string.lower(spec:getName() or "")
+            local isSpecial = false
+            
+            for _, name in ipairs(specialMonsters) do
+                if string.find(creatureName, name, 1, true) then
+                    isSpecial = true
+                    break
+                end
+            end
+
+            if isSpecial then
+                local mTargetId = 0
+                if type(spec.getTargetId) == "function" then
+                    mTargetId = spec:getTargetId() or 0
+                elseif spec.targetId then
+                    mTargetId = spec.targetId
+                elseif type(spec.getTarget) == "function" then
+                    local tgt = spec:getTarget()
+                    if tgt then mTargetId = tgt:getId() end
+                end
+
+                if mTargetId == myId then
+                    specialAttackingMe = specialAttackingMe + 1
+                end
+            end
+        end
+    end
+
+    if specialAttackingMe >= 2 then
+        if cavebotMacro and type(cavebotMacro) == "table" then
+            cavebotMacro.delay = cNow + 1000
+        elseif CaveBot and type(CaveBot.macro) == "table" then
+            CaveBot.macro.delay = cNow + 1000
+        elseif CaveBot and type(CaveBot.delay) == "function" then
+            CaveBot.delay(1000)
+        end
+    end
+end
+
+-- ====================================================================
+-- SUA FUNÇÃO DE PRIORIDADE TOTALMENTE LIMPA SEM VARIÁVEL CHASE
+-- ====================================================================
+TargetBot.Creature.calculatePriority = function(creature, config, path)
+  -- Roda a checagem de pausa de waypoints em segundo plano
+  checkSpecialMonstersLure()
+
+  local priority = 0
+
+  -- extra priority if it's current target
+  if g_game.getAttackingCreature() == creature then
+    priority = priority + 1
+  end
+
+  -- VERIFICAÇÃO DE MONSTROS ESPECIAIS COM VALIDAÇÃO DE ANTI-KS
+  local creatureName = string.lower(creature:getName() or "")
+  local isSpecial = false
+  
+  for _, name in ipairs(specialMonsters) do
+    if string.find(creatureName, name, 1, true) then
+      isSpecial = true
+      break
+    end
+  end
+
+  if isSpecial then
+    local localPlayer = g_game.getLocalPlayer()
+    local myId = localPlayer and localPlayer:getId() or 0
+    
+    local mTargetId = 0
+    if type(creature.getTargetId) == "function" then
+        mTargetId = creature:getTargetId() or 0
+    elseif creature.targetId then
+        mTargetId = creature.targetId
+    elseif type(creature.getTarget) == "function" then
+        local tgt = creature:getTarget()
+        if tgt then mTargetId = tgt:getId() end
+    end
+
+    local attackingOtherPlayer = (mTargetId > 0 and mTargetId ~= myId)
+    if not attackingOtherPlayer then
+      priority = priority + 1000
+    end
+  end
+
+  -- check if distance is fine
+  if #path > config.maxDistance then
+    return priority
+  end
+
+  -- add config priority
+  priority = priority + config.priority
+  
+  -- extra priority for close distance
+  local path_length = #path
+  if path_length == 1 then
+    priority = priority + 3
+  elseif path_length <= 3 then
+    priority = priority + 1
+  end
+
+  -- extra priority for low health (CHASE REMOVIDO DAQUI)
+  local hp = creature:getHealthPercent() or 100
+  if hp < 20 then
+    priority = priority + 5 -- Mesclado o maior bônus de vida baixa direto aqui
+  elseif hp < 40 then
+    priority = priority + 2.5
+  elseif hp < 60 then
+    priority = priority + 1.5
+  elseif hp < 80 then
+    priority = priority + 0.5
+  end
+
+  return priority
+end
