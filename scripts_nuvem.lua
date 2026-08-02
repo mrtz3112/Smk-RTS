@@ -3161,7 +3161,7 @@ print("[Loader] Anti-KS e Lure Inteligente calibrados com Sensor de Proximidade.
 
 
 -- ====================================================================
--- NOVO CREATURE_PRIORITY
+-- NOVO CREATURE_PRIORITY (SUPER BÔNUS APENAS COLADO - 1 SQM)
 -- ====================================================================
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 
@@ -3228,6 +3228,7 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   checkSpecialMonstersLure()
 
   local priority = 0
+  local path_length = #path
 
   -- extra priority if it's current target
   if g_game.getAttackingCreature() == creature then
@@ -3261,12 +3262,23 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
 
     local attackingOtherPlayer = (mTargetId > 0 and mTargetId ~= myId)
     if not attackingOtherPlayer then
-      priority = priority + 1000
+      -- ====================================================================
+      -- TRAVA DE CONTATO ADAPTADA:
+      -- Se o monstro especial estiver COLADO (exatamente 1 SQM), ganha foco total (+1000).
+      -- Se estiver a 2 ou mais SQMs de distância, recebe apenas o bônus leve (+5).
+      -- Isso força o bot a priorizar QUALQUER monstro comum que esteja grudado em você primeiro.
+      -- ====================================================================
+      if path_length == 1 then
+        priority = priority + 1000
+      else
+        priority = priority + 5
+      end
+      -- ====================================================================
     end
   end
 
   -- check if distance is fine
-  if #path > config.maxDistance then
+  if path_length > config.maxDistance then
     return priority
   end
 
@@ -3274,7 +3286,6 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   priority = priority + config.priority
   
   -- extra priority for close distance
-  local path_length = #path
   if path_length == 1 then
     priority = priority + 3
   elseif path_length <= 3 then
@@ -3284,7 +3295,7 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   -- extra priority for low health
   local hp = creature:getHealthPercent() or 100
   if hp < 20 then
-    priority = priority + 5 -- Mesclado o maior bônus de vida baixa direto aqui
+    priority = priority + 5
   elseif hp < 40 then
     priority = priority + 2.5
   elseif hp < 60 then
