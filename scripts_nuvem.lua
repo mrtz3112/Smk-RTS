@@ -2,52 +2,116 @@
 -- HIGIENIZAÇÃO DE STORAGE AUTOMÁTICA VIA REPOSITÓRIO ONLINE (HTTP)
 -- ====================================================================
 
--- 1. ADICIONE A URL DIRETA DO SEU SCRIPT DO REPOSITÓRIO ABAIXO (Link do código bruto/raw)
 local URL_REPOSITORIO_ONLINE = "https://raw.githubusercontent.com/mrtz3112/Smk-RTS/refs/heads/main/scripts_nuvem.lua"
 
 local chavesPermitidasLoader = {}
 local carregamentoConcluido = false
 
--- Baixa o texto do repositório em segundo plano para não travar o jogo ao logar
+local function processarConteudo(content)
+    for word in content:gmatch('["\']([%a%d_%s%-]+)["\']') do chavesPermitidasLoader[word] = true end
+    for word in content:gmatch('%.([%a%d_]+)') do chavesPermitidasLoader[word] = true end
+    chavesPermitidasLoader["alarms"] = true
+    chavesPermitidasLoader["_macros"] = true
+    chavesPermitidasLoader["_configs"] = true
+    chavesPermitidasLoader["painelSalvo"] = true
+    chavesPermitidasLoader["petItemCooldowns"] = true
+    carregamentoConcluido = true
+end
+
 if type(HTTP) == "table" and type(HTTP.get) == "function" then
     HTTP.get(URL_REPOSITORIO_ONLINE, function(content, err)
         if not err and content and type(content) == "string" then
-            -- Expressões regulares para varrer o texto puro vindo da internet
-            for word in content:gmatch('["\']([%a%d_%s%-]+)["\']') do chavesPermitidasLoader[word] = true end
-            for word in content:gmatch('%.([%a%d_]+)') do chavesPermitidasLoader[word] = true end
-            
-            -- Chaves estruturais nativas que não podem ser apagadas de forma alguma
-            chavesPermitidasLoader["alarms"] = true
-            chavesPermitidasLoader["_macros"] = true
-            chavesPermitidasLoader["_configs"] = true
-            chavesPermitidasLoader["painelSalvo"] = true
-            chavesPermitidasLoader["petItemCooldowns"] = true
-            
-            carregamentoConcluido = true
+            processarConteudo(content)
             print("[Loader] Storage Cleaner habilitado com sucesso.")
         else
             print("[Loader] Erro ao conectar ao repositório online: " .. tostring(err))
         end
     end)
 elseif type(g_http) == "table" and type(g_http.get) == "function" then
-    -- Alternativa para clients que usam a nomenclatura g_http
     g_http.get(URL_REPOSITORIO_ONLINE, function(content, err)
         if not err and content then
-            for word in content:gmatch('["\']([%a%d_%s%-]+)["\']') do chavesPermitidasLoader[word] = true end
-            for word in content:gmatch('%.([%a%d_]+)') do chavesPermitidasLoader[word] = true end
-            chavesPermitidasLoader["alarms"] = true
-            chavesPermitidasLoader["_macros"] = true
-            chavesPermitidasLoader["_configs"] = true
-            chavesPermitidasLoader["painelSalvo"] = true
-            chavesPermitidasLoader["petItemCooldowns"] = true
-            carregamentoConcluido = true
+            processarConteudo(content)
             print("[Loader] Storage Cleaner importada com sucesso via g_http.")
         end
     end)
 end
 
 -- ====================================================================
--- INTERCEPTADOR DE CONFIGURAÇÃO E MEMÓRIA VIVA
+-- FUNÇÃO DE HIGIENIZAÇÃO PROFUNDA (CORRIGE CHAVES MISTURADAS E INVALIDAS)
+-- ====================================================================
+local function higienizarTabelaJSON(tabela)
+    if type(tabela) ~= "table" then return tabela end
+
+    local novasChavesTexto = {}
+    local novasChavesNum = {}
+    local temChaveTexto = false
+    local temChaveNum = false
+
+    for k, v in pairs(tabela) do
+        local tipoChave = type(k)
+        local tipoValor = type(v)
+
+        -- 1. Descarta valores que não podem ir para o JSON de forma alguma
+        local valorValido = true
+        if tipoValor == "userdata" or tipoValor == "function" or tipoValor == "thread" then
+            valorValido = false
+        elseif tipoValor == "table" then
+            if v.getClassName or v.createWidget then
+                valorValido = false
+            else
+                v = higienizarTabelaJSON(v) -- Recursividade para tabelas filhas
+            end
+        end
+
+        if valorValido then
+            -- 2. Separa e higieniza os tipos de chaves para evitar tipos misturados
+            if tipoChave == "string" then
+                temChaveTexto = true
+                novasChavesTexto[k] = v
+            elseif tipoChave == "number" then
+                temChaveNum = true
+                novasChavesNum[k] = v
+            end
+        end
+    end
+
+    -- 3. Resolve o problema de "mixed key types" (chaves misturadas)
+    -- Se a tabela possui ambos os tipos, força todas as chaves numéricas a virarem strings
+    if temChaveTexto and temChaveNum then
+        for k, v in pairs(novasChavesNum) do
+            novasChavesTexto[tostring(k)] = v
+        end
+        return novasChavesTexto
+    elseif temChaveTexto then
+        return novasChavesTexto
+    else
+        return novasChavesNum
+    end
+end
+
+-- ====================================================================
+-- INTERCEPTADOR DIRETO NA BIBLIOTECA JSON (CORREÇÃO DEFINITIVA)
+-- ====================================================================
+if json and type(json.serialize) == "function" then
+    local originalSerialize = json.serialize
+    json.serialize = function(value, ...)
+        if type(value) == "table" then
+            value = higienizarTabelaJSON(value)
+        end
+        return originalSerialize(value, ...)
+    end
+elseif json and type(json.encode) == "function" then
+    local originalEncode = json.encode
+    json.encode = function(value, ...)
+        if type(value) == "table" then
+            value = higienizarTabelaJSON(value)
+        end
+        return originalEncode(value, ...)
+    end
+end
+
+-- ====================================================================
+-- INTERCEPTADOR DE CONFIGURAÇÃO DO BOT
 -- ====================================================================
 if type(Config) == "table" and type(Config.setup) == "function" then
     local originalConfigSetup = Config.setup
@@ -58,7 +122,6 @@ if type(Config) == "table" and type(Config.setup) == "function" then
 
         local originalCallback = callback
         local cleanCallback = function(name, enabled, data)
-            -- Só higieniza se a Whitelist já tiver sido baixada e se não for arquivo do bot
             if carregamentoConcluido and not ehArquivoDoBot and data and type(data) == "table" then
                 local chavesRemovidas = 0
                 for key, _ in pairs(data) do
@@ -76,26 +139,11 @@ if type(Config) == "table" and type(Config.setup) == "function" then
 
         local configObject = originalConfigSetup(configName, widget, typeFormat, cleanCallback, ...)
 
-        -- Proteção contra o erro fatal de userdata ao salvar no disco
-        if configObject and type(configObject.save) == "function" and not ehArquivoDoBot then
+        if configObject and type(configObject.save) == "function" then
             local originalSave = configObject.save
             configObject.save = function(saveData, ...)
                 if saveData and type(saveData) == "table" then
-                    local function limparLixoPrimitivo(tabela)
-                        for k, v in pairs(tabela) do
-                            local t = type(v)
-                            if t == "userdata" or t == "function" or t == "thread" then
-                                tabela[k] = nil
-                            elseif t == "table" then
-                                if v.getClassName or v.createWidget then
-                                    tabela[k] = nil
-                                else
-                                    limparLixoPrimitivo(v)
-                                end
-                            end
-                        end
-                    end
-                    limparLixoPrimitivo(saveData)
+                    saveData = higienizarTabelaJSON(saveData)
                 end
                 return originalSave(saveData, ...)
             end
@@ -105,30 +153,16 @@ if type(Config) == "table" and type(Config.setup) == "function" then
     end
 end
 
--- Varredura contínua para manter a memória RAM limpa de lixo de interface
+-- Varredura contínua na memória viva do storage global
 if type(cycleEvent) == "function" then
     cycleEvent(function()
-        if carregamentoConcluido and storage and type(storage) == "table" then
-            local function expurgarUserdataViva(tabela)
-                for k, v in pairs(tabela) do
-                    local t = type(v)
-                    if t == "userdata" or t == "function" or t == "thread" then
-                        tabela[k] = nil
-                    elseif t == "table" then
-                        if v.getClassName or v.createWidget then
-                            tabela[k] = nil
-                        else
-                            expurgarUserdataViva(v)
-                        end
-                    end
-                end
-            end
-            pcall(expurgarUserdataViva, storage)
+        if storage and type(storage) == "table" then
+            pcall(function()
+                storage = higienizarTabelaJSON(storage)
+            end)
         end
-    end, 1000)
+    end, 2000)
 end
-
-
 
 setDefaultTab("Main")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
@@ -3174,88 +3208,142 @@ end
 print("[Loader] Anti-KS habilitado com sucesso.")
 
 
+local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
+
 -- ====================================================================
--- NOVO CREATURE_PRIORITY (SUPER BÔNUS APENAS COLADO - 1 SQM)
+-- DECLARAÇÃO GLOBAL DIRETA (SEM USAR _G PARA EVITAR O ERRO SANDBOX)
 -- ====================================================================
-TargetBot.Creature.calculatePriority = function(creature, config, path)
-  -- Roda a checagem de pausa de waypoints em segundo plano
-  checkSpecialMonstersLure()
+local lastCheck = 0
 
-  local priority = 0
-  local path_length = #path
+-- Ao remover o 'local' da frente, a função vira global automaticamente no ambiente do bot
+checkSpecialMonstersLure = function()
+    local cNow = now or (os.clock() * 1000)
+    if cNow - lastCheck < 100 then return end
+    lastCheck = cNow
 
-  -- Extra priority if it's current target
-  if g_game.getAttackingCreature() == creature then
-    priority = priority + 1
-  end
-
-  -- VERIFICAÇÃO DE MONSTROS ESPECIAIS COM VALIDAÇÃO DE ANTI-KS
-  local creatureName = string.lower(creature:getName() or "")
-  local isSpecial = false
-  
-  for _, name in ipairs(specialMonsters) do
-    if string.find(creatureName, name, 1, true) then
-      isSpecial = true
-      break
-    end
-  end
-
-  if isSpecial then
     local localPlayer = g_game.getLocalPlayer()
-    local myId = localPlayer and localPlayer:getId() or 0
-    
-    local mTargetId = 0
-    if type(creature.getTargetId) == "function" then
-        mTargetId = creature:getTargetId() or 0
-    elseif creature.targetId then
-        mTargetId = creature.targetId
-    elseif type(creature.getTarget) == "function" then
-        local tgt = creature:getTarget()
-        if tgt then mTargetId = tgt:getId() end
+    if not localPlayer then return end
+
+    local myId = localPlayer:getId()
+    local playerPos = localPlayer:getPosition()
+    if not playerPos then return end
+
+    local specialAttackingMe = 0
+    local spectators = g_map.getSpectators(playerPos, false)
+
+    for _, spec in ipairs(spectators) do
+        if spec:isMonster() and spec:getHealthPercent() > 0 then
+            local creatureName = string.lower(spec:getName() or "")
+            local isSpecial = false
+            
+            for _, name in ipairs(specialMonsters) do
+                if string.find(creatureName, name, 1, true) then
+                    isSpecial = true
+                    break
+                end
+            end
+
+            if isSpecial then
+                local mTargetId = 0
+                if type(spec.getTargetId) == "function" then
+                    mTargetId = spec:getTargetId() or 0
+                elseif spec.targetId then
+                    mTargetId = spec.targetId
+                elseif type(spec.getTarget) == "function" then
+                    local tgt = spec:getTarget()
+                    if tgt then mTargetId = tgt:getId() end
+                end
+
+                if mTargetId == myId then
+                    specialAttackingMe = specialAttackingMe + 1
+                end
+            end
+        end
     end
 
-    local attackingOtherPlayer = (mTargetId > 0 and mTargetId ~= myId)
-    if not attackingOtherPlayer then
-      -- Modificado: Se o Elite estiver longe (2+ SQMs), ele NÃO ganha bônus extra automático
-      -- Ele só ganha foco total se estiver colado (1 SQM)
-      if path_length == 1 then
-        priority = priority + 1000
-      end
+    if specialAttackingMe >= 2 then
+        if cavebotMacro and type(cavebotMacro) == "table" then
+            cavebotMacro.delay = cNow + 1000
+        elseif CaveBot and type(CaveBot.macro) == "table" then
+            CaveBot.macro.delay = cNow + 1000
+        elseif CaveBot and type(CaveBot.delay) == "function" then
+            CaveBot.delay(1000)
+        end
     end
-  end
-
-  -- Check if distance is fine
-  if path_length > config.maxDistance then
-    return priority
-  end
-
-  -- Add config priority
-  priority = priority + config.priority
-  
-  -- ====================================================================
-  -- TRAVA DE CONTATO ABSOLUTA (CORREÇÃO):
-  -- Qualquer monstro (comum ou especial) que estiver a 1 SQM de distância 
-  -- recebe um bônus massivo para garantir que a box seja limpa primeiro.
-  -- ====================================================================
-  if path_length == 1 then
-    priority = priority + 500
-  elseif path_length <= 3 then
-    priority = priority + 2
-  end
-  -- ====================================================================
-
-  -- Extra priority for low health
-  local hp = creature:getHealthPercent() or 100
-  if hp < 20 then
-    priority = priority + 5
-  elseif hp < 40 then
-    priority = priority + 2.5
-  elseif hp < 60 then
-    priority = priority + 1.5
-  elseif hp < 80 then
-    priority = priority + 0.5
-  end
-
-  return priority
 end
 
+-- ====================================================================
+-- INTERCEPTADOR DO TARGETBOT COM PRIORIDADE CORRIGIDA (BOX EM 1º LUGAR)
+-- ====================================================================
+if TargetBot and TargetBot.Creature then
+    TargetBot.Creature.calculatePriority = function(creature, config, path)
+      -- Executa a função global de segurança diretamente
+      if type(checkSpecialMonstersLure) == "function" then
+          checkSpecialMonstersLure()
+      end
+
+      local priority = 0
+      local path_length = #path
+
+      if g_game.getAttackingCreature() == creature then
+        priority = priority + 1
+      end
+
+      local creatureName = string.lower(creature:getName() or "")
+      local isSpecial = false
+      
+      for _, name in ipairs(specialMonsters) do
+        if string.find(creatureName, name, 1, true) then
+          isSpecial = true
+          break
+        end
+      end
+
+      if isSpecial then
+        local localPlayer = g_game.getLocalPlayer()
+        local myId = localPlayer and localPlayer:getId() or 0
+        
+        local mTargetId = 0
+        if type(creature.getTargetId) == "function" then
+            mTargetId = creature:getTargetId() or 0
+        elseif creature.targetId then
+            mTargetId = creature.targetId
+        elseif type(creature.getTarget) == "function" then
+            local tgt = creature:getTarget()
+            if tgt then mTargetId = tgt:getId() end
+        end
+
+        local attackingOtherPlayer = (mTargetId > 0 and mTargetId ~= myId)
+        if not attackingOtherPlayer then
+          if path_length == 1 then
+            priority = priority + 1000
+          end
+        end
+      end
+
+      if path_length > config.maxDistance then
+        return priority
+      end
+
+      priority = priority + config.priority
+      
+      if path_length == 1 then
+        priority = priority + 500
+      elseif path_length <= 3 then
+        priority = priority + 2
+      end
+
+      local hp = creature:getHealthPercent() or 100
+      if hp < 20 then
+        priority = priority + 5
+      elseif hp < 40 then
+        priority = priority + 2.5
+      elseif hp < 60 then
+        priority = priority + 1.5
+      elseif hp < 80 then
+        priority = priority + 0.5
+      end
+
+      return priority
+    end
+end
