@@ -2442,7 +2442,7 @@ enemy = macro(30, 'Enemy', "ALT+3", function()
 end)
 
 -- Macro secundária que monitora o desligamento do Enemy
-macro(100, function()
+macro(30, function()
     if enemy and not enemy.isOn() and estadoAnteriorMacro then
         -- ====================================================================
         -- MODIFICAÇÃO: Executa ações imediatas assim que a macro desliga
