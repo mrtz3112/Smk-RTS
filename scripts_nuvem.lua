@@ -3021,7 +3021,6 @@ end)
 -- ====================================================================
 -- ANTI-KS SEGURO COM TRAVA DE LURE INTELIGENTE (FILTRO DE PROXIMIDADE)
 -- ====================================================================
-
 local function isMonsterOfOtherPlayer(creature, myId, localPlayer)
     if not creature or not creature:isMonster() then return false end
     
@@ -3163,66 +3162,6 @@ print("[Loader] Anti-KS habilitado com sucesso.")
 -- ====================================================================
 -- NOVO CREATURE_PRIORITY (SUPER BÔNUS APENAS COLADO - 1 SQM)
 -- ====================================================================
-local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
-
--- SISTEMA DE MONITORAMENTO DE CAVEBOT (PAUSA SE HOUVER 2+ ESPECIAIS EM VOCÊ)
-local lastCheck = 0
-local function checkSpecialMonstersLure()
-    local cNow = now or (os.clock() * 1000)
-    if cNow - lastCheck < 100 then return end
-    lastCheck = cNow
-
-    local localPlayer = g_game.getLocalPlayer()
-    if not localPlayer then return end
-
-    local myId = localPlayer:getId()
-    local playerPos = localPlayer:getPosition()
-    if not playerPos then return end
-
-    local specialAttackingMe = 0
-    local spectators = g_map.getSpectators(playerPos, false)
-
-    for _, spec in ipairs(spectators) do
-        if spec:isMonster() and spec:getHealthPercent() > 0 then
-            local creatureName = string.lower(spec:getName() or "")
-            local isSpecial = false
-            
-            for _, name in ipairs(specialMonsters) do
-                if string.find(creatureName, name, 1, true) then
-                    isSpecial = true
-                    break
-                end
-            end
-
-            if isSpecial then
-                local mTargetId = 0
-                if type(spec.getTargetId) == "function" then
-                    mTargetId = spec:getTargetId() or 0
-                elseif spec.targetId then
-                    mTargetId = spec.targetId
-                elseif type(spec.getTarget) == "function" then
-                    local tgt = spec:getTarget()
-                    if tgt then mTargetId = tgt:getId() end
-                end
-
-                if mTargetId == myId then
-                    specialAttackingMe = specialAttackingMe + 1
-                end
-            end
-        end
-    end
-
-    if specialAttackingMe >= 2 then
-        if cavebotMacro and type(cavebotMacro) == "table" then
-            cavebotMacro.delay = cNow + 1000
-        elseif CaveBot and type(CaveBot.macro) == "table" then
-            CaveBot.macro.delay = cNow + 1000
-        elseif CaveBot and type(CaveBot.delay) == "function" then
-            CaveBot.delay(1000)
-        end
-    end
-end
-
 TargetBot.Creature.calculatePriority = function(creature, config, path)
   -- Roda a checagem de pausa de waypoints em segundo plano
   checkSpecialMonstersLure()
@@ -3230,7 +3169,7 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   local priority = 0
   local path_length = #path
 
-  -- extra priority if it's current target
+  -- Extra priority if it's current target
   if g_game.getAttackingCreature() == creature then
     priority = priority + 1
   end
@@ -3262,37 +3201,35 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
 
     local attackingOtherPlayer = (mTargetId > 0 and mTargetId ~= myId)
     if not attackingOtherPlayer then
-      -- ====================================================================
-      -- TRAVA DE CONTATO ADAPTADA:
-      -- Se o monstro especial estiver COLADO (exatamente 1 SQM), ganha foco total (+1000).
-      -- Se estiver a 2 ou mais SQMs de distância, recebe apenas o bônus leve (+5).
-      -- Isso força o bot a priorizar QUALQUER monstro comum que esteja grudado em você primeiro.
-      -- ====================================================================
+      -- Modificado: Se o Elite estiver longe (2+ SQMs), ele NÃO ganha bônus extra automático
+      -- Ele só ganha foco total se estiver colado (1 SQM)
       if path_length == 1 then
         priority = priority + 1000
-      else
-        priority = priority + 5
       end
-      -- ====================================================================
     end
   end
 
-  -- check if distance is fine
+  -- Check if distance is fine
   if path_length > config.maxDistance then
     return priority
   end
 
-  -- add config priority
+  -- Add config priority
   priority = priority + config.priority
   
-  -- extra priority for close distance
+  -- ====================================================================
+  -- TRAVA DE CONTATO ABSOLUTA (CORREÇÃO):
+  -- Qualquer monstro (comum ou especial) que estiver a 1 SQM de distância 
+  -- recebe um bônus massivo para garantir que a box seja limpa primeiro.
+  -- ====================================================================
   if path_length == 1 then
-    priority = priority + 3
+    priority = priority + 500
   elseif path_length <= 3 then
-    priority = priority + 1
+    priority = priority + 2
   end
+  -- ====================================================================
 
-  -- extra priority for low health
+  -- Extra priority for low health
   local hp = creature:getHealthPercent() or 100
   if hp < 20 then
     priority = priority + 5
@@ -3306,3 +3243,4 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
 
   return priority
 end
+
