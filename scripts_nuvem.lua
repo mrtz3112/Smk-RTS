@@ -2351,7 +2351,6 @@ end)
 if chaseatk and chaseatk.setOff then
     chaseatk.setOff()
 end
---enemy
 local function definirModoAtaque(modo)
     local rootWidget = g_ui.getRootWidget()
     if not rootWidget then return end 
@@ -2368,36 +2367,43 @@ local function definirModoAtaque(modo)
 end
 
 -- ====================================================================
--- FUNÇÃO AUXILIAR PARA DESLIGAR O CAVEBOT E TARGETBOT NATIVOS
+-- FUNÇÃO AUXILIAR PARA CONTROLAR O CAVEBOT E TARGETBOT NATIVOS
 -- ====================================================================
-local function desligarBotsNativos()
-    -- Desliga o CaveBot (Varre múltiplas nomenclaturas da API)
-    if CaveBot then
-        if type(CaveBot.setOff) == "function" then CaveBot.setOff()
-        elseif type(CaveBot.stop) == "function" then CaveBot.stop()
-        elseif CaveBot.macro and type(CaveBot.macro.setOff) == "function" then CaveBot.macro.setOff()
+local function alternarBotsNativos(ligar)
+    if ligar then
+        -- MODIFICAÇÃO: Lógica para ligar o TargetBot automaticamente
+        if TargetBot then
+            if type(TargetBot.setOn) == "function" then TargetBot.setOn()
+            elseif type(TargetBot.start) == "function" then TargetBot.start()
+            elseif TargetBot.macro and type(TargetBot.macro.setOn) == "function" then TargetBot.macro.setOn()
+            end
         end
-    end
-    
-    -- Desliga o TargetBot (Varre múltiplas nomenclaturas da API)
-    if TargetBot then
-        if type(TargetBot.setOff) == "function" then TargetBot.setOff()
-        elseif type(TargetBot.stop) == "function" then TargetBot.stop()
-        elseif TargetBot.macro and type(TargetBot.macro.setOff) == "function" then TargetBot.macro.setOff()
+    else
+        -- Desliga o CaveBot
+        if CaveBot then
+            if type(CaveBot.setOff) == "function" then CaveBot.setOff()
+            elseif type(CaveBot.stop) == "function" then CaveBot.stop()
+            elseif CaveBot.macro and type(CaveBot.macro.setOff) == "function" then CaveBot.macro.setOff()
+            end
+        end
+        
+        -- Desliga o TargetBot
+        if TargetBot then
+            if type(TargetBot.setOff) == "function" then TargetBot.setOff()
+            elseif type(TargetBot.stop) == "function" then TargetBot.stop()
+            elseif TargetBot.macro and type(TargetBot.macro.setOff) == "function" then TargetBot.macro.setOff()
+            end
         end
     end
 end
 
 local estadoAnteriorMacro = false
 enemy = macro(30, 'Enemy', "ALT+3", function()
-    -- ====================================================================
-    -- MODIFICAÇÃO: Executa ações imediatas assim que a macro liga
-    -- ====================================================================
     if not estadoAnteriorMacro then
-        desligarBotsNativos() -- Desliga CaveBot e TargetBot automaticamente
+        alternarBotsNativos(false) -- Desliga os bots ao ativar o Enemy
         definirModoAtaque("balanced")
         estadoAnteriorMacro = true
-        print("[Enemy] Macro Ligada! Bots Nativos Desligados e Modo Balanced Setado.")
+        print("[Enemy] TargetBot Desligado.")
     end
     
     local myPos = pos()
@@ -2435,13 +2441,19 @@ enemy = macro(30, 'Enemy', "ALT+3", function()
     end
 end)
 
-macro(250, function()
+-- Macro secundária que monitora o desligamento do Enemy
+macro(100, function()
     if enemy and not enemy.isOn() and estadoAnteriorMacro then
+        -- ====================================================================
+        -- MODIFICAÇÃO: Executa ações imediatas assim que a macro desliga
+        -- ====================================================================
+        alternarBotsNativos(true) -- Religa o TargetBot automaticamente
         definirModoAtaque("offensive")
         estadoAnteriorMacro = false
-        print("[Enemy] Macro Desligada! Modo Offensive Restaurado.")
+        print("[Enemy] TargetBot Ativado.")
     end
 end)
+
 
 --X-Sense
 if type(storage.Sense) ~= "string" then
