@@ -1238,12 +1238,16 @@ if storage.painelSalvo.special == nil then storage.painelSalvo.special = false e
 if storage.painelSalvo.selfSpecial == nil then storage.painelSalvo.selfSpecial = false end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
+if storage.painelSalvo.horizontal == nil then storage.painelSalvo.horizontal = false end
 
-local painelIconesUI = setupUI([[
+local painelIconesUI = nil
+
+-- LAYOUT MODO VERTICAL (Compactado e Enxuto)
+local layoutVertical = [[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Spell Caster')
-  size: 92 190
+  size: 92 185
   focusable: false
   draggable: true
   phantom: false
@@ -1256,7 +1260,7 @@ MainWindow
     Button
       id: botaoSpells
       !text: tr('Area/Single')
-      size: 78 30
+      size: 78 24
       anchors.top: parent.top
       anchors.horizontalCenter: parent.horizontalCenter
       margin-left: 1
@@ -1264,35 +1268,138 @@ MainWindow
     Button
       id: botaoSpecial
       !text: tr('Target HP')
-      size: 78 30
+      size: 78 24
       anchors.top: botaoSpells.bottom
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 8
+      margin-top: 4
       margin-left: 1
 
     Button
       id: botaoSelfSpecial
       !text: tr('Self HP')
-      size: 78 30
+      size: 78 24
       anchors.top: botaoSpecial.bottom
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 8
+      margin-top: 4
       margin-left: 1
 
     Button
       id: botaoWave
       !text: tr('Wave (Reta)')
-      size: 78 30
+      size: 78 24
       anchors.top: botaoSelfSpecial.bottom
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 8
+      margin-top: 4
       margin-left: 1
-]], modules.game_interface.getMapPanel())
 
-painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
-painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
+    Button
+      id: botaoGirar
+      !text: tr('Girar')
+      size: 78 18
+      anchors.top: botaoWave.bottom
+      anchors.horizontalCenter: parent.horizontalCenter
+      margin-top: 4
+      margin-left: 1
+]]
 
--- Verifica de forma segura se a macro está ligada no motor do bot
+-- LAYOUT MODO HORIZONTAL (Calibrado: Janela em 410px e Botões em 80px)
+local layoutHorizontal = [[
+MainWindow
+  id: painelMacrosJanela
+  !text: tr('Spell Caster')
+  size: 410 75
+  focusable: false
+  draggable: true
+  phantom: false
+
+  Panel
+    id: containerIcones
+    anchors.fill: parent
+    phantom: false
+
+    Button
+      id: botaoSpells
+      !text: tr('Area/Single')
+      size: 80 24
+      anchors.top: parent.top
+      anchors.left: parent.left
+      margin-top: 0
+      margin-left: 2
+
+    Button
+      id: botaoSpecial
+      !text: tr('Target HP')
+      size: 80 24
+      anchors.top: parent.top
+      anchors.left: botaoSpells.right
+      margin-top: 0
+      margin-left: 4
+
+    Button
+      id: botaoSelfSpecial
+      !text: tr('Self HP')
+      size: 80 24
+      anchors.top: parent.top
+      anchors.left: botaoSpecial.right
+      margin-top: 0
+      margin-left: 4
+
+    Button
+      id: botaoWave
+      !text: tr('Wave (Reta)')
+      size: 80 24
+      anchors.top: parent.top
+      anchors.left: botaoSelfSpecial.right
+      margin-top: 0
+      margin-left: 4
+
+    Button
+      id: botaoGirar
+      !text: tr('Girar')
+      size: 44 24
+      anchors.top: parent.top
+      anchors.left: botaoWave.right
+      margin-top: 0
+      margin-left: 4
+]]
+
+-- Função de vinculação nativa de cliques e cores
+local function conectarComponentesPainel()
+    if not painelIconesUI then return end
+    
+    painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
+    painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
+    
+    local container = painelIconesUI:getChildById("containerIcones")
+    if not container then return end
+    
+    local btnSpecial = container:getChildById("botaoSpecial")
+    local btnSelfSpecial = container:getChildById("botaoSelfSpecial")
+    local btnSpells = container:getChildById("botaoSpells")
+    local btnWave = container:getChildById("botaoWave")
+    local btnGirar = container:getChildById("botaoGirar")
+    
+    if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
+    if btnSelfSpecial then btnSelfSpecial.onClick = function() alternarEstadoMacro(selflowhp, "selfSpecial") end end
+    if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
+    if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
+    
+    if btnGirar then
+        btnGirar.onClick = function()
+            storage.painelSalvo.horizontal = not storage.painelSalvo.horizontal
+            painelIconesUI:destroy()
+            local layout = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
+            painelIconesUI = setupUI(layout, modules.game_interface.getMapPanel())
+            conectarComponentesPainel()
+        end
+    end
+end
+
+-- Inicialização com base no estado salvo do personagem
+local layoutInicial = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
+painelIconesUI = setupUI(layoutInicial, modules.game_interface.getMapPanel())
+
+-- CONTROLADORES NATIVOS DAS MACROS
 local function isMacroActive(macroRef)
     if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
         return macroRef.isOn()
@@ -1300,8 +1407,7 @@ local function isMacroActive(macroRef)
     return false
 end
 
--- Força a macro a alternar seu estado nativo diretamente
-local function alternarEstadoMacro(macroRef, storageKey)
+function alternarEstadoMacro(macroRef, storageKey)
     if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
         if macroRef.isOn() then
             macroRef.setOff()
@@ -1313,50 +1419,45 @@ local function alternarEstadoMacro(macroRef, storageKey)
     end
 end
 
-if painelIconesUI then
+-- Inicializa as conexões
+conectarComponentesPainel()
+
+-- Loop leve de atualização de cores e sincronia inicial
+local jaSincronizou = false
+macro(100, function()
+    if not g_game.isOnline() or not painelIconesUI then return end
+    
     local container = painelIconesUI:getChildById("containerIcones")
-    if container then
-        local btnSpecial = container:getChildById("botaoSpecial")
-        local btnSelfSpecial = container:getChildById("botaoSelfSpecial")
-        local btnSpells = container:getChildById("botaoSpells")
-        local btnWave = container:getChildById("botaoWave")
-        
-        -- Configuração dos cliques usando os controladores nativos diretos das macros
-        if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
-        if btnSelfSpecial then btnSelfSpecial.onClick = function() alternarEstadoMacro(selflowhp, "selfSpecial") end end
-        if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
-        if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
-        
-        local jaSincronizou = false
-        
-        macro(100, function()
-            if not g_game.isOnline() then return end
-            
-            -- Sincroniza o estado salvo no storage assim que você entra no jogo
-            if not jaSincronizou then
-                if lowhp and type(lowhp) == "table" and type(lowhp.setOn) == "function" then 
-                    if storage.painelSalvo.special then lowhp.setOn() else lowhp.setOff() end 
-                end
-                if selflowhp and type(selflowhp) == "table" and type(selflowhp.setOn) == "function" then 
-                    if storage.painelSalvo.selfSpecial then selflowhp.setOn() else selflowhp.setOff() end 
-                end
-                if combo and type(combo) == "table" and type(combo.setOn) == "function" then 
-                    if storage.painelSalvo.spells then combo.setOn() else combo.setOff() end 
-                end
-                if turnCombo and type(turnCombo) == "table" and type(turnCombo.setOn) == "function" then 
-                    if storage.painelSalvo.wave then turnCombo.setOn() else turnCombo.setOff() end 
-                end
-                jaSincronizou = true
-            end
-            
-            -- Atualiza as cores dos botões (Verde = Ativo, Vermelho = Inativo) em tempo real
-            if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp) and "green" or "red") end
-            if btnSelfSpecial then btnSelfSpecial:setColor(isMacroActive(selflowhp) and "green" or "red") end
-            if btnSpells then btnSpells:setColor(isMacroActive(combo) and "green" or "red") end
-            if btnWave then btnWave:setColor(isMacroActive(turnCombo) and "green" or "red") end
-        end)
+    if not container then return end
+    
+    local btnSpecial = container:getChildById("botaoSpecial")
+    local btnSelfSpecial = container:getChildById("botaoSelfSpecial")
+    local btnSpells = container:getChildById("botaoSpells")
+    local btnWave = container:getChildById("botaoWave")
+
+    if not jaSincronizou then
+        if lowhp and type(lowhp) == "table" and type(lowhp.setOn) == "function" then 
+            if storage.painelSalvo.special then lowhp.setOn() else lowhp.setOff() end 
+        end
+        if selflowhp and type(selflowhp) == "table" and type(selflowhp.setOn) == "function" then 
+            if storage.painelSalvo.selfSpecial then selflowhp.setOn() else selflowhp.setOff() end 
+        end
+        if combo and type(combo) == "table" and type(combo.setOn) == "function" then 
+            if storage.painelSalvo.spells then combo.setOn() else combo.setOff() end 
+        end
+        if turnCombo and type(turnCombo) == "table" and type(turnCombo.setOn) == "function" then 
+            if storage.painelSalvo.wave then turnCombo.setOn() else turnCombo.setOff() end 
+        end
+        jaSincronizou = true
     end
-end
+    
+    if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp) and "green" or "red") end
+    if btnSelfSpecial then btnSelfSpecial:setColor(isMacroActive(selflowhp) and "green" or "red") end
+    if btnSpells then btnSpells:setColor(isMacroActive(combo) and "green" or "red") end
+    if btnWave then btnWave:setColor(isMacroActive(turnCombo) and "green" or "red") end
+end)
+
+
 
 
 setDefaultTab("HEAL")
@@ -2918,10 +3019,10 @@ macro(100, function()
 end)
 
 -- ====================================================================
--- ANTI KS
+-- ANTI-KS SEGURO COM TRAVA DE LURE INTELIGENTE (FILTRO DE PROXIMIDADE)
 -- ====================================================================
--- FUNÇÃO AUXILIAR PARA DETERMINAR SE O MONSTRO PERTENCE A OUTRO JOGADOR
-local function isMonsterOfOtherPlayer(creature, myId)
+
+local function isMonsterOfOtherPlayer(creature, myId, localPlayer)
     if not creature or not creature:isMonster() then return false end
     
     -- Captura com segurança o ID do alvo do monstro
@@ -2935,14 +3036,47 @@ local function isMonsterOfOtherPlayer(creature, myId)
         if tgt then mTargetId = tgt:getId() end
     end
 
-    -- CASO 1: O monstro está com alvo explícito em outro jogador
+    -- CASO 1: O monstro está focando outro jogador explicitamente
     local hasOtherTarget = (mTargetId > 0 and mTargetId ~= myId)
     
-    -- CASO 2: O monstro perdeu vida mas o alvo dele NÃO é você (Anti-atraso de rede)
-    local isDamagedByOthers = (creature:getHealthPercent() < 100 and mTargetId ~= myId)
+    -- CASO 2: O monstro está perdendo vida (AoE de terceiros) e o alvo NÃO é você
+    local isDamagedByOthers = (mTargetId ~= myId and creature:getHealthPercent() < 100)
 
-    if hasOtherTarget or isDamagedByOthers then
-        -- Permite atacar se o nome contiver "trainer" ou "guild boss"
+    -- CASO 3: SENSOR DE PROXIMIDADE (Bicho com 100% de vida colado em outro player)
+    local coladoEmOutroPlayer = false
+    if not hasOtherTarget and not isDamagedByOthers and localPlayer then
+        local cPos = creature:getPosition()
+        local myPos = localPlayer:getPosition()
+        
+        if cPos and myPos then
+            -- Procura por outros jogadores que estejam ao redor do monstro
+            local specs = g_map.getSpectators(cPos, false)
+            for i = 1, #specs do
+                local spec = specs[i]
+                -- Se encontrar outro player (que não seja você e nem da sua party)
+                if spec:isPlayer() and spec:getId() ~= myId and not spec:isPartyMember() then
+                    local pPos = spec:getPosition()
+                    if pPos and pPos.z == cPos.z then
+                        local distX = math.abs(pPos.x - cPos.x)
+                        local distY = math.abs(pPos.y - cPos.y)
+                        
+                        -- Se o monstro estiver colado (raio de 1 quadrado) do outro jogador, 
+                        -- e você estiver mais longe do que o outro jogador está dele:
+                        if distX <= 1 and distY <= 1 then
+                            local meuDistX = math.abs(myPos.x - cPos.x)
+                            local meuDistY = math.abs(myPos.y - cPos.y)
+                            if meuDistX > 1 or meuDistY > 1 then
+                                coladoEmOutroPlayer = true
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if hasOtherTarget or isDamagedByOthers or coladoEmOutroPlayer then
         local cName = creature:getName() or ""
         local cNameLower = cName:lower()
         if cNameLower:find("trainer") or cNameLower:find("guild boss") then
@@ -2953,14 +3087,15 @@ local function isMonsterOfOtherPlayer(creature, myId)
     return false
 end
 
--- FILTRO SEGURO NA LISTA DE CRIATURAS DO TARGETBOT (SISTEMA INVISÍVEL)
+-- ====================================================================
+-- INTERCEPTADOR 1: SOME COM OS BICHOS ALHEIOS DA LISTA DO TARGET
+-- ====================================================================
 if TargetBot and type(TargetBot.getCreatures) == "function" then
     local oldGetCreatures = TargetBot.getCreatures
     TargetBot.getCreatures = function(...)
         local list = oldGetCreatures(...)
         local localPlayer = g_game.getLocalPlayer()
         
-        -- Se o player não existir ou estiver em grupo (Party), libera todos os monstros
         if not localPlayer or localPlayer:isPartyMember() then 
             return list 
         end
@@ -2969,20 +3104,60 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
         local playerTarget = g_game.getAttackingCreature()
         local filteredList = {}
         
-        for _, creature in ipairs(list) do
-            local isTargetAlheio = isMonsterOfOtherPlayer(creature, myId)
+        for i = 1, #list do
+            local creature = list[i]
+            local isTargetAlheio = isMonsterOfOtherPlayer(creature, myId, localPlayer)
             local isMeuTargetManual = (playerTarget and playerTarget:getId() == creature:getId())
             
-            -- Se o monstro NÃO for de outro player OU se for o bicho que eu cliquei manualmente
             if not isTargetAlheio or isMeuTargetManual then
-                table.insert(filteredList, creature) -- Mantém o monstro na lista do bot
+                table.insert(filteredList, creature)
             end
         end
         
-        return filteredList -- Entrega para o TargetBot apenas os monstros legítimos
+        return filteredList
     end
-    print("[Anti-KS] Filtro invisível ativado. Alvos alheios removidos com segurança.")
 end
+
+-- ====================================================================
+-- INTERCEPTADOR 2: CONTROLADOR DE MOVIMENTO (SOMA APENAS OS SEUS MONSTROS)
+-- ====================================================================
+if CaveBot and type(CaveBot.doWalking) == "function" then
+    local oldDoWalking = CaveBot.doWalking
+    CaveBot.doWalking = function(...)
+        local localPlayer = g_game.getLocalPlayer()
+        if localPlayer and not localPlayer:isPartyMember() then
+            local myId = localPlayer:getId()
+            local playerPos = localPlayer:getPosition()
+            
+            if playerPos then
+                local totalMonstersBox = 0
+                local spectators = g_map.getSpectators(playerPos, false)
+                
+                for i = 1, #spectators do
+                    local spec = spectators[i]
+                    if spec:isMonster() and spec:getHealthPercent() > 0 then
+                        -- Graças ao Caso 3 adicionado acima, os bichos colados no outro jogador 
+                        -- serão detectados e NUNCA vão entrar na contagem do seu Lure!
+                        if not isMonsterOfOtherPlayer(spec, myId, localPlayer) then
+                            totalMonstersBox = totalMonstersBox + 1
+                        end
+                    end
+                end
+                
+                -- Se surgirem 5 ou mais monstros legítimos SEUS, trava a caminhada
+                if totalMonstersBox >= 5 then
+                    if type(CaveBot.delay) == "function" then
+                        CaveBot.delay(500)
+                    end
+                    return false 
+                end
+            end
+        end
+        return oldDoWalking(...)
+    end
+end
+
+print("[Loader] Anti-KS e Lure Inteligente calibrados com Sensor de Proximidade.")
 
 
 -- ====================================================================
