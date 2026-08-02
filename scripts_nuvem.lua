@@ -1,5 +1,5 @@
 -- ====================================================================
--- HIGIENIZAÇÃO DE STORAGE AUTOMÁTICA VIA REPOSITÓRIO ONLINE (HTTP)
+-- 1. HIGIENIZAÇÃO DE STORAGE AUTOMÁTICA VIA REPOSITÓRIO ONLINE (HTTP)
 -- ====================================================================
 
 local URL_REPOSITORIO_ONLINE = "https://raw.githubusercontent.com/mrtz3112/Smk-RTS/refs/heads/main/scripts_nuvem.lua"
@@ -34,134 +34,6 @@ elseif type(g_http) == "table" and type(g_http.get) == "function" then
             print("[Loader] Storage Cleaner importada com sucesso via g_http.")
         end
     end)
-end
-
--- ====================================================================
--- FUNÇÃO DE HIGIENIZAÇÃO PROFUNDA (CORRIGE CHAVES MISTURADAS E INVALIDAS)
--- ====================================================================
-local function higienizarTabelaJSON(tabela)
-    if type(tabela) ~= "table" then return tabela end
-
-    local novasChavesTexto = {}
-    local novasChavesNum = {}
-    local temChaveTexto = false
-    local temChaveNum = false
-
-    for k, v in pairs(tabela) do
-        local tipoChave = type(k)
-        local tipoValor = type(v)
-
-        -- 1. Descarta valores que não podem ir para o JSON de forma alguma
-        local valorValido = true
-        if tipoValor == "userdata" or tipoValor == "function" or tipoValor == "thread" then
-            valorValido = false
-        elseif tipoValor == "table" then
-            if v.getClassName or v.createWidget then
-                valorValido = false
-            else
-                v = higienizarTabelaJSON(v) -- Recursividade para tabelas filhas
-            end
-        end
-
-        if valorValido then
-            -- 2. Separa e higieniza os tipos de chaves para evitar tipos misturados
-            if tipoChave == "string" then
-                temChaveTexto = true
-                novasChavesTexto[k] = v
-            elseif tipoChave == "number" then
-                temChaveNum = true
-                novasChavesNum[k] = v
-            end
-        end
-    end
-
-    -- 3. Resolve o problema de "mixed key types" (chaves misturadas)
-    -- Se a tabela possui ambos os tipos, força todas as chaves numéricas a virarem strings
-    if temChaveTexto and temChaveNum then
-        for k, v in pairs(novasChavesNum) do
-            novasChavesTexto[tostring(k)] = v
-        end
-        return novasChavesTexto
-    elseif temChaveTexto then
-        return novasChavesTexto
-    else
-        return novasChavesNum
-    end
-end
-
--- ====================================================================
--- INTERCEPTADOR DIRETO NA BIBLIOTECA JSON (CORREÇÃO DEFINITIVA)
--- ====================================================================
-if json and type(json.serialize) == "function" then
-    local originalSerialize = json.serialize
-    json.serialize = function(value, ...)
-        if type(value) == "table" then
-            value = higienizarTabelaJSON(value)
-        end
-        return originalSerialize(value, ...)
-    end
-elseif json and type(json.encode) == "function" then
-    local originalEncode = json.encode
-    json.encode = function(value, ...)
-        if type(value) == "table" then
-            value = higienizarTabelaJSON(value)
-        end
-        return originalEncode(value, ...)
-    end
-end
-
--- ====================================================================
--- INTERCEPTADOR DE CONFIGURAÇÃO DO BOT
--- ====================================================================
-if type(Config) == "table" and type(Config.setup) == "function" then
-    local originalConfigSetup = Config.setup
-    
-    Config.setup = function(configName, widget, typeFormat, callback, ...)
-        local cName = tostring(configName or ""):lower()
-        local ehArquivoDoBot = cName:find("target") or cName:find("cave") or cName:find("creature")
-
-        local originalCallback = callback
-        local cleanCallback = function(name, enabled, data)
-            if carregamentoConcluido and not ehArquivoDoBot and data and type(data) == "table" then
-                local chavesRemovidas = 0
-                for key, _ in pairs(data) do
-                    if not chavesPermitidasLoader[key] then
-                        data[key] = nil
-                        chavesRemovidas = chavesRemovidas + 1
-                    end
-                end
-                if chavesRemovidas > 0 then
-                    print("[Storage Cleaner] Limpeza concluida: " .. chavesRemovidas .. " chaves inválidas deletadas.")
-                end
-            end
-            return originalCallback(name, enabled, data)
-        end
-
-        local configObject = originalConfigSetup(configName, widget, typeFormat, cleanCallback, ...)
-
-        if configObject and type(configObject.save) == "function" then
-            local originalSave = configObject.save
-            configObject.save = function(saveData, ...)
-                if saveData and type(saveData) == "table" then
-                    saveData = higienizarTabelaJSON(saveData)
-                end
-                return originalSave(saveData, ...)
-            end
-        end
-
-        return configObject
-    end
-end
-
--- Varredura contínua na memória viva do storage global
-if type(cycleEvent) == "function" then
-    cycleEvent(function()
-        if storage and type(storage) == "table" then
-            pcall(function()
-                storage = higienizarTabelaJSON(storage)
-            end)
-        end
-    end, 2000)
 end
 
 setDefaultTab("Main")
@@ -2494,29 +2366,55 @@ local function definirModoAtaque(modo)
         pcall(function() targetButton:onClick() end)
     end
 end
+
+-- ====================================================================
+-- FUNÇÃO AUXILIAR PARA DESLIGAR O CAVEBOT E TARGETBOT NATIVOS
+-- ====================================================================
+local function desligarBotsNativos()
+    -- Desliga o CaveBot (Varre múltiplas nomenclaturas da API)
+    if CaveBot then
+        if type(CaveBot.setOff) == "function" then CaveBot.setOff()
+        elseif type(CaveBot.stop) == "function" then CaveBot.stop()
+        elseif CaveBot.macro and type(CaveBot.macro.setOff) == "function" then CaveBot.macro.setOff()
+        end
+    end
+    
+    -- Desliga o TargetBot (Varre múltiplas nomenclaturas da API)
+    if TargetBot then
+        if type(TargetBot.setOff) == "function" then TargetBot.setOff()
+        elseif type(TargetBot.stop) == "function" then TargetBot.stop()
+        elseif TargetBot.macro and type(TargetBot.macro.setOff) == "function" then TargetBot.macro.setOff()
+        end
+    end
+end
+
 local estadoAnteriorMacro = false
 enemy = macro(30, 'Enemy', "ALT+3", function()
+    -- ====================================================================
+    -- MODIFICAÇÃO: Executa ações imediatas assim que a macro liga
+    -- ====================================================================
     if not estadoAnteriorMacro then
+        desligarBotsNativos() -- Desliga CaveBot e TargetBot automaticamente
         definirModoAtaque("balanced")
         estadoAnteriorMacro = true
-        print("[Enemy] Macro Ligada! Modo Balanced Setado.")
+        print("[Enemy] Macro Ligada! Bots Nativos Desligados e Modo Balanced Setado.")
     end
+    
     local myPos = pos()
     local localPlayer = g_game.getLocalPlayer()
     local actualTarget
     local actualTargetHp = 101
     local actualTargetDist = 10
+    
     for _, creature in ipairs(getSpectators(myPos)) do
         local specHp = creature:getHealthPercent()
         local specPos = creature:getPosition()
         
         if (creature:isPlayer() and specHp and specHp > 0) then
             local specSkull = creature:getSkull()
-            local specShield = creature:getShield() -- Detecta o escudo de Party
+            local specShield = creature:getShield()
             
-            -- Verifica se o player tem alguma skull de PK (1 = White, 4 = Red)
             if (specSkull == 1 or specSkull == 4) then
-                -- REGRA DA PARTY: Só ataca se o jogador NÃO tiver escudo de party (specShield == 0)
                 if (specShield == 0 and creature:getEmblem() ~= 1 and creature ~= localPlayer) then
                     if creature:canShoot() then
                         local specDist = getDistanceBetween(myPos, specPos)
@@ -2536,6 +2434,7 @@ enemy = macro(30, 'Enemy', "ALT+3", function()
         modules.game_interface.processMouseAction(nil, 2, myPos, nil, actualTarget, actualTarget)
     end
 end)
+
 macro(250, function()
     if enemy and not enemy.isOn() and estadoAnteriorMacro then
         definirModoAtaque("offensive")
@@ -2543,6 +2442,7 @@ macro(250, function()
         print("[Enemy] Macro Desligada! Modo Offensive Restaurado.")
     end
 end)
+
 --X-Sense
 if type(storage.Sense) ~= "string" then
     storage.Sense = ""
