@@ -1247,7 +1247,7 @@ local layoutVertical = [[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Spell Caster')
-  size: 92 185
+  size: 92 180
   focusable: false
   draggable: true
   phantom: false
@@ -1298,7 +1298,7 @@ MainWindow
       size: 78 18
       anchors.top: botaoWave.bottom
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 4
+      margin-top: 10
       margin-left: 1
 ]]
 
