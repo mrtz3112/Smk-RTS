@@ -2158,64 +2158,37 @@ else
 end
 end)
 --BugMap AWSD/Setas/NumPad
-local ladderIds = { 
-    -- Escadas de Madeira e Pranchas Tradicionais
-    1385, 1386, 1387, 1388, 369, 370, 434, 435, 1948, 5543, 7725, 19183, 19184,
-    -- Bueiros (Sewers), Grelhas, Tampas de Esgoto e Grades de Bueiro
-    411, 412, 413, 414, 432, 433, 459, 460, 475, 476, 479, 480, 2984, 2985, 5732,
-    -- Rampas (Pedra, Barro, Areia, Gelo, Montanha, Cristal, Earth, Sandstone)
-    1389, 1391, 1393, 1395, 1397, 1399, 1401, 1403, 1405, 3131, 3132, 3133, 3134,
-    4526, 4527, 4528, 4529, 4530, 4531, 4532, 4533, 4534, 4535, 4536, 4537, 4538,
-    4834, 4835, 4836, 4837, 6909, 6911, 6913, 6915, 8376, 8377, 8593, 8632, 15687,
-    -- Spots de Corda, Buracos com Corda Enroscada e Estacas (Rope Places)
-    384, 415, 416, 417, 418, 419, 420, 421, 422, 423, 424, 425, 426, 427, 428, 
-    482, 483, 484, 485, 1311, 1312, 1724, 1726, 2982, 5734, 8567, 10604, 10605,
-    -- Escadas de Pedra, Escadas em Caracol, Pirâmides e Ruínas de Cidades
-    361, 362, 363, 364, 365, 366, 367, 368, 471, 472, 473, 474, 1407, 1409, 1411, 
-    1728, 1730, 1731, 1754, 1755, 6085, 6086, 6087, 6088, 6896, 6897, 6898, 6900,
-    -- Escadas Metálicas, Andaimes, Corrimãos de Parede e Rungs
-    6263, 6265, 11442, 11443, 20114, 20115, 22285, 22286, 24197, 24198, 24323
-}
 local function checkPos(x, y)
-    local player = g_game.getLocalPlayer()
-    if not player then return end
-    local pos = player:getPosition()
-    local dirX = (x ~= 0) and (x / math.abs(x)) or 0
-    local dirY = (y ~= 0) and (y / math.abs(y)) or 0
-    local nextTile = g_map.getTile({x = pos.x + dirX, y = pos.y + dirY, z = pos.z})
-    if nextTile then
-        local topThing = nextTile:getTopUseThing()
-        if topThing then
-            local currentId = topThing:getId()
-            for i = 1, #ladderIds do
-                if currentId == ladderIds[i] then
-                    return g_game.use(topThing)
-                end
-            end
-        end
-    end
-    local dashX = dirX * 2
-    local dashY = dirY * 2
-    local targetTile = g_map.getTile({x = pos.x + dashX, y = pos.y + dashY, z = pos.z})
-    if targetTile then
-        local targetThing = targetTile:getTopUseThing()
-        if targetThing then 
-            return g_game.use(targetThing) 
-        end
-    end
-    return false
+ xyz = g_game.getLocalPlayer():getPosition()
+ xyz.x = xyz.x + x
+ xyz.y = xyz.y + y
+ tile = g_map.getTile(xyz)
+ if tile then
+  return g_game.use(tile:getTopUseThing())
+ else
+  return false
+ end
 end
-dash = macro(30, "BugMap", ('CTRL+3'), function()
-    local k = modules.corelib.g_keyboard.isKeyPressed
-    if k('w') or k('Up') or k('numpad8') then checkPos(0, -2)
-    elseif k('e') then checkPos(2, -2)
-    elseif k('d') or k('Right') or k('numpad6') then checkPos(2, 0)
-    elseif k('c') then checkPos(2, 2)
-    elseif k('s') or k('Down') or k('numpad2') then checkPos(0, 2)
-    elseif k('z') then checkPos(-2, 2)
-    elseif k('a') or k('Left') or k('numpad4') then checkPos(-2, 0)
-    elseif k('q') then checkPos(-2, -2)
-    end
+
+consoleModule = modules.game_console
+dash = macro(1, 'Bug Map', ('CTRL+3'), function() 
+ if modules.corelib.g_keyboard.isKeyPressed('w') and not consoleModule:isChatEnabled() then
+  checkPos(0, -5)
+ elseif modules.corelib.g_keyboard.isKeyPressed('e') and not consoleModule:isChatEnabled() then
+  checkPos(3, -3)
+ elseif modules.corelib.g_keyboard.isKeyPressed('d') and not consoleModule:isChatEnabled() then
+  checkPos(5, 0)
+ elseif modules.corelib.g_keyboard.isKeyPressed('c') and not consoleModule:isChatEnabled() then
+  checkPos(3, 3)
+ elseif modules.corelib.g_keyboard.isKeyPressed('s') and not consoleModule:isChatEnabled() then
+  checkPos(0, 5)
+ elseif modules.corelib.g_keyboard.isKeyPressed('z') and not consoleModule:isChatEnabled() then
+  checkPos(-3, 3)
+ elseif modules.corelib.g_keyboard.isKeyPressed('a') and not consoleModule:isChatEnabled() then
+  checkPos(-5, 0)
+ elseif modules.corelib.g_keyboard.isKeyPressed('q') and not consoleModule:isChatEnabled() then
+  checkPos(-3, -3)
+ end
 end)
 if dash and dash.setOff then dash.setOff() end
 --Auto MWall na Frente do Alvo
