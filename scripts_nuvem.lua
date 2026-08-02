@@ -2290,6 +2290,21 @@ onTextMessage(function(mode, text)
         ui.title:setOn(false)
     end
 end)
+UI.Separator()
+--automsgtrade
+macro(100, "Auto Trade Msg", function()
+  local trade = getChannelId("Trade")
+  if not trade then
+    trade = getChannelId("Trade")
+  end
+  if trade and storage.autotrademsg:len() > 0 then    
+    sayChannel(trade, storage.autotrademsg)
+	delay(60000)
+  end
+end)
+UI.TextEdit(storage.autotrademsg or "", function(widget, text)    
+  storage.autotrademsg = text
+end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ HUD Hotkeys ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
