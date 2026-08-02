@@ -24,9 +24,9 @@ if type(HTTP) == "table" and type(HTTP.get) == "function" then
             chavesPermitidasLoader["petItemCooldowns"] = true
             
             carregamentoConcluido = true
-            print("[Storage Cleaner] Whitelist importada com sucesso.")
+            print("[Loader] Storage Cleaner habilitado com sucesso.")
         else
-            print("[Storage Cleaner] Erro ao conectar ao repositório online: " .. tostring(err))
+            print("[Loader] Erro ao conectar ao repositório online: " .. tostring(err))
         end
     end)
 elseif type(g_http) == "table" and type(g_http.get) == "function" then
@@ -41,7 +41,7 @@ elseif type(g_http) == "table" and type(g_http.get) == "function" then
             chavesPermitidasLoader["painelSalvo"] = true
             chavesPermitidasLoader["petItemCooldowns"] = true
             carregamentoConcluido = true
-            print("[Storage Cleaner] Whitelist importada com sucesso via g_http.")
+            print("[Loader] Storage Cleaner importada com sucesso via g_http.")
         end
     end)
 end
@@ -2859,7 +2859,7 @@ if player:getBlessings() == 0 then
   say("!bless")
   schedule(1000, function()
     if player:getBlessings() == 0 then
-      print("[Loader] Bless habilitada com sucesso.")
+      print("[Loader] Bless automatica habilitada com sucesso.")
     end
   end)
 end
@@ -3157,7 +3157,7 @@ if CaveBot and type(CaveBot.doWalking) == "function" then
     end
 end
 
-print("[Loader] Anti-KS e Lure Inteligente calibrados com Sensor de Proximidade.")
+print("[Loader] Anti-KS habilitado com sucesso.")
 
 
 -- ====================================================================
