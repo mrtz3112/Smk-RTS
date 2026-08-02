@@ -2081,6 +2081,21 @@ setDefaultTab("Extra")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Utility ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+--automsgtrade
+macro(100, "Trade Channel", function()
+  local trade = getChannelId("Trade")
+  if not trade then
+    trade = getChannelId("Trade")
+  end
+  if trade and storage.autotrademsg:len() > 0 then    
+    sayChannel(trade, storage.autotrademsg)
+	delay(60000)
+  end
+end)
+UI.TextEdit(storage.autotrademsg or "", function(widget, text)    
+  storage.autotrademsg = text
+end)
+UI.Separator()
 --AutoRoll
 local panelName = "roll"
 storage[panelName] = storage[panelName] or {enabled = false}
@@ -2125,7 +2140,7 @@ Panel
     anchors.left: parent.left
     text-align: center
     width: 130
-    !text: tr('Item Roll')
+    !text: tr('Roll Urahara Card')
 
   Button
     id: edit
@@ -2300,7 +2315,7 @@ Panel
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.right: parent.right
-    text: Auto Legendary
+    text: Roll Scrolls
 
   BotItem
     id: item
@@ -2353,21 +2368,6 @@ onTextMessage(function(mode, text)
         config.enabled = false
         ui.title:setOn(false)
     end
-end)
-UI.Separator()
---automsgtrade
-macro(100, "Auto Trade Msg", function()
-  local trade = getChannelId("Trade")
-  if not trade then
-    trade = getChannelId("Trade")
-  end
-  if trade and storage.autotrademsg:len() > 0 then    
-    sayChannel(trade, storage.autotrademsg)
-	delay(60000)
-  end
-end)
-UI.TextEdit(storage.autotrademsg or "", function(widget, text)    
-  storage.autotrademsg = text
 end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ HUD Hotkeys ~"):setColor('#EBDEF0')
