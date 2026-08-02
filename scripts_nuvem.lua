@@ -444,118 +444,141 @@ macro(100, function()
   end
 end)
 UI.Separator()
---Auto Boost
-local panelName = "AutoBoost"
-storage[panelName] = storage[panelName] or {enabled = false}
-local config = storage[panelName]
+-- Smart Follow por Nome - Versão com Layout Invertido
+local Objects = { 
+    1385, 1386, 1387, 1388, 369, 370, 434, 435, 1948, 5543, 7725, 19183, 19184,
+    411, 412, 413, 414, 432, 433, 459, 460, 475, 476, 479, 480, 2984, 2985, 5732,
+    1389, 1391, 1393, 1395, 1397, 1399, 1401, 1403, 1405, 3131, 3132, 3133, 3134,
+    4526, 4527, 4528, 4529, 4530, 4531, 4532, 4533, 4534, 4535, 4536, 4537, 4538,
+    4834, 4835, 4836, 4837, 6909, 6911, 6913, 6915, 8376, 8377, 8593, 8632, 15687,
+    384, 415, 416, 417, 418, 419, 420, 421, 422, 423, 424, 425, 426, 427, 428, 
+    482, 483, 484, 485, 1311, 1312, 1724, 1726, 2982, 5734, 8567, 10604, 10605,
+    361, 362, 363, 364, 365, 366, 367, 368, 471, 472, 473, 474, 1407, 1409, 1411, 
+    1728, 1730, 1731, 1754, 1755, 6085, 6086, 6087, 6088, 6896, 6897, 6898, 6900,
+    6263, 6265, 11442, 11443, 20114, 20115, 22285, 22286, 24197, 24198, 24323
+}
+local Doors = {7727, 8265, 1629, 1632, 5129, 5120, 8266, 7728, 5102, 5111}
+local toFollowPos = {}
+local lastWalkTarget = nil
 
-local ui = setupUI([[
-Panel
-  height: 58
+-- Função de caminhada estável que respeita o corpo dos monstros
+local function stableWalk(targetPos)
+    local myPlayer = g_game.getLocalPlayer()
+    if not myPlayer then return end
 
-  BotSwitch
-    id: titleBoost
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    text: Auto Boost
+    if myPlayer:isWalking() and lastWalkTarget and lastWalkTarget.x == targetPos.x and lastWalkTarget.y == targetPos.y and lastWalkTarget.z == targetPos.z then
+        return
+    end
 
-  BotItem
-    id: boostItem2
-    anchors.top: titleBoost.bottom
-    anchors.horizontalCenter: titleBoost.horizontalCenter
-    margin-top: 5
-    width: 34
-    height: 34
+    lastWalkTarget = targetPos
 
-  BotItem
-    id: boostItem1
-    anchors.top: titleBoost.bottom
-    anchors.right: boostItem2.left
-    margin-top: 5
-    margin-right: 2
-    width: 34
-    height: 34
-
-  BotItem
-    id: boostItem3
-    anchors.top: titleBoost.bottom
-    anchors.left: boostItem2.right
-    margin-top: 5
-    margin-left: 2
-    width: 34
-    height: 34
-]])
-
--- Inicialização dos Storages específicos para os Boosts (Todos iniciam vazios em 0)
-storage.boostId1 = storage.boostId1 or 0
-storage.boostId2 = storage.boostId2 or 0
-storage.boostId3 = storage.boostId3 or 0
-
-ui.boostItem1:setItemId(storage.boostId1)
-ui.boostItem2:setItemId(storage.boostId2)
-ui.boostItem3:setItemId(storage.boostId3)
-
--- Gerenciadores de mudança de item por clique/arraste
-ui.boostItem1.onItemChange = function(widget)
-    storage.boostId1 = widget:getItemId()
+    if type(autoWalk) == "function" then
+        autoWalk(targetPos, 20, { ignoreCreatures = false, ignoreNonPathable = true, precision = 1 })
+    elseif g_game.autoWalk then
+        g_game.autoWalk(targetPos, { ignoreCreatures = false, ignoreNonPathable = true, precision = 1 })
+    end
 end
 
-ui.boostItem2.onItemChange = function(widget)
-    storage.boostId2 = widget:getItemId()
-end
+-- 1. DECLARAÇÃO DO MACRO (Aparecerá primeiro na interface)
+macro(80, "Smart Follow", function() 
+    if not g_game.isOnline() then return end
+    
+    local targetName = tostring(storage.followTargetName or "")
+    targetName = targetName:gsub("^%s*(.-)%s*$", "%1"):lower()
+    
+    if targetName == "" or targetName == "nome do player" then return end
+    
+    local myPlayer = g_game.getLocalPlayer()
+    if not myPlayer then return end
 
-ui.boostItem3.onItemChange = function(widget)
-    storage.boostId3 = widget:getItemId()
-end
+    local myPos = pos()
+    local target = nil
 
--- Botão de Ativar/Desativar
-ui.titleBoost:setOn(config.enabled)
-ui.titleBoost.onClick = function(widget)
-    config.enabled = not config.enabled
-    widget:setOn(config.enabled)
-end
+    -- Localiza o jogador na tela pelo nome digitado
+    for _, spec in ipairs(getSpectators(myPos)) do
+        if spec:isPlayer() and spec:getName():lower() == targetName then
+            target = spec
+            break
+        end
+    end
 
--- Tabela interna para controlar o tempo de reuso (10 segundos individual por slot)
-local boostCooldowns = {0, 0, 0}
+    if target then
+        local tpos = target:getPosition()
+        toFollowPos[tpos.z] = tpos
+        
+        local dist = getDistanceBetween(myPos, tpos)
+        
+        -- Se já estiver colado, descansa o pathfinder
+        if dist <= 1 then
+            lastWalkTarget = nil
+            return
+        end
 
--- Execução da Macro rodando a cada 100ms para precisão de clique
-macro(100, function()
-    -- Não faz nada se estiver desativado ou se o personagem estiver em PZ
-    if not config.enabled or isInPz() then return end
+        stableWalk(tpos)
 
-    local currentTime = now
-    local boostIds = {storage.boostId1, storage.boostId2, storage.boostId3}
-
-    -- Percorre a lista de IDs configurados na ordem exata (Slot 1 -> Slot 2 -> Slot 3)
-    for index, id in ipairs(boostIds) do
-        -- Apenas processa se o slot tiver um ID válido maior que 0
-        if id and id > 0 then
-            -- Verifica se já se passaram 10000ms (10 segundos) desde o último uso DESTE slot específico
-            if currentTime - boostCooldowns[index] >= 10000 then
-                
-                -- BUSCA EXCLUSIVA EM CONTAINERS: Vasculha todas as backpacks abertas na tela
-                local itemFound = nil
-                local containers = g_game.getContainers()
-                
-                for _, container in pairs(containers) do
-                    for _, item in ipairs(container:getItems()) do
-                        if item:getId() == id then
-                            itemFound = item
-                            break
+        -- Verificação de portas trancadas no trajeto
+        if dist > 1 then
+            for _, doorId in ipairs(Doors) do
+                for x = -1, 1 do
+                    for y = -1, 1 do
+                        local checkPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
+                        local tile = g_map.getTile(checkPos)
+                        if tile then
+                            for _, item in ipairs(tile:getItems()) do
+                                if item:getId() == doorId then
+                                    g_game.use(item)
+                                    return
+                                end
+                            end
                         end
                     end
-                    if itemFound then break end
-                end
-
-                -- Se encontrou o item dentro de alguma backpack aberta, dá Use nele
-                if itemFound then
-                    g_game.use(itemFound)
-                    boostCooldowns[index] = currentTime -- Atualiza o tempo do cooldown com o milissegundo atual
-                    break -- Interrompe o loop atual. O próximo item da ordem só será processado nos próximos ciclos de 100ms
                 end
             end
         end
+        return
+    end
+
+    -- Se o jogador alvo sumiu ou mudou de andar, segue o rastro
+    local lastLeaderPosInMyFloor = toFollowPos[myPos.z]
+    if lastLeaderPosInMyFloor then
+        if getDistanceBetween(myPos, lastLeaderPosInMyFloor) > 0 then
+            stableWalk(lastLeaderPosInMyFloor)
+            return
+        end
+        
+        -- Busca por escadas/portais no fim do rastro
+        for _, objectId in ipairs(Objects) do
+            for x = -1, 1 do
+                for y = -1, 1 do
+                    local searchPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
+                    local tile = g_map.getTile(searchPos)
+                    if tile then
+                        for _, item in ipairs(tile:getItems()) do
+                            if item:getId() == objectId then
+                                g_game.use(item)
+                                return
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- 2. CRIAÇÃO DA INTERFACE ABAIXO DO BOTÃO (Movido para o final)
+addTextEdit("followTargetName", storage.followTargetName or "Nome do Player", function(widget, text)
+    storage.followTargetName = text
+end)
+
+-- Listener de rastreamento de passos em segundo plano
+onCreaturePositionChange(function(creature, newPos, oldPos)
+    if not newPos then return end
+    local targetName = tostring(storage.followTargetName or "")
+    targetName = targetName:gsub("^%s*(.-)%s*$", "%1"):lower()
+    
+    if targetName ~= "" and creature:getName():lower() == targetName then
+        toFollowPos[newPos.z] = newPos
     end
 end)
 UI.Separator()
@@ -727,113 +750,6 @@ local trainerMacro = macro(100, "House Trainer", function(macroObj)
     g_game.attack(closestTrainer)
   end
 end)
-UI.Separator()
---Smart Follow
-local Objects = { 
-    -- Escadas de Madeira e Pranchas Tradicionais
-    1385, 1386, 1387, 1388, 369, 370, 434, 435, 1948, 5543, 7725, 19183, 19184,
-    -- Bueiros (Sewers), Grelhas, Tampas de Esgoto e Grades de Bueiro
-    411, 412, 413, 414, 432, 433, 459, 460, 475, 476, 479, 480, 2984, 2985, 5732,
-    -- Rampas (Pedra, Barro, Areia, Gelo, Montanha, Cristal, Earth, Sandstone)
-    1389, 1391, 1393, 1395, 1397, 1399, 1401, 1403, 1405, 3131, 3132, 3133, 3134,
-    4526, 4527, 4528, 4529, 4530, 4531, 4532, 4533, 4534, 4535, 4536, 4537, 4538,
-    4834, 4835, 4836, 4837, 6909, 6911, 6913, 6915, 8376, 8377, 8593, 8632, 15687,
-    -- Spots de Corda, Buracos com Corda Enroscada e Estacas (Rope Places)
-    384, 415, 416, 417, 418, 419, 420, 421, 422, 423, 424, 425, 426, 427, 428, 
-    482, 483, 484, 485, 1311, 1312, 1724, 1726, 2982, 5734, 8567, 10604, 10605,
-    -- Escadas de Pedra, Escadas em Caracol, Pirâmides e Ruínas de Cidades
-    361, 362, 363, 364, 365, 366, 367, 368, 471, 472, 473, 474, 1407, 1409, 1411, 
-    1728, 1730, 1731, 1754, 1755, 6085, 6086, 6087, 6088, 6896, 6897, 6898, 6900,
-    -- Escadas Metálicas, Andaimes, Corrimãos de Parede e Rungs
-    6263, 6265, 11442, 11443, 20114, 20115, 22285, 22286, 24197, 24198, 24323
-}
-local Doors = {7727, 8265, 1629, 1632, 5129, 5120, 8266, 7728, 5102, 5111}
-local toFollowPos = {}
-local activeLeaderName = ""
-macro(30, "Follow Party Leader", function() 
-    if not g_game.isOnline() then return end
-    
-    local myPlayer = g_game.getLocalPlayer()
-    if not myPlayer or myPlayer:isWalking() then return end
-
-    local myPos = pos()
-    local target = nil
-
-    -- Procura automaticamente pelo Líder da Party na tela
-    for _, spec in ipairs(getSpectators(myPos)) do
-        if spec:isPlayer() and spec:isPartyLeader() then
-            target = spec
-            activeLeaderName = spec:getName() -- Armazena o nome para o rastreador de passos
-            break
-        end
-    end
-    if target then
-        local tpos = target:getPosition()
-        toFollowPos[tpos.z] = tpos
-        if getDistanceBetween(myPos, tpos) <= 1 then 
-            return 
-        end
-        if getDistanceBetween(myPos, tpos) > 2 then
-            for _, doorId in ipairs(Doors) do
-                for x = -1, 1 do
-                    for y = -1, 1 do
-                        local checkPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
-                        local tile = g_map.getTile(checkPos)
-                        if tile then
-                            for _, item in ipairs(tile:getItems()) do
-                                if item:getId() == doorId then
-                                    g_game.use(item)
-                                    return
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        autoWalk(tpos, 20, { ignoreNonPathable = true, precision = 1 })
-        return
-    end
-    -- Se o líder sumiu da tela ou mudou de andar, segue o rastro dele
-    local lastLeaderPosInMyFloor = toFollowPos[myPos.z]
-    if lastLeaderPosInMyFloor then
-        if getDistanceBetween(myPos, lastLeaderPosInMyFloor) > 0 then
-            autoWalk(lastLeaderPosInMyFloor, 20, { ignoreNonPathable = true, precision = 0 })
-            return
-        end
-        for _, objectId in ipairs(Objects) do
-            for x = -1, 1 do
-                for y = -1, 1 do
-                    local searchPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
-                    local tile = g_map.getTile(searchPos)
-                    if tile then
-                        for _, item in ipairs(tile:getItems()) do
-                            if item:getId() == objectId then
-                                g_game.use(item)
-                                return
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-onPlayerPositionChange(function(newPos, oldPos)
-    if g_game.isFollowing() then
-        local tfollow = g_game.getFollowingCreature()
-        if tfollow and tfollow:isPartyLeader() then
-            activeLeaderName = tfollow:getName()
-        end
-    end
-end)
-onCreaturePositionChange(function(creature, newPos, oldPos)
-    if not newPos then return end
-    if activeLeaderName ~= "" and creature:getName() == activeLeaderName then
-        toFollowPos[newPos.z] = newPos
-    end
-end)
 -- Revide PK
 local botsDesligadosPeloPVP = false
 local function definirSafeFightBox(deveAtivar)
@@ -928,7 +844,193 @@ macro(100, 'Revide PK', function()
         end
     end
 end)
+UI.Separator()
+--Eat Food
+local panelName = "AutoFood"
+storage[panelName] = storage[panelName] or {enabled = false}
+local config = storage[panelName]
 
+local ui = setupUI([[
+Panel
+  height: 58
+
+  BotSwitch
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: Auto Food
+
+  BotItem
+    id: item1
+    anchors.top: title.bottom
+    anchors.right: title.horizontalCenter
+    margin-top: 5
+    margin-right: 2
+    width: 34
+    height: 34
+
+  BotItem
+    id: item2
+    anchors.top: title.bottom
+    anchors.left: title.horizontalCenter
+    margin-top: 5
+    margin-left: 2
+    width: 34
+    height: 34
+]])
+
+storage.foodItem1 = storage.foodItem1 or 3577
+storage.foodItem2 = storage.foodItem2 or 0
+
+ui.item1:setItemId(storage.foodItem1)
+ui.item2:setItemId(storage.foodItem2)
+
+ui.item1.onItemChange = function(widget)
+    storage.foodItem1 = widget:getItemId()
+end
+ui.item2.onItemChange = function(widget)
+    storage.foodItem2 = widget:getItemId()
+end
+ui.title:setOn(config.enabled)
+ui.title.onClick = function(widget)
+    config.enabled = not config.enabled
+    widget:setOn(config.enabled)
+end
+local foodCooldowns = {0, 0}
+macro(100, function()
+    if not config.enabled or isInPz() then return end
+    
+    local currentTime = now
+    local foodIds = {storage.foodItem1, storage.foodItem2}
+    for index, id in ipairs(foodIds) do
+        if id and id > 0 then
+            if currentTime - foodCooldowns[index] >= 10000 then
+                local food = findItem(id)
+                if food then
+                    g_game.use(food)
+                    foodCooldowns[index] = currentTime
+                    break
+                end
+            end
+        end
+    end
+end)
+UI.Separator()
+--Auto Boost
+local panelName = "AutoBoost"
+storage[panelName] = storage[panelName] or {enabled = false}
+local config = storage[panelName]
+
+local ui = setupUI([[
+Panel
+  height: 58
+
+  BotSwitch
+    id: titleBoost
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: Auto Boost
+
+  BotItem
+    id: boostItem2
+    anchors.top: titleBoost.bottom
+    anchors.horizontalCenter: titleBoost.horizontalCenter
+    margin-top: 5
+    width: 34
+    height: 34
+
+  BotItem
+    id: boostItem1
+    anchors.top: titleBoost.bottom
+    anchors.right: boostItem2.left
+    margin-top: 5
+    margin-right: 2
+    width: 34
+    height: 34
+
+  BotItem
+    id: boostItem3
+    anchors.top: titleBoost.bottom
+    anchors.left: boostItem2.right
+    margin-top: 5
+    margin-left: 2
+    width: 34
+    height: 34
+]])
+
+-- Inicialização dos Storages específicos para os Boosts (Todos iniciam vazios em 0)
+storage.boostId1 = storage.boostId1 or 0
+storage.boostId2 = storage.boostId2 or 0
+storage.boostId3 = storage.boostId3 or 0
+
+ui.boostItem1:setItemId(storage.boostId1)
+ui.boostItem2:setItemId(storage.boostId2)
+ui.boostItem3:setItemId(storage.boostId3)
+
+-- Gerenciadores de mudança de item por clique/arraste
+ui.boostItem1.onItemChange = function(widget)
+    storage.boostId1 = widget:getItemId()
+end
+
+ui.boostItem2.onItemChange = function(widget)
+    storage.boostId2 = widget:getItemId()
+end
+
+ui.boostItem3.onItemChange = function(widget)
+    storage.boostId3 = widget:getItemId()
+end
+
+-- Botão de Ativar/Desativar
+ui.titleBoost:setOn(config.enabled)
+ui.titleBoost.onClick = function(widget)
+    config.enabled = not config.enabled
+    widget:setOn(config.enabled)
+end
+
+-- Tabela interna para controlar o tempo de reuso (10 segundos individual por slot)
+local boostCooldowns = {0, 0, 0}
+
+-- Execução da Macro rodando a cada 100ms para precisão de clique
+macro(100, function()
+    -- Não faz nada se estiver desativado ou se o personagem estiver em PZ
+    if not config.enabled or isInPz() then return end
+
+    local currentTime = now
+    local boostIds = {storage.boostId1, storage.boostId2, storage.boostId3}
+
+    -- Percorre a lista de IDs configurados na ordem exata (Slot 1 -> Slot 2 -> Slot 3)
+    for index, id in ipairs(boostIds) do
+        -- Apenas processa se o slot tiver um ID válido maior que 0
+        if id and id > 0 then
+            -- Verifica se já se passaram 10000ms (10 segundos) desde o último uso DESTE slot específico
+            if currentTime - boostCooldowns[index] >= 10000 then
+                
+                -- BUSCA EXCLUSIVA EM CONTAINERS: Vasculha todas as backpacks abertas na tela
+                local itemFound = nil
+                local containers = g_game.getContainers()
+                
+                for _, container in pairs(containers) do
+                    for _, item in ipairs(container:getItems()) do
+                        if item:getId() == id then
+                            itemFound = item
+                            break
+                        end
+                    end
+                    if itemFound then break end
+                end
+
+                -- Se encontrou o item dentro de alguma backpack aberta, dá Use nele
+                if itemFound then
+                    g_game.use(itemFound)
+                    boostCooldowns[index] = currentTime -- Atualiza o tempo do cooldown com o milissegundo atual
+                    break -- Interrompe o loop atual. O próximo item da ordem só será processado nos próximos ciclos de 100ms
+                end
+            end
+        end
+    end
+end)
 UI.Separator()
 UI.Button("Screen: +  Zoom", function() zoomIn() end)
 UI.Button("Screen: -  Zoom", function() zoomOut() end)
@@ -1979,78 +2081,6 @@ setDefaultTab("Extra")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Utility ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---Eat Food
-local panelName = "AutoFood"
-storage[panelName] = storage[panelName] or {enabled = false}
-local config = storage[panelName]
-
-local ui = setupUI([[
-Panel
-  height: 58
-
-  BotSwitch
-    id: title
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    text: Auto Food
-
-  BotItem
-    id: item1
-    anchors.top: title.bottom
-    anchors.right: title.horizontalCenter
-    margin-top: 5
-    margin-right: 2
-    width: 34
-    height: 34
-
-  BotItem
-    id: item2
-    anchors.top: title.bottom
-    anchors.left: title.horizontalCenter
-    margin-top: 5
-    margin-left: 2
-    width: 34
-    height: 34
-]])
-
-storage.foodItem1 = storage.foodItem1 or 3577
-storage.foodItem2 = storage.foodItem2 or 0
-
-ui.item1:setItemId(storage.foodItem1)
-ui.item2:setItemId(storage.foodItem2)
-
-ui.item1.onItemChange = function(widget)
-    storage.foodItem1 = widget:getItemId()
-end
-ui.item2.onItemChange = function(widget)
-    storage.foodItem2 = widget:getItemId()
-end
-ui.title:setOn(config.enabled)
-ui.title.onClick = function(widget)
-    config.enabled = not config.enabled
-    widget:setOn(config.enabled)
-end
-local foodCooldowns = {0, 0}
-macro(100, function()
-    if not config.enabled or isInPz() then return end
-    
-    local currentTime = now
-    local foodIds = {storage.foodItem1, storage.foodItem2}
-    for index, id in ipairs(foodIds) do
-        if id and id > 0 then
-            if currentTime - foodCooldowns[index] >= 10000 then
-                local food = findItem(id)
-                if food then
-                    g_game.use(food)
-                    foodCooldowns[index] = currentTime
-                    break
-                end
-            end
-        end
-    end
-end)
-UI.Separator()
 --AutoRoll
 local panelName = "roll"
 storage[panelName] = storage[panelName] or {enabled = false}
@@ -3208,11 +3238,10 @@ end
 print("[Loader] Anti-KS habilitado com sucesso.")
 
 
+-- ====================================================================
+-- CREATURE_PRIORITY
+-- ====================================================================
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
-
--- ====================================================================
--- DECLARAÇÃO GLOBAL DIRETA (SEM USAR _G PARA EVITAR O ERRO SANDBOX)
--- ====================================================================
 local lastCheck = 0
 
 -- Ao remover o 'local' da frente, a função vira global automaticamente no ambiente do bot
