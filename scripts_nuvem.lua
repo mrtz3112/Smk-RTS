@@ -553,7 +553,7 @@ macro(1000, "DepositGold & StackItems", function()
     for index = 1, #items do
       local item = items[index]
       -- Usamos a verificação cravada de limite de agrupamento (geralmente 100 ou o max do servidor)
-      if item and item:isStackable() and item:getCount() < 1000 then
+      if item and item:isStackable() and item:getCount() < 10000 then
         local itemId = item:getId()
         local count = item:getCount()
         -- CORREÇÃO DO SLOT: O slot correto do item para movimentação é index - 1
@@ -572,7 +572,7 @@ macro(1000, "DepositGold & StackItems", function()
     local items = container:getItems()
     for index = 1, #items do
       local item = items[index]
-      if item and item:isStackable() and item:getCount() < 1000 then
+      if item and item:isStackable() and item:getCount() < 10000 then
         local itemId = item:getId()
         local destino = itensMapeados[itemId]
 
