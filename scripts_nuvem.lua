@@ -1,5 +1,53 @@
 -- ====================================================================
--- SISTEMA DE LIMPEZA INTELIGENTE DE STORAGE (ENTRADA E SALVAMENTO BLINDADOS)
+-- HIGIENIZAÇÃO DE STORAGE AUTOMÁTICA VIA REPOSITÓRIO ONLINE (HTTP)
+-- ====================================================================
+
+-- 1. ADICIONE A URL DIRETA DO SEU SCRIPT DO REPOSITÓRIO ABAIXO (Link do código bruto/raw)
+local URL_REPOSITORIO_ONLINE = "https://raw.githubusercontent.com/mrtz3112/Smk-RTS/refs/heads/main/scripts_nuvem.lua"
+
+local chavesPermitidasLoader = {}
+local carregamentoConcluido = false
+
+-- Baixa o texto do repositório em segundo plano para não travar o jogo ao logar
+if type(HTTP) == "table" and type(HTTP.get) == "function" then
+    HTTP.get(URL_REPOSITORIO_ONLINE, function(content, err)
+        if not err and content and type(content) == "string" then
+            -- Expressões regulares para varrer o texto puro vindo da internet
+            for word in content:gmatch('["\']([%a%d_%s%-]+)["\']') do chavesPermitidasLoader[word] = true end
+            for word in content:gmatch('%.([%a%d_]+)') do chavesPermitidasLoader[word] = true end
+            
+            -- Chaves estruturais nativas que não podem ser apagadas de forma alguma
+            chavesPermitidasLoader["alarms"] = true
+            chavesPermitidasLoader["_macros"] = true
+            chavesPermitidasLoader["_configs"] = true
+            chavesPermitidasLoader["painelSalvo"] = true
+            chavesPermitidasLoader["petItemCooldowns"] = true
+            
+            carregamentoConcluido = true
+            print("[Storage Cleaner] Whitelist importada com sucesso.")
+        else
+            print("[Storage Cleaner] Erro ao conectar ao repositório online: " .. tostring(err))
+        end
+    end)
+elseif type(g_http) == "table" and type(g_http.get) == "function" then
+    -- Alternativa para clients que usam a nomenclatura g_http
+    g_http.get(URL_REPOSITORIO_ONLINE, function(content, err)
+        if not err and content then
+            for word in content:gmatch('["\']([%a%d_%s%-]+)["\']') do chavesPermitidasLoader[word] = true end
+            for word in content:gmatch('%.([%a%d_]+)') do chavesPermitidasLoader[word] = true end
+            chavesPermitidasLoader["alarms"] = true
+            chavesPermitidasLoader["_macros"] = true
+            chavesPermitidasLoader["_configs"] = true
+            chavesPermitidasLoader["painelSalvo"] = true
+            chavesPermitidasLoader["petItemCooldowns"] = true
+            carregamentoConcluido = true
+            print("[Storage Cleaner] Whitelist importada com sucesso via g_http.")
+        end
+    end)
+end
+
+-- ====================================================================
+-- INTERCEPTADOR DE CONFIGURAÇÃO E MEMÓRIA VIVA
 -- ====================================================================
 if type(Config) == "table" and type(Config.setup) == "function" then
     local originalConfigSetup = Config.setup
@@ -8,29 +56,10 @@ if type(Config) == "table" and type(Config.setup) == "function" then
         local cName = tostring(configName or ""):lower()
         local ehArquivoDoBot = cName:find("target") or cName:find("cave") or cName:find("creature")
 
-        -- 1. DETECTA QUAIS CHAVES EXISTEM TEXTUALMENTE NO LOADER.LUA PARA MONTAR A WHITELIST
-        local chavesPermitidasLoader = {}
-        if not ehArquivoDoBot then
-            pcall(function()
-                local file = io.open("loader.lua", "r") or io.open("modules/client_macros/loader.lua", "r")
-                if file then
-                    local content = file:read("*a")
-                    file:close()
-                    for word in content:gmatch('["\']([%a%d_%s%-]+)["\']') do chavesPermitidasLoader[word] = true end
-                    for word in content:gmatch('%.([%a%d_]+)') do chavesPermitidasLoader[word] = true end
-                end
-            end)
-            chavesPermitidasLoader["alarms"] = true
-            chavesPermitidasLoader["_macros"] = true
-            chavesPermitidasLoader["_configs"] = true
-            chavesPermitidasLoader["painelSalvo"] = true
-            chavesPermitidasLoader["petItemCooldowns"] = true
-        end
-
-        -- 2. GANCHO DE CARREGAMENTO (ENTRADA DO BOT)
         local originalCallback = callback
         local cleanCallback = function(name, enabled, data)
-            if not ehArquivoDoBot and data and type(data) == "table" then
+            -- Só higieniza se a Whitelist já tiver sido baixada e se não for arquivo do bot
+            if carregamentoConcluido and not ehArquivoDoBot and data and type(data) == "table" then
                 local chavesRemovidas = 0
                 for key, _ in pairs(data) do
                     if not chavesPermitidasLoader[key] then
@@ -39,28 +68,30 @@ if type(Config) == "table" and type(Config.setup) == "function" then
                     end
                 end
                 if chavesRemovidas > 0 then
-                    print("[Cleaner] Escaneamento completo: Removidas " .. chavesRemovidas .. " chaves que não estão no seu loader.")
+                    print("[Storage Cleaner] Limpeza concluida: " .. chavesRemovidas .. " chaves inválidas deletadas.")
                 end
             end
             return originalCallback(name, enabled, data)
         end
 
-        -- Executa o setup padrão obtendo o objeto de configuração que o bot gerou
         local configObject = originalConfigSetup(configName, widget, typeFormat, cleanCallback, ...)
 
-        -- 3. TRAVA SUPREMA DE ENGENHARIA REVERSA: GANCHO NO SALVAMENTO (FIM DO LOG DE USERDATA)
+        -- Proteção contra o erro fatal de userdata ao salvar no disco
         if configObject and type(configObject.save) == "function" and not ehArquivoDoBot then
             local originalSave = configObject.save
             configObject.save = function(saveData, ...)
                 if saveData and type(saveData) == "table" then
-                    -- Função recursiva profunda para caçar e estripar qualquer 'userdata' ou função no JSON
                     local function limparLixoPrimitivo(tabela)
                         for k, v in pairs(tabela) do
                             local t = type(v)
                             if t == "userdata" or t == "function" or t == "thread" then
-                                tabela[k] = nil -- Deleta o lixo incompatível com JSON imediatamente
+                                tabela[k] = nil
                             elseif t == "table" then
-                                limparLixoPrimitivo(v) -- Entra em sub-tabelas (ex: alarmes, configs internas)
+                                if v.getClassName or v.createWidget then
+                                    tabela[k] = nil
+                                else
+                                    limparLixoPrimitivo(v)
+                                end
                             end
                         end
                     end
@@ -72,8 +103,32 @@ if type(Config) == "table" and type(Config.setup) == "function" then
 
         return configObject
     end
-    print("[Loader] Cleaner de storages obsoletas habilitado.")
 end
+
+-- Varredura contínua para manter a memória RAM limpa de lixo de interface
+if type(cycleEvent) == "function" then
+    cycleEvent(function()
+        if carregamentoConcluido and storage and type(storage) == "table" then
+            local function expurgarUserdataViva(tabela)
+                for k, v in pairs(tabela) do
+                    local t = type(v)
+                    if t == "userdata" or t == "function" or t == "thread" then
+                        tabela[k] = nil
+                    elseif t == "table" then
+                        if v.getClassName or v.createWidget then
+                            tabela[k] = nil
+                        else
+                            expurgarUserdataViva(v)
+                        end
+                    end
+                end
+            end
+            pcall(expurgarUserdataViva, storage)
+        end
+    end, 1000)
+end
+
+
 
 setDefaultTab("Main")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
