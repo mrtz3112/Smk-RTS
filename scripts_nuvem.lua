@@ -3658,20 +3658,3 @@ if TargetBot and TargetBot.Creature then
       return priority
     end
 end
-
--- ====================================================================
--- CaveBot Fast Step
--- ====================================================================
-
--- 1. Altera as configurações nativas do módulo do CaveBot (VBot/CandyBot)
-if type(CaveBot) == "table" then
-    -- Força a remoção de delays configurados na memória viva do bot
-    CaveBot.walkDelay = 250 -- Reduz o atraso padrão de passo para apenas 10ms
-    CaveBot.pingDelay = 1000 -- Reduz a tolerância de atraso por ping
-    
-    if type(CaveBot.config) == "table" then
-        CaveBot.config.walkDelay = 250
-        CaveBot.config.pingDelay = 1000
-        CaveBot.config.fastWalk = true -- Ativa o modo de caminhada rápida se disponível
-    end
-end
