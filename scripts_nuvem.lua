@@ -454,13 +454,14 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
     end
 end)
 UI.Separator()
---Deposit Gold & Stack Items (Versão Ultra-Otimizada Sem Slow Macro)
-macro(1000, "DepositGold & StackItems", function()
+--Deposit Gold & Stack Items
+macro(500, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
   
   local coinIds = {3031, 3035, 3043, 10137} 
   local minAmount = 1
   local shouldDeposit = false
+
   -- 1. CHECAGEM RÁPIDA DE DINHEIRO
   for _, id in ipairs(coinIds) do
     local item = findItem(id)
@@ -474,18 +475,44 @@ macro(1000, "DepositGold & StackItems", function()
     delay(500)
     return
   end
-  -- 2. MAPEAR ITENS AGRUPÁVEIS (Uso de cache limpo para reduzir consumo de CPU)
+
+  -- [NOVO] 2. CHECAGEM RÁPIDA DE AGRUPAMENTO (Dorme se não houver itens duplicados soltos)
   local containers = g_game.getContainers()
+  local idsEncontrados = {}
+  local precisaAgrupar = false
+
+  for _, container in pairs(containers) do
+    local items = container:getItems()
+    for index = 1, #items do
+      local item = items[index]
+      if item and item:isStackable() and item:getCount() < 10000 then -- 100 é o limite padrão do Tibia
+        local itemId = item:getId()
+        -- Se já vimos esse ID antes em outro slot/backpack, significa que eles precisam ser juntados
+        if idsEncontrados[itemId] then
+          precisaAgrupar = true
+          break
+        else
+          idsEncontrados[itemId] = true
+        end
+      end
+    end
+    if precisaAgrupar then break end
+  end
+
+  -- Se não tem ouro E não tem nada para agrupar, o script "dorme" e ignora o resto do código pesado
+  if not precisaAgrupar then
+    return
+  end
+
+  -- 3. MAPEAR ITENS AGRUPÁVEIS (Só roda se a checagem acima disser que precisa)
   local itensMapeados = {}
   for _, container in pairs(containers) do
     local items = container:getItems()
     for index = 1, #items do
       local item = items[index]
-      -- Usamos a verificação cravada de limite de agrupamento (geralmente 100 ou o max do servidor)
       if item and item:isStackable() and item:getCount() < 10000 then
         local itemId = item:getId()
         local count = item:getCount()
-        -- CORREÇÃO DO SLOT: O slot correto do item para movimentação é index - 1
         local posicaoAtual = container:getSlotPosition(index - 1)
 
         if posicaoAtual and (not itensMapeados[itemId] or count > itensMapeados[itemId].count) then
@@ -497,6 +524,8 @@ macro(1000, "DepositGold & StackItems", function()
       end
     end
   end
+
+  -- 4. EXECUTAR A MOVIMENTAÇÃO
   for _, container in pairs(containers) do
     local items = container:getItems()
     for index = 1, #items do
@@ -509,9 +538,8 @@ macro(1000, "DepositGold & StackItems", function()
           local posicaoAtual = container:getSlotPosition(index - 1)
 
           if posicaoAtual and (posicaoAtual.x ~= destino.posicao.x or posicaoAtual.y ~= destino.posicao.y or posicaoAtual.slot ~= destino.posicao.slot) then
-            -- Move o item e encerra o ciclo imediatamente, distribuindo a carga de CPU pelos próximos ciclos
             g_game.move(item, destino.posicao, item:getCount())
-            delay(200) -- Pequena folga estável para o servidor registrar o movimento do item
+            delay(200) 
             return "retry"
           end
         end
@@ -1304,60 +1332,77 @@ local amountOfMonsters = 2
 
 local indexArea, indexSingle = 1, 1
 
+-- Tabelas em cache (Evita criar tabelas a cada 100ms)
+local cacheAreaSpells = {}
+local cacheSingleSpells = {}
+
+-- Função interna para atualizar o cache de magias apenas quando o texto mudar
+local function atualizarCacheSpells()
+    cacheAreaSpells = {}
+    if storage.areaspell01 and storage.areaspell01 ~= "" then table.insert(cacheAreaSpells, storage.areaspell01) end
+    if storage.areaspell02 and storage.areaspell02 ~= "" then table.insert(cacheAreaSpells, storage.areaspell02) end
+
+    cacheSingleSpells = {}
+    if storage.spell01 and storage.spell01 ~= "" then table.insert(cacheSingleSpells, storage.spell01) end
+    if storage.spell02 and storage.spell02 ~= "" then table.insert(cacheSingleSpells, storage.spell02) end
+    if storage.spell03 and storage.spell03 ~= "" then table.insert(cacheSingleSpells, storage.spell03) end
+end
+
 combo = macro(100, "Smart Cast", function()
     if not g_game.isOnline() or not g_game.isAttacking() then return end     
     
     local target = g_game.getAttackingCreature()
-    local atacandoPlayer = target and target:isPlayer()
+    if not target then return end
+    
+    local atacandoPlayer = target:isPlayer()
     local specAmount = 0  
     
-    -- Conta monstros ao redor apenas se o alvo atual não for um Player
+    -- Conta monstros ao redor apenas se o alvo não for Player
     if not atacandoPlayer then
+        local minhaPos = pos()
         for _, mob in ipairs(getSpectators()) do
-            if mob:isMonster() and getDistanceBetween(pos(), mob:getPosition()) <= distance then
+            if mob:isMonster() and getDistanceBetween(minhaPos, mob:getPosition()) <= distance then
                 specAmount = specAmount + 1
+                -- Otimização: Se já atingiu a quantidade necessária, não precisa continuar contando os outros
+                if specAmount >= amountOfMonsters then break end
             end
         end
     end
     
-    -- Condição 1: Se houver 2 ou mais monstros e o alvo não for Player -> Solta área
+    -- Condição 1: Solta área (2 ou mais monstros e alvo não é Player)
     if specAmount >= amountOfMonsters and not atacandoPlayer then
-        local areaSpells = {}
-        if storage.areaspell01 and storage.areaspell01 ~= "" then table.insert(areaSpells, storage.areaspell01) end
-        if storage.areaspell02 and storage.areaspell02 ~= "" then table.insert(areaSpells, storage.areaspell02) end
-        
-        if #areaSpells > 0 then
-            if indexArea > #areaSpells then indexArea = 1 end
-            say(areaSpells[indexArea])
+        local totalArea = #cacheAreaSpells
+        if totalArea > 0 then
+            if indexArea > totalArea then indexArea = 1 end
+            say(cacheAreaSpells[indexArea])
             indexArea = indexArea + 1
         end
-    -- Condição 2: Caso contrário (apenas 1 monstro ou atacando um Player) -> Solta Single
+    -- Condição 2: Solta Single
     else
-        local singleSpells = {}
-        if storage.spell01 and storage.spell01 ~= "" then table.insert(singleSpells, storage.spell01) end
-        if storage.spell02 and storage.spell02 ~= "" then table.insert(singleSpells, storage.spell02) end
-        if storage.spell03 and storage.spell03 ~= "" then table.insert(singleSpells, storage.spell03) end
-        
-        if #singleSpells > 0 then
-            if indexSingle > #singleSpells then indexSingle = 1 end
-            say(singleSpells[indexSingle])
+        local totalSingle = #cacheSingleSpells
+        if totalSingle > 0 then
+            if indexSingle > totalSingle then indexSingle = 1 end
+            say(cacheSingleSpells[indexSingle])
             indexSingle = indexSingle + 1
         end
     end
 end)
 
--- Interface Gráfica (UI)
+-- Interface Gráfica (UI) com gatilho de atualização de cache
 UI.Separator()
 UI.Label("Area Spells (2+ Mobs)"):setColor('#FFEA99')
 UI.Separator()
-UI.TextEdit(storage.areaspell01 or "", function(widget, text) storage.areaspell01 = text end)
-UI.TextEdit(storage.areaspell02 or "", function(widget, text) storage.areaspell02 = text end)
+UI.TextEdit(storage.areaspell01 or "", function(widget, text) storage.areaspell01 = text; atualizarCacheSpells() end)
+UI.TextEdit(storage.areaspell02 or "", function(widget, text) storage.areaspell02 = text; atualizarCacheSpells() end)
 UI.Separator()
 UI.Label("Single Spells"):setColor('#FFEA99')
 UI.Separator()
-UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text end)
-UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text end)
-UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text end)
+UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text; atualizarCacheSpells() end)
+UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text; atualizarCacheSpells() end)
+UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text; atualizarCacheSpells() end)
+
+-- Executa uma vez ao iniciar o script para carregar as magias já salvas
+atualizarCacheSpells()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Others ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
