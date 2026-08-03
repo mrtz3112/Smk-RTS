@@ -3658,3 +3658,23 @@ if TargetBot and TargetBot.Creature then
       return priority
     end
 end
+
+-- ====================================================================
+-- CONTROLADOR DE DELAY ENTRE WAYPOINTS (FAST WAYPOINT)
+-- ====================================================================
+
+-- 1. Interceptador de loop para diminuir pausas longas entre os pontos
+if CaveBot and type(CaveBot.delay) == "function" then
+    if not CaveBot.oldDelay then
+        CaveBot.oldDelay = CaveBot.delay
+    end
+    
+    CaveBot.delay = function(ms, ...)
+        -- Se o bot pedir uma pausa de transição entre waypoints,
+        -- o script reduz esse tempo para apenas 20ms.
+        if ms and ms <= 500 then
+            ms = 20 
+        end
+        return CaveBot.oldDelay(ms, ...)
+    end
+end
