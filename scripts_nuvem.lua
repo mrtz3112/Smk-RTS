@@ -3660,9 +3660,7 @@ if TargetBot and TargetBot.Creature then
 end
 
 -- ====================================================================
-
--- ====================================================================
--- CONTROLADOR DE WALKDELAY MAX VELOCITY (CAVEBOT FAST STEP)
+-- CaveBot Fast Step
 -- ====================================================================
 
 -- 1. Altera as configurações nativas do módulo do CaveBot (VBot/CandyBot)
@@ -3675,22 +3673,5 @@ if type(CaveBot) == "table" then
         CaveBot.config.walkDelay = 250
         CaveBot.config.pingDelay = 1000
         CaveBot.config.fastWalk = true -- Ativa o modo de caminhada rápida se disponível
-    end
-end
-
--- 2. Interceptador de loop para zerar ou ignorar pedidos de delay (ex: CaveBot.delay(500))
--- Isso impede que outros scripts ou funções herdem pausas longas ao andar
-if CaveBot and type(CaveBot.delay) == "function" then
-    if not CaveBot.oldDelay then
-        CaveBot.oldDelay = CaveBot.delay
-    end
-    
-    CaveBot.delay = function(ms, ...)
-        -- Se o bot pedir uma pausa padrão de caminhada (ex: 300ms a 500ms), 
-        -- o script esmaga esse tempo para apenas 20ms para manter o fluxo correndo.
-        if ms and ms <= 500 then
-            ms = 20 
-        end
-        return CaveBot.oldDelay(ms, ...)
     end
 end
