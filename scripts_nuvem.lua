@@ -816,10 +816,7 @@ markOnThing = function(thing, color)
     return false
 end
 
-Stairs.walk =
-    macro(
-    1,
-    function()
+Stairs.walk = macro(1, function()
         if modules.corelib.g_keyboard.isKeyPressed("Escape") then
             return Stairs.walk.setOff()
         end
@@ -837,16 +834,11 @@ Stairs.walk =
             end
         end
         return Stairs.goUse(Stairs.pos)
-    end
-)
+    end)
 
 Stairs.walk.setOff()
 
-stairMacro =
-    macro(
-    1,
-    "Auto-Escadas",
-    function()
+macro(1,"Auto-Escadas", function()
         if Stairs.walk.isOn() then
             return
         end
@@ -867,10 +859,7 @@ stairMacro =
         else
             return markOnThing(Stairs.bestTile, "#FF0000")
         end
-    end
-)
-
-addIcon("Escada", {item = 1958, text = "Escadas"}, stairMacro)
+    end)
 
 function checkPos(x, y)
     local xyz = g_game.getLocalPlayer():getPosition()
