@@ -3659,26 +3659,38 @@ if TargetBot and TargetBot.Creature then
     end
 end
 
+-- ====================================================================
 
 -- ====================================================================
 -- CONTROLADOR DE WALKDELAY MAX VELOCITY (CAVEBOT FAST STEP)
 -- ====================================================================
 
--- 3. Macro contínuo de aceleração de ticks (Mantém o motor ativo em 10ms)
-macro(10, "CaveBot Fast Walk", function()
-    if not g_game.isOnline() then return end
+-- 1. Altera as configurações nativas do módulo do CaveBot (VBot/CandyBot)
+if type(CaveBot) == "table" then
+    -- Força a remoção de delays configurados na memória viva do bot
+    CaveBot.walkDelay = 250 -- Reduz o atraso padrão de passo para apenas 10ms
+    CaveBot.pingDelay = 1000 -- Reduz a tolerância de atraso por ping
     
-    -- Se o Cavebot estiver ligado, força a atualização das variáveis internas
-    if CaveBot and type(CaveBot.isOn) == "function" and CaveBot.isOn() then
-        if CaveBot.walkDelay then CaveBot.walkDelay = 50 end
-        
-        -- Se o seu personagem travar por "stuck", força o recálculo imediato do waypoint
-        local myPlayer = g_game.getLocalPlayer()
-        if myPlayer and not myPlayer:isWalking() then
-            if type(CaveBot.fetchNextWaypoint) == "function" then
-                -- Força o bot a olhar o próximo ponto sem esperar o temporizador interno acabar
-                CaveBot.fetchNextWaypoint() 
-            end
-        end
+    if type(CaveBot.config) == "table" then
+        CaveBot.config.walkDelay = 250
+        CaveBot.config.pingDelay = 1000
+        CaveBot.config.fastWalk = true -- Ativa o modo de caminhada rápida se disponível
     end
-end)
+end
+
+-- 2. Interceptador de loop para zerar ou ignorar pedidos de delay (ex: CaveBot.delay(500))
+-- Isso impede que outros scripts ou funções herdem pausas longas ao andar
+if CaveBot and type(CaveBot.delay) == "function" then
+    if not CaveBot.oldDelay then
+        CaveBot.oldDelay = CaveBot.delay
+    end
+    
+    CaveBot.delay = function(ms, ...)
+        -- Se o bot pedir uma pausa padrão de caminhada (ex: 300ms a 500ms), 
+        -- o script esmaga esse tempo para apenas 20ms para manter o fluxo correndo.
+        if ms and ms <= 500 then
+            ms = 20 
+        end
+        return CaveBot.oldDelay(ms, ...)
+    end
+end
