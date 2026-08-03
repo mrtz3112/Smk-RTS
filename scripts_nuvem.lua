@@ -3673,7 +3673,7 @@ if CaveBot and type(CaveBot.delay) == "function" then
         -- Se o bot pedir uma pausa de transição entre waypoints,
         -- o script reduz esse tempo para apenas 20ms.
         if ms and ms <= 500 then
-            ms = 20 
+            ms = 100 
         end
         return CaveBot.oldDelay(ms, ...)
     end
