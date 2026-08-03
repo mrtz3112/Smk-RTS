@@ -1406,7 +1406,6 @@ atualizarCacheSpells()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Others ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---Spell at HP Target
 -- ============================================================================
 -- [INICIALIZAÇÃO] CONFIGURAÇÃO DE MEMÓRIA DO PAINEL FIGHT
 -- ============================================================================
@@ -1419,57 +1418,43 @@ if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 -- ============================================================================
 local panelName = "hpbelowconfig"
 
-if storage[panelName] == nil then 
-    storage[panelName] = { hp = 80 } 
-end
+-- Garante que as tabelas de armazenamento existam com segurança
+if storage[panelName] == nil then storage[panelName] = { hp = 80 } end
+if storage.painelSalvo == nil then storage.painelSalvo = { special = false } end
 
-lowhp = macro(100, function()
+-- Cache da magia para evitar leitura de disco/storage a cada 100ms
+local cacheHpSpell = storage.hpspell or ""
+
+-- [PADRÃO SMART CAST]: Registro nativo. Cria o botão verde automático sincronizado com o painel
+lowhp = macro(100, "Spell at Target HP", function()
+    -- Checagens rápidas de segurança
     if not g_game.isOnline() or not g_game.isAttacking() then return end  
     
     local target = g_game.getAttackingCreature()
     if not target or not target:isPlayer() then return end
     
-    if target:getHealthPercent() <= storage[panelName].hp then
-        if storage.hpspell and storage.hpspell ~= "" then
-            say(storage.hpspell)
-        end
+    -- Executa se a vida do alvo for menor ou igual e o cache da magia não estiver vazio
+    if target:getHealthPercent() <= storage[panelName].hp and cacheHpSpell ~= "" then
+        say(cacheHpSpell)
     end
 end)
 
--- Interface Gráfica (UI) - Spell at Target HP
+-- Interface Gráfica (UI) - Contém APENAS a barra de rolagem (Sem o botão duplicado)
 local uiHP = setupUI([[
 Panel
-  height: 35
-  BotSwitch
-    id: title
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.bottom: parent.verticalCenter
-    text-align: center
-    !text: tr('Spell at Target HP')
-
+  height: 20
   HorizontalScrollBar
     id: HP
     anchors.bottom: parent.bottom
     anchors.right: parent.right
     anchors.left: parent.left
-    margin-top: 3
+    margin-top: 0
     minimum: 1
     maximum: 100
     step: 1
 ]], parent)
 
 uiHP:setId(panelName)
-
-uiHP.title.onClick = function(widget)
-    if lowhp.isOn() then
-        lowhp.setOff()
-        storage.painelSalvo.special = false
-    else
-        lowhp.setOn()
-        storage.painelSalvo.special = true
-    end
-end
 
 local updateHpText = function()
     uiHP.HP:setText("HP: < " .. storage[panelName].hp .. "%")
@@ -1483,50 +1468,54 @@ end
 uiHP.HP:setValue(storage[panelName].hp)
 updateHpText()
 
+-- Atualiza o cache imediatamente quando você digita a magia
 UI.TextEdit(storage.hpspell or "", function(widget, text) 
     storage.hpspell = text 
+    cacheHpSpell = text
 end)
+
 UI.Separator()
+
+-- [SINCRONIZADOR NATÍVO]: Mantém a macro e o seu Painel de Botões central 100% em sincronia
+macro(200, function()
+    if not g_game.isOnline() then return end
+    storage.painelSalvo.special = lowhp.isOn()
+end)
+
+UI.Separator()
+
 -- ============================================================================
 -- SPELL AT SELF HP
 -- ============================================================================
-
 local panelName = "selfhpbelowconfig"
 
-if storage[panelName] == nil then 
-    storage[panelName] = { hp = 80 } 
-end
+-- Garante que as tabelas de armazenamento existam com segurança
+if storage[panelName] == nil then storage[panelName] = { hp = 80 } end
+if storage.painelSalvo == nil then storage.painelSalvo = { selfSpecial = false } end
 
--- Macro ajustada para verificar o HP do próprio jogador
-selflowhp = macro(100, function()
+-- Cache da magia na memória RAM para evitar leituras repetidas de storage a cada 100ms
+local cacheSelfHpSpell = storage.selfhpspell or ""
+
+-- [PADRÃO SMART CAST]: Registro nativo. Cria o botão verde automático sincronizado com o painel
+selflowhp = macro(100, "Spell at Self HP", function()
     if not g_game.isOnline() then return end  
     
-    -- hppercent() lê a porcentagem de vida do seu próprio personagem
-    if hppercent() <= storage[panelName].hp then
-        if storage.selfhpspell and storage.selfhpspell ~= "" then
-            say(storage.selfhpspell)
-        end
+    -- Executa apenas se o seu HP estiver abaixo do limite e você tiver uma magia configurada
+    if hppercent() <= storage[panelName].hp and cacheSelfHpSpell ~= "" then
+        say(cacheSelfHpSpell)
     end
 end)
 
--- Interface Gráfica (UI) - Spell at Self HP
+-- Interface Gráfica (UI) - Contém APENAS a barra de rolagem (Sem o botão duplicado)
 local uiSelfHP = setupUI([[
 Panel
-  height: 35
-  BotSwitch
-    id: title
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.bottom: parent.verticalCenter
-    text-align: center
-    !text: tr('Spell at Self HP')
-
+  height: 20
   HorizontalScrollBar
     id: HP
     anchors.bottom: parent.bottom
     anchors.right: parent.right
     anchors.left: parent.left
-    margin-top: 3
+    margin-top: 0
     minimum: 1
     maximum: 100
     step: 1
@@ -1534,19 +1523,8 @@ Panel
 
 uiSelfHP:setId(panelName)
 
--- Controla o estado nativo e salva na memória
-uiSelfHP.title.onClick = function(widget)
-    if selflowhp.isOn() then
-        selflowhp.setOff()
-        if storage.painelSalvo then storage.painelSalvo.selfSpecial = false end
-    else
-        selflowhp.setOn()
-        if storage.painelSalvo then storage.painelSalvo.selfSpecial = true end
-    end
-end
-
 local updateHpText = function()
-    uiSelfHP.HP:setText("My HP: < " .. storage[panelName].hp .. "%")
+    uiSelfHP.HP:setText("HP: < " .. storage[panelName].hp .. "%")
 end
 
 uiSelfHP.HP.onValueChange = function(scroll, value)
@@ -1557,40 +1535,33 @@ end
 uiSelfHP.HP:setValue(storage[panelName].hp)
 updateHpText()
 
--- Armazena o texto da magia em uma chave separada (selfhpspell)
+-- Atualiza o cache de texto na memória instantaneamente ao digitar
 UI.TextEdit(storage.selfhpspell or "", function(widget, text) 
     storage.selfhpspell = text 
-end)
-
--- ============================================================================
--- [SINCRO] RESTAURADOR DE MEMÓRIA E ATUALIZADOR VISUAL LOCAL
--- ============================================================================
-local jaSincronizouSelf = false
-
-macro(100, function()
-    if not g_game.isOnline() then return end
-    if not storage.painelSalvo then return end
-    
-    -- Inicializa respeitando o último estado salvo antes de deslogar
-    if not jaSincronizouSelf then
-        if storage.painelSalvo.selfSpecial then selflowhp.setOn() else selflowhp.setOff() end
-        jaSincronizouSelf = true
-    end
-    
-    -- Sincroniza a cor do botão com o motor real do bot
-    local ativo = selflowhp.isOn()
-    if uiSelfHP and uiSelfHP.title then uiSelfHP.title:setOn(ativo) end
-    storage.painelSalvo.selfSpecial = ativo
+    cacheSelfHpSpell = text
 end)
 
 UI.Separator()
 
+-- [SINCRONIZADOR NATÍVO]: Mantém a macro e o seu Painel de Botões central 100% em sincronia
+macro(200, function()
+    if not g_game.isOnline() then return end
+    storage.painelSalvo.selfSpecial = selflowhp.isOn()
+end)
+
+
 -- ============================================================================
 -- SPELL WAVE (Gira e Conjura na Reta)
 -- ============================================================================
-local panelWaveName = "waveconfig"
+-- Garante que as tabelas de armazenamento existam para o painel de botões ler
+if storage.painelSalvo == nil then storage.painelSalvo = {} end
+if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 
-turnCombo = macro(50, function()
+-- Cache local da magia para poupar processamento
+local cacheTurnSpell = storage.turnSpell or ""
+
+-- [PADRÃO SMART CAST]: Registro nativo. Cria o botão automático e vincula ao Painel
+turnCombo = macro(100, "Auto Wave", function()
     if not g_game.isOnline() then return end
     
     local target = g_game.getAttackingCreature()
@@ -1603,72 +1574,39 @@ turnCombo = macro(50, function()
     local diffX = targetPos.x - myPos.x
     local diffY = targetPos.y - myPos.y
     
+    -- Calcula a direção correta teórica baseado na posição do alvo
+    local direcaoDesejada = 0
     if math.abs(diffX) >= math.abs(diffY) then
-        if diffX > 0 then g_game.turn(1) else g_game.turn(3) end
+        direcaoDesejada = (diffX > 0) and 1 or 3 -- 1: Direita, 3: Esquerda
     else
-        if diffY > 0 then g_game.turn(2) else g_game.turn(0) end
+        direcaoDesejada = (diffY > 0) and 2 or 0 -- 2: Baixo, 0: Cima
     end   
     
-    delay(30) 
+    -- Só envia o pacote de virar se você já não estiver na direção certa
+    if g_game.getLocalPlayer():getDirection() ~= direcaoDesejada then
+        g_game.turn(direcaoDesejada)
+        delay(50)
+    end
     
-    if storage.turnSpell and storage.turnSpell ~= "" then
-        say(storage.turnSpell)
+    -- Solta a magia de Wave se configurada
+    if cacheTurnSpell ~= "" then
+        say(cacheTurnSpell)
     end
 end)
 
--- Interface Gráfica (UI) - Wave (Reta)
-local uiWave = setupUI([[
-Panel
-  height: 20
-  BotSwitch
-    id: title
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.top: parent.top
-    text-align: center
-    !text: tr('Wave (Reta)')
-]], parent)
-
-uiWave:setId(panelWaveName)
-
-uiWave.title.onClick = function(widget)
-    if turnCombo.isOn() then
-        turnCombo.setOff()
-        storage.painelSalvo.wave = false
-    else
-        turnCombo.setOn()
-        storage.painelSalvo.wave = true
-    end
-end
-
+-- Adiciona apenas a caixa de texto para configurar a magia na aba lateral
 addTextEdit("spellTurnConfig", storage.turnSpell or "", function(widget, text)
-    storage.turnSpell = text:trim()
+    local textoLimpo = text:trim()
+    storage.turnSpell = textoLimpo
+    cacheTurnSpell = textoLimpo
 end)
 
--- ============================================================================
--- [SINCRO] RESTAURADOR DE MEMÓRIA E ATUALIZADOR VISUAL (Sem Loops Falsos)
--- ============================================================================
-local jaSincronizouAoLigar = false
-
-macro(100, function()
+-- [SINCRONIZADOR NATÍVO]: Garante que o estado da macro alimente a variável que seu Painel lê
+macro(200, function()
     if not g_game.isOnline() then return end
-    
-    -- Executa apenas uma vez quando você loga para carregar o estado salvo antigo
-    if not jaSincronizouAoLigar then
-        if storage.painelSalvo.special then lowhp.setOn() else lowhp.setOff() end
-        if storage.painelSalvo.wave then turnCombo.setOn() else turnCombo.setOff() end
-        jaSincronizouAoLigar = true
-    end
-    
-    -- Atualiza as cores dos botões locais baseados no motor real do bot
-    local hpAtivo = lowhp.isOn()
-    if uiHP and uiHP.title then uiHP.title:setOn(hpAtivo) end
-    storage.painelSalvo.special = hpAtivo
-
-    local waveAtiva = turnCombo.isOn()
-    if uiWave and uiWave.title then uiWave.title:setOn(waveAtiva) end
-    storage.painelSalvo.wave = waveAtiva
+    storage.painelSalvo.wave = turnCombo.isOn()
 end)
+
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
@@ -1816,6 +1754,7 @@ local function conectarComponentesPainel()
     local btnWave = container:getChildById("botaoWave")
     local btnGirar = container:getChildById("botaoGirar")
     
+    -- Vincula os cliques chamando as funções globais com segurança
     if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
     if btnSelfSpecial then btnSelfSpecial.onClick = function() alternarEstadoMacro(selflowhp, "selfSpecial") end end
     if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
@@ -1853,13 +1792,16 @@ function alternarEstadoMacro(macroRef, storageKey)
             macroRef.setOn()
             storage.painelSalvo[storageKey] = true
         end
+    -- [CORREÇÃO] Se a macro ainda não foi carregada na memória, altera apenas o estado salvo para o outro script ler
+    else
+        storage.painelSalvo[storageKey] = not storage.painelSalvo[storageKey]
     end
 end
 
 -- Inicializa as conexões
 conectarComponentesPainel()
 
--- Loop leve de atualização de cores e sincronia inicial
+-- Loop otimizado para sincronia de cores e estados
 local jaSincronizou = false
 macro(100, function()
     if not g_game.isOnline() or not painelIconesUI then return end
@@ -1867,11 +1809,7 @@ macro(100, function()
     local container = painelIconesUI:getChildById("containerIcones")
     if not container then return end
     
-    local btnSpecial = container:getChildById("botaoSpecial")
-    local btnSelfSpecial = container:getChildById("botaoSelfSpecial")
-    local btnSpells = container:getChildById("botaoSpells")
-    local btnWave = container:getChildById("botaoWave")
-
+    -- Sincronização inicial executada de forma segura
     if not jaSincronizou then
         if lowhp and type(lowhp) == "table" and type(lowhp.setOn) == "function" then 
             if storage.painelSalvo.special then lowhp.setOn() else lowhp.setOff() end 
@@ -1888,14 +1826,17 @@ macro(100, function()
         jaSincronizou = true
     end
     
+    local btnSpecial = container:getChildById("botaoSpecial")
+    local btnSelfSpecial = container:getChildById("botaoSelfSpecial")
+    local btnSpells = container:getChildById("botaoSpells")
+    local btnWave = container:getChildById("botaoWave")
+
+    -- Atualiza as cores dinamicamente baseando-se no motor real de cada macro
     if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp) and "green" or "red") end
     if btnSelfSpecial then btnSelfSpecial:setColor(isMacroActive(selflowhp) and "green" or "red") end
     if btnSpells then btnSpells:setColor(isMacroActive(combo) and "green" or "red") end
     if btnWave then btnWave:setColor(isMacroActive(turnCombo) and "green" or "red") end
 end)
-
-
-
 
 setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
