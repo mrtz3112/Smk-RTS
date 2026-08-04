@@ -3173,7 +3173,7 @@ Panel
 
 ]], modules.game_interface.getMapPanel())
 
-macro(500, function()
+macro(100, function()
   if not pvehud then return end
 
   if pvehud.iconlayer then pvehud.iconlayer:setText("     ~ [Smk Custom - v4.1] ~   ") end
