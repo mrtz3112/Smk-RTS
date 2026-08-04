@@ -3122,7 +3122,7 @@ Panel
 
 ]], modules.game_interface.getMapPanel())
 
-macro(100, function()
+macro(500, function()
   if not pvehud then return end
 
   if pvehud.iconlayer then pvehud.iconlayer:setText("     ~ [Smk Custom - v4.1] ~   ") end
@@ -3426,19 +3426,15 @@ local function isMonsterOfOtherPlayer(creature, myId, localPlayer)
         local myPos = localPlayer:getPosition()
         
         if cPos and myPos then
-            -- Procura por outros jogadores que estejam ao redor do monstro
             local specs = g_map.getSpectators(cPos, false)
             for i = 1, #specs do
                 local spec = specs[i]
-                -- Se encontrar outro player (que não seja você e nem da sua party)
                 if spec:isPlayer() and spec:getId() ~= myId and not spec:isPartyMember() then
                     local pPos = spec:getPosition()
                     if pPos and pPos.z == cPos.z then
                         local distX = math.abs(pPos.x - cPos.x)
                         local distY = math.abs(pPos.y - cPos.y)
                         
-                        -- Se o monstro estiver colado (raio de 1 quadrado) do outro jogador, 
-                        -- e você estiver mais longe do que o outro jogador está dele:
                         if distX <= 1 and distY <= 1 then
                             local meuDistX = math.abs(myPos.x - cPos.x)
                             local meuDistY = math.abs(myPos.y - cPos.y)
@@ -3513,15 +3509,21 @@ if CaveBot and type(CaveBot.doWalking) == "function" then
                 for i = 1, #spectators do
                     local spec = spectators[i]
                     if spec:isMonster() and spec:getHealthPercent() > 0 then
-                        -- Graças ao Caso 3 adicionado acima, os bichos colados no outro jogador 
-                        -- serão detectados e NUNCA vão entrar na contagem do seu Lure!
-                        if not isMonsterOfOtherPlayer(spec, myId, localPlayer) then
-                            totalMonstersBox = totalMonstersBox + 1
+                        local mPos = spec:getPosition()
+                        if mPos and mPos.z == playerPos.z then
+                            -- CORREÇÃO DA VARIÁVEL AQUI (distToMeY corrigido)
+                            local distToMeX = math.abs(playerPos.x - mPos.x)
+                            local distToMeY = math.abs(playerPos.y - mPos.y)
+                            
+                            if distToMeX <= 4 and distToMeY <= 4 then
+                                if not isMonsterOfOtherPlayer(spec, myId, localPlayer) then
+                                    totalMonstersBox = totalMonstersBox + 1
+                                end
+                            end
                         end
                     end
                 end
                 
-                -- Se surgirem 5 ou mais monstros legítimos SEUS, trava a caminhada
                 if totalMonstersBox >= 5 then
                     if type(CaveBot.delay) == "function" then
                         CaveBot.delay(500)
@@ -3535,6 +3537,7 @@ if CaveBot and type(CaveBot.doWalking) == "function" then
 end
 
 print("[Loader] Anti-KS habilitado com sucesso.")
+
 
 
 -- ====================================================================
