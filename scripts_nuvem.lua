@@ -1199,7 +1199,7 @@ ui.title.onClick = function(widget)
     widget:setOn(config.enabled)
 end
 local foodCooldowns = {0, 0}
-macro(100, function()
+macro(1000, function()
     if not config.enabled or isInPz() then return end
     
     local currentTime = now
