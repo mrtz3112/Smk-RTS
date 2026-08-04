@@ -1034,8 +1034,8 @@ function getDash(dir)
         return true
     end
 end
---AutoRift
-macro(500, "Click Rift", function()
+-- Click Rift (Super Otimizado com Cooldown e Redução de Varredura)
+macro(1000, "Click Rift", function()
   local player = g_game.getLocalPlayer()
   if not player then return end
 
@@ -1043,9 +1043,9 @@ macro(500, "Click Rift", function()
   if not myPos then return end
 
   local targetId = 11843
-  local raio = 7 -- Vasculha até 7 SQMs ao seu redor (o suficiente para cobrir a tela visível)
+  local raio = 7 -- Vasculha apenas a área útil da tela visível ao redor do jogador
 
-  -- Varredura localizada focada no jogador (consome 95% menos CPU que pegar todos os tiles do andar)
+  -- Loops numéricos puros focados na coordenada do personagem
   for x = -raio, raio do
     for y = -raio, raio do
       local tilePos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
@@ -1055,12 +1055,18 @@ macro(500, "Click Rift", function()
         local items = tile:getItems()
         for i = 1, #items do
           local item = items[i]
+          
           if item and item:getId() == targetId then
             g_game.use(item)
+            
             if CaveBot and type(CaveBot.gotoLabel) == "function" then
               CaveBot.gotoLabel("Rift")
             end
-            return -- Encontra o Rift e encerra o ciclo imediatamente, poupando processamento
+            
+            -- TRAVA CRÍTICA DE COOLDOWN: Força a macro a dormir por 2 segundos 
+            -- para evitar loops repetitivos e spam de pacotes no mesmo frame
+            delay(2000) 
+            return
           end
         end
       end
