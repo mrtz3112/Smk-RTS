@@ -3735,8 +3735,11 @@ if CaveBot and type(CaveBot.delay) == "function" then
     end
 end
 
--- INJEÇÃO DE PERFORMANCE PARA O TARGETBOT (VIA LOADER.LUA)
--- 1. Criação do Provedor de Tempo Universal para alimentar o 'now' global do bot
+-- ====================================================================
+-- INJEÇÃO DE ALTA PERFORMANCE PARA TARGETBOT VIA LOADER.LUA (V2)
+-- ====================================================================
+
+-- 1. Alimentação da variável global 'now' com motor de tempo compatível
 local function obterTempoReal()
     if os and type(os.milliSeconds) == "function" then return os.milliSeconds()
     elseif os and type(os.milliseconds) == "function" then return os.milliseconds()
@@ -3745,32 +3748,74 @@ local function obterTempoReal()
     else return math.floor(os.clock() * 1000) end
 end
 
--- Ciclo contínuo para manter a variável 'now' sempre atualizada com precisão nativa
 macro(1, function()
     now = obterTempoReal()
 end)
 
--- 2. Interceptador de Leitura de Mapa (Evita que o findPath do target.lua destrua a CPU)
+-- 2. Interceptador cirúrgico de criaturas (Remove o excesso ANTES da linha 50)
+if TargetBot and type(TargetBot.getCreatures) == "function" then
+    local oldGetCreatures = TargetBot.getCreatures
+    TargetBot.getCreatures = function(...)
+        local listaOriginal = oldGetCreatures(...)
+        if not listaOriginal or #listaOriginal == 0 then return listaOriginal end
+
+        local player = g_game.getLocalPlayer()
+        if not player then return listaOriginal end
+        
+        local playerPos = player:getPosition()
+        if not playerPos then return listaOriginal end
+
+        local listaFiltrada = {}
+        local totalAdicionados = 0
+        local limiteMaximoMonstros = 4 -- Reduzimos o loop para calcular no máximo os 4 monstros mais perigosos/próximos
+
+        for i = 1, #listaOriginal do
+            local creature = listaOriginal[i]
+            if creature and creature:isMonster() and creature:getHealthPercent() > 0 then
+                local cPos = creature:getPosition()
+                
+                -- OTIMIZAÇÃO CRÍTICA: Ignora instantaneamente monstros em outros andares (Z diferente)
+                if cPos and cPos.z == playerPos.z then
+                    local distX = math.abs(playerPos.x - cPos.x)
+                    local distY = math.abs(playerPos.y - cPos.y)
+                    
+                    -- Só aceita monstros dentro da área de combate real (até 4 quadrados de distância)
+                    if distX <= 4 and distY <= 4 then
+                        totalAdicionados = totalAdicionados + 1
+                        listaFiltrada[totalAdicionados] = creature
+                        
+                        -- Se já atingiu o limite de monstros para processar neste frame, encerra a busca
+                        if totalAdicionados >= limiteMaximoMonstros then
+                            break
+                        end
+                    end
+                end
+            end
+        end
+
+        return listaFiltrada
+    end
+end
+
+-- 3. Cache global para a função findPath nativa do bot
 local ultimoCalculoPath = 0
 local cachePaths = {}
 
 if type(findPath) == "function" then
     local oldFindPath = findPath
     findPath = function(startPos, endPos, maxDist, params, ...)
-        -- Se o TargetBot estiver ativo e buscando caminhos, limitamos o processamento repetido
         local atual = obterTempoReal()
-        if atual - ultimoCalculoPath > 250 then
+        if atual - ultimoCalculoPath > 300 then
             cachePaths = {}
             ultimoCalculoPath = atual
         end
 
         if endPos then
-            local hashChave = string.format("%d,%d", endPos.x, endPos.y)
+            local hashChave = string.format("%d,%d,%d", endPos.x, endPos.y, endPos.z)
             if cachePaths[hashChave] ~= nil then
-                return cachePaths[hashChave] -- Retorna o caminho direto do cache sem recalcular
+                return cachePaths[hashChave]
             end
             
-            -- Executa o findPath original e guarda no cache
             local rota = oldFindPath(startPos, endPos, maxDist, params, ...)
             cachePaths[hashChave] = rota or false
             return rota
@@ -3779,22 +3824,4 @@ if type(findPath) == "function" then
     end
 end
 
--- 3. Interceptador de Área de Busca (Filtra monstros distantes antes do loop pesado do target.lua)
-if g_map and type(g_map.getSpectatorsInRange) == "function" then
-    local oldGetSpecsInRange = g_map.getSpectatorsInRange
-    g_map.getSpectatorsInRange = function(centerPos, multiFloor, minRange, maxRange, ...)
-        -- Se o target.lua pedir a área padrão de 6x6, nós reduzimos dinamicamente para poupar a CPU
-        if minRange == 6 and maxRange == 6 then
-            local specs = oldGetSpecsInRange(centerPos, multiFloor, 4, 4, ...) -- Reduzido para raio 4 (Área de combate real)
-            
-            -- Se a tela estiver muito cheia, aperta ainda mais o cerco para ignorar o lag de monstros longe
-            if #specs > 8 then
-                return oldGetSpecsInRange(centerPos, multiFloor, 3, 3, ...)
-            end
-            return specs
-        end
-        return oldGetSpecsInRange(centerPos, multiFloor, minRange, maxRange, ...)
-    end
-end
-
-print("[Loader] Blindagem externa do TargetBot injetada com sucesso.")
+print("[Loader] TargetBot otimizado com sucesso.")
