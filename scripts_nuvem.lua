@@ -1,7 +1,4 @@
--- ====================================================================
 -- 1. HIGIENIZAÇÃO DE STORAGE AUTOMÁTICA VIA REPOSITÓRIO ONLINE (HTTP)
--- ====================================================================
-
 local URL_REPOSITORIO_ONLINE = "https://raw.githubusercontent.com/mrtz3112/Smk-RTS/refs/heads/main/scripts_nuvem.lua"
 
 local chavesPermitidasLoader = {}
@@ -42,9 +39,7 @@ elseif type(g_http) == "table" and type(g_http.get) == "function" then
     end)
 end
 
--- ====================================================================
--- [NOVO] INTERCEPTADOR E CORRETOR AUTOMÁTICO DE TABELAS INVÁLIDAS
--- ====================================================================
+-- INTERCEPTADOR E CORRETOR AUTOMÁTICO DE TABELAS INVÁLIDAS
 local function sanitizarTabelaParaJson(t)
     if type(t) ~= "table" then return end
     
@@ -1385,9 +1380,7 @@ setDefaultTab("Fight")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
--- ============================================================================
 -- Smart Cast
--- ============================================================================
 local distance = 2
 local amountOfMonsters = 2
 
@@ -1467,30 +1460,22 @@ atualizarCacheSpells()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Others ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
--- ============================================================================
 -- [INICIALIZAÇÃO] CONFIGURAÇÃO DE MEMÓRIA DO PAINEL FIGHT
--- ============================================================================
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 
--- ============================================================================
 -- SPELL AT TARGET HP (Apenas em Players)
--- ============================================================================
 local panelName = "hpbelowconfig"
-
 -- Garante que as tabelas de armazenamento existam com segurança
 if storage[panelName] == nil then storage[panelName] = { hp = 80 } end
 if storage.painelSalvo == nil then storage.painelSalvo = { special = false } end
-
 -- Cache da magia para evitar leitura de disco/storage a cada 100ms
 local cacheHpSpell = storage.hpspell or ""
-
 -- [PADRÃO SMART CAST]: Registro nativo. Cria o botão verde automático sincronizado com o painel
 lowhp = macro(100, "Spell at Target HP", function()
     -- Checagens rápidas de segurança
     if not g_game.isOnline() or not g_game.isAttacking() then return end  
-    
     local target = g_game.getAttackingCreature()
     if not target or not target:isPlayer() then return end
     
@@ -1499,7 +1484,6 @@ lowhp = macro(100, "Spell at Target HP", function()
         say(cacheHpSpell)
     end
 end)
-
 -- Interface Gráfica (UI) - Contém APENAS a barra de rolagem (Sem o botão duplicado)
 local uiHP = setupUI([[
 Panel
@@ -1545,9 +1529,7 @@ end)
 
 UI.Separator()
 
--- ============================================================================
 -- SPELL AT SELF HP
--- ============================================================================
 local panelName = "selfhpbelowconfig"
 
 -- Garante que as tabelas de armazenamento existam com segurança
@@ -1610,10 +1592,7 @@ macro(200, function()
     storage.painelSalvo.selfSpecial = selflowhp.isOn()
 end)
 
-
--- ============================================================================
 -- SPELL WAVE (Gira e Conjura na Reta)
--- ============================================================================
 -- Garante que as tabelas de armazenamento existam para o painel de botões ler
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
@@ -2797,9 +2776,7 @@ local function definirModoAtaque(modo)
     end
 end
 
--- ====================================================================
 -- FUNÇÃO AUXILIAR PARA CONTROLAR O CAVEBOT E TARGETBOT NATIVOS
--- ====================================================================
 local function alternarBotsNativos(ligar)
     if ligar then
         -- MODIFICAÇÃO: Lógica para ligar o TargetBot automaticamente
@@ -2875,9 +2852,7 @@ end)
 -- Macro secundária que monitora o desligamento do Enemy
 macro(30, function()
     if enemy and not enemy.isOn() and estadoAnteriorMacro then
-        -- ====================================================================
         -- MODIFICAÇÃO: Executa ações imediatas assim que a macro desliga
-        -- ====================================================================
         alternarBotsNativos(true) -- Religa o TargetBot automaticamente
         definirModoAtaque("offensive")
         estadoAnteriorMacro = false
@@ -3440,9 +3415,7 @@ macro(100, function()
     updateTargetWidget(name, percent, hasTarget)
 end)
 
--- ====================================================================
 -- ANTI-KS SEGURO COM TRAVA DE LURE INTELIGENTE (FILTRO DE PROXIMIDADE)
--- ====================================================================
 local function isMonsterOfOtherPlayer(creature, myId, localPlayer)
     if not creature or not creature:isMonster() then return false end
     
@@ -3504,9 +3477,7 @@ local function isMonsterOfOtherPlayer(creature, myId, localPlayer)
     return false
 end
 
--- ====================================================================
 -- INTERCEPTADOR 1: SOME COM OS BICHOS ALHEIOS DA LISTA DO TARGET
--- ====================================================================
 if TargetBot and type(TargetBot.getCreatures) == "function" then
     local oldGetCreatures = TargetBot.getCreatures
     TargetBot.getCreatures = function(...)
@@ -3535,9 +3506,7 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
     end
 end
 
--- ====================================================================
 -- INTERCEPTADOR 2: CONTROLADOR DE MOVIMENTO (SOMA APENAS OS SEUS MONSTROS)
--- ====================================================================
 if CaveBot and type(CaveBot.doWalking) == "function" then
     local oldDoWalking = CaveBot.doWalking
     CaveBot.doWalking = function(...)
@@ -3582,11 +3551,7 @@ end
 
 print("[Loader] Anti-KS habilitado com sucesso.")
 
-
-
--- ====================================================================
 -- CREATURE_PRIORITY
--- ====================================================================
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 local lastCheck = 0
 
@@ -3647,9 +3612,7 @@ checkSpecialMonstersLure = function()
     end
 end
 
--- ====================================================================
 -- INTERCEPTADOR DO TARGETBOT COM PRIORIDADE CORRIGIDA (BOX EM 1º LUGAR)
--- ====================================================================
 if TargetBot and TargetBot.Creature then
     TargetBot.Creature.calculatePriority = function(creature, config, path)
       -- Executa a função global de segurança diretamente
@@ -3723,10 +3686,7 @@ if TargetBot and TargetBot.Creature then
     end
 end
 
--- ====================================================================
 -- CONTROLADOR DE DELAY ENTRE WAYPOINTS (FAST WAYPOINT)
--- ====================================================================
-
 -- 1. Interceptador de loop para diminuir pausas longas entre os pontos
 if CaveBot and type(CaveBot.delay) == "function" then
     if not CaveBot.oldDelay then
