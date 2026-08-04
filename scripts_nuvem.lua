@@ -3766,10 +3766,10 @@ if CaveBot and type(CaveBot.delay) == "function" then
 end
 
 -- ====================================================================
--- INJEÇÃO DE PERFORMANCE ABSOLUTA PARA TARGETBOT VIA LOADER.LUA (V4)
+-- INJEÇÃO CIRÚRGICA DE ALTA PERFORMANCE - TARGETBOT V5 (DEFINITIVA)
 -- ====================================================================
 
--- 1. Gerenciador e Provedor de Tempo estável para alimentar o 'now' global
+-- 1. Alimentação estável da variável global 'now'
 local function obterTempoReal()
     if os and type(os.milliSeconds) == "function" then return os.milliSeconds()
     elseif os and type(os.milliseconds) == "function" then return os.milliseconds()
@@ -3782,76 +3782,55 @@ macro(1, function()
     now = obterTempoReal()
 end)
 
--- 2. BLOQUEIO DE FRAMES COMPLETO (Sequestra a macro nativa e força 300ms de respiro)
-if type(macro) == "function" then
-    local oldMacro = macro
-    macro = function(delayTime, name, ...)
-        -- Identifica o loop nativo do TargetBot pelo delay padrão de 100ms sem nome
-        if delayTime == 100 and type(name) == "function" then
-            local targetFunc = name
-            local ultimoTickExecutado = 0
-            
-            -- Recria a macro injetando uma trava física intransponível
-            return oldMacro(33, function() -- Roda em ciclos rápidos de checagem
-                local agora = obterTempoReal()
-                
-                -- TRAVA CRÍTICA: Se o target tentou rodar há menos de 300ms, aborta na hora
-                -- Isso impede fisicamente a linha 50 de saturar o processador do jogo
-                if agora - ultimoTickExecutado < 300 then
-                    return
-                end
-                
-                ultimoTickExecutado = agora
-                return targetFunc()
-            end)
-        end
-        return oldMacro(delayTime, name, ...)
-    end
-end
+-- 2. INTERCEPTADOR DIRETO DA FUNÇÃO DA LINHA 50 (calculateParams)
+if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams) == "function" then
+    local oldCalculateParams = TargetBot.Creature.calculateParams
+    local ultimoCalculoParams = 0
+    local cacheParams = {}
 
--- 3. Interceptador de Lista de Alvos (Zera o processamento de criaturas distantes)
-if TargetBot and type(TargetBot.getCreatures) == "function" then
-    local oldGetCreatures = TargetBot.getCreatures
-    TargetBot.getCreatures = function(...)
-        local listaOriginal = oldGetCreatures(...)
-        if not listaOriginal or #listaOriginal == 0 then return listaOriginal end
+    TargetBot.Creature.calculateParams = function(creature, path, ...)
+        if not creature then return {danger = 0, priority = 0} end
 
         local player = g_game.getLocalPlayer()
-        if not player then return listaOriginal end
-        
+        if not player then return oldCalculateParams(creature, path, ...) end
+
         local playerPos = player:getPosition()
-        if not playerPos then return listaOriginal end
+        local cPos = creature:getPosition()
 
-        local listaFiltrada = {}
-        local totalAdicionados = 0
-        local limiteMaximoMonstros = 2 -- Reduzido para calcular apenas os 2 alvos mais urgentes colados em você
+        if playerPos and cPos then
+            -- FILTRO 1: Ignora na hora monstros em outros andares (Z diferente)
+            if cPos.z ~= playerPos.z then
+                return {danger = 0, priority = 0, config = {name = creature:getName() or ""}}
+            end
 
-        for i = 1, #listaOriginal do
-            local creature = listaOriginal[i]
-            if creature and creature:isMonster() and creature:getHealthPercent() > 0 then
-                local cPos = creature:getPosition()
-                
-                if cPos and cPos.z == playerPos.z then
-                    local distX = math.abs(playerPos.x - cPos.x)
-                    local distY = math.abs(playerPos.y - cPos.y)
-                    
-                    -- Limita estritamente para criaturas coladas (raio de 3 quadrados)
-                    if distX <= 3 and distY <= 3 then
-                        totalAdicionados = totalAdicionados + 1
-                        listaFiltrada[totalAdicionados] = creature
-                        
-                        if totalAdicionados >= limiteMaximoMonstros then
-                            break
-                        end
-                    end
-                end
+            -- FILTRO 2: Ignora monstros fora da área de combate imediata (raio maior que 4 SQMs)
+            local distX = math.abs(playerPos.x - cPos.x)
+            local distY = math.abs(playerPos.y - cPos.y)
+            if distX > 4 or distY > 4 then
+                return {danger = 0, priority = 0, config = {name = creature:getName() or ""}}
             end
         end
-        return listaFiltrada
+
+        -- OTIMIZAÇÃO DE MEMÓRIA: Cache dos parâmetros por ID do Monstro por 300ms
+        local agora = obterTempoReal()
+        if agora - ultimoCalculoParams > 300 then
+            cacheParams = {}
+            ultimoCalculoParams = agora
+        end
+
+        local cId = creature:getId()
+        if cacheParams[cId] ~= nil then
+            return cacheParams[cId]
+        end
+
+        -- Executa o cálculo original apenas se o monstro estiver colado e o cache expirado
+        local resultado = oldCalculateParams(creature, path, ...)
+        cacheParams[cId] = resultado
+        return resultado
     end
 end
 
--- 4. Desativação global de funções matemáticas de mapa pesadas
+-- 3. Cache para a função findPath nativa
 if type(findPath) == "function" then
     local oldFindPath = findPath
     local ultimoCalculoPath = 0
@@ -3859,7 +3838,7 @@ if type(findPath) == "function" then
     
     findPath = function(startPos, endPos, maxDist, params, ...)
         local atual = obterTempoReal()
-        if atual - ultimoCalculoPath > 500 then
+        if atual - ultimoCalculoPath > 400 then
             cachePaths = {}
             ultimoCalculoPath = atual
         end
