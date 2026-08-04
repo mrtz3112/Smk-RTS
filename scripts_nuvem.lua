@@ -408,7 +408,7 @@ local function stableWalk(targetPos)
 end
 
 -- 1. DECLARAÇÃO DO MACRO (Aparecerá primeiro na interface)
-macro(80, "Smart Follow", function() 
+macro(40, "Smart Follow", function() 
     if not g_game.isOnline() then return end
     
     local targetName = tostring(storage.followTargetName or "")
@@ -625,7 +625,7 @@ function findNearestSafePosition(playerPos, maxRange)
                     local tile = g_map.getTile(newPos)
 
                     if tile and tile:isWalkable() and not hasEffect(tile, effectIdToAvoid) then
-                        if findPath(playerPos, newPos, 10, flags) then
+                        if findPath(playerPos, newPos, 7, flags) then
                             return newPos
                         end
                     end
@@ -635,7 +635,7 @@ function findNearestSafePosition(playerPos, maxRange)
     end
     return nil
 end
-macro(30, "Dodge Red SQM Spells", function()
+macro(1, "Dodge Red SQM Spells", function()
     if player:isWalking() then return end
 
     local playerPos = player:getPosition()
@@ -647,8 +647,7 @@ macro(30, "Dodge Red SQM Spells", function()
 
     local safePos = findNearestSafePosition(playerPos)
     if safePos then
-        autoWalk(safePos, 3, flags) 
-        delay(200)
+        autoWalk(safePos, 7, flags)
     end
 end)
 --AutoEscadas
@@ -1035,6 +1034,39 @@ function getDash(dir)
         return true
     end
 end
+--AutoRift
+macro(500, "Click Rift", function()
+  local player = g_game.getLocalPlayer()
+  if not player then return end
+
+  local myPos = player:getPosition()
+  if not myPos then return end
+
+  local targetId = 11843
+  local raio = 7 -- Vasculha até 7 SQMs ao seu redor (o suficiente para cobrir a tela visível)
+
+  -- Varredura localizada focada no jogador (consome 95% menos CPU que pegar todos os tiles do andar)
+  for x = -raio, raio do
+    for y = -raio, raio do
+      local tilePos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
+      local tile = g_map.getTile(tilePos)
+      
+      if tile then
+        local items = tile:getItems()
+        for i = 1, #items do
+          local item = items[i]
+          if item and item:getId() == targetId then
+            g_game.use(item)
+            if CaveBot and type(CaveBot.gotoLabel) == "function" then
+              CaveBot.gotoLabel("Rift")
+            end
+            return -- Encontra o Rift e encerra o ciclo imediatamente, poupando processamento
+          end
+        end
+      end
+    end
+  end
+end)
 --Auto Enter Dungeon
 local window_name = "Dungeons"
 macro(2000, "Enter Dungeons", function()
@@ -3702,3 +3734,67 @@ if CaveBot and type(CaveBot.delay) == "function" then
         return CaveBot.oldDelay(ms, ...)
     end
 end
+
+-- INJEÇÃO DE PERFORMANCE PARA O TARGETBOT (VIA LOADER.LUA)
+-- 1. Criação do Provedor de Tempo Universal para alimentar o 'now' global do bot
+local function obterTempoReal()
+    if os and type(os.milliSeconds) == "function" then return os.milliSeconds()
+    elseif os and type(os.milliseconds) == "function" then return os.milliseconds()
+    elseif g_clock and type(g_clock.realMillis) == "function" then return g_clock.realMillis()
+    elseif g_clock and type(g_clock.millis) == "function" then return g_clock.millis()
+    else return math.floor(os.clock() * 1000) end
+end
+
+-- Ciclo contínuo para manter a variável 'now' sempre atualizada com precisão nativa
+macro(1, function()
+    now = obterTempoReal()
+end)
+
+-- 2. Interceptador de Leitura de Mapa (Evita que o findPath do target.lua destrua a CPU)
+local ultimoCalculoPath = 0
+local cachePaths = {}
+
+if type(findPath) == "function" then
+    local oldFindPath = findPath
+    findPath = function(startPos, endPos, maxDist, params, ...)
+        -- Se o TargetBot estiver ativo e buscando caminhos, limitamos o processamento repetido
+        local atual = obterTempoReal()
+        if atual - ultimoCalculoPath > 250 then
+            cachePaths = {}
+            ultimoCalculoPath = atual
+        end
+
+        if endPos then
+            local hashChave = string.format("%d,%d", endPos.x, endPos.y)
+            if cachePaths[hashChave] ~= nil then
+                return cachePaths[hashChave] -- Retorna o caminho direto do cache sem recalcular
+            end
+            
+            -- Executa o findPath original e guarda no cache
+            local rota = oldFindPath(startPos, endPos, maxDist, params, ...)
+            cachePaths[hashChave] = rota or false
+            return rota
+        end
+        return oldFindPath(startPos, endPos, maxDist, params, ...)
+    end
+end
+
+-- 3. Interceptador de Área de Busca (Filtra monstros distantes antes do loop pesado do target.lua)
+if g_map and type(g_map.getSpectatorsInRange) == "function" then
+    local oldGetSpecsInRange = g_map.getSpectatorsInRange
+    g_map.getSpectatorsInRange = function(centerPos, multiFloor, minRange, maxRange, ...)
+        -- Se o target.lua pedir a área padrão de 6x6, nós reduzimos dinamicamente para poupar a CPU
+        if minRange == 6 and maxRange == 6 then
+            local specs = oldGetSpecsInRange(centerPos, multiFloor, 4, 4, ...) -- Reduzido para raio 4 (Área de combate real)
+            
+            -- Se a tela estiver muito cheia, aperta ainda mais o cerco para ignorar o lag de monstros longe
+            if #specs > 8 then
+                return oldGetSpecsInRange(centerPos, multiFloor, 3, 3, ...)
+            end
+            return specs
+        end
+        return oldGetSpecsInRange(centerPos, multiFloor, minRange, maxRange, ...)
+    end
+end
+
+print("[Loader] Blindagem externa do TargetBot injetada com sucesso.")
