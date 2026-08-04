@@ -1419,16 +1419,17 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 -- Smart Cast
-local distance = 2
+-- Smart Cast (Corrigido para Alcance de 7 SQMs com Foco no Alvo)
+local alcanceMaximoTarget = 7 -- Permite identificar e atacar alvos em até 7 SQMs
+local raioDeAreaDoMonstro = 3 -- Raio ao redor do alvo para validar magia de área
 local amountOfMonsters = 2
 
 local indexArea, indexSingle = 1, 1
 
--- Tabelas em cache (Evita criar tabelas a cada 100ms)
+-- Tabelas em cache
 local cacheAreaSpells = {}
 local cacheSingleSpells = {}
 
--- Função interna para atualizar o cache de magias apenas quando o texto mudar
 local function atualizarCacheSpells()
     cacheAreaSpells = {}
     if storage.areaspell01 and storage.areaspell01 ~= "" then table.insert(cacheAreaSpells, storage.areaspell01) end
@@ -1446,22 +1447,45 @@ combo = macro(100, "Smart Cast", function()
     local target = g_game.getAttackingCreature()
     if not target then return end
     
+    local targetPos = target:getPosition()
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer or not targetPos then return end
+    
+    local minhaPos = localPlayer:getPosition()
+    if not minhaPos or minhaPos.z ~= targetPos.z then return end
+
+    -- Valida se o alvo está dentro do seu alcance máximo de 7 SQMs
+    local distToTargetX = math.abs(minhaPos.x - targetPos.x)
+    local distToTargetY = math.abs(minhaPos.y - targetPos.y)
+    if distToTargetX > alcanceMaximoTarget or distToTargetY > alcanceMaximoTarget then return end
+
     local atacandoPlayer = target:isPlayer()
     local specAmount = 0  
     
-    -- Conta monstros ao redor apenas se o alvo não for Player
+    -- Conta monstros ao redor do ALVO (Target) apenas se não for Player
     if not atacandoPlayer then
-        local minhaPos = pos()
-        for _, mob in ipairs(getSpectators()) do
-            if mob:isMonster() and getDistanceBetween(minhaPos, mob:getPosition()) <= distance then
-                specAmount = specAmount + 1
-                -- Otimização: Se já atingiu a quantidade necessária, não precisa continuar contando os outros
-                if specAmount >= amountOfMonsters then break end
+        -- OTIMIZAÇÃO: Varre apenas os arredores do alvo (raio 3) em vez da tela inteira
+        local mobsAoRedorDoAlvo = g_map.getSpectatorsInRange(targetPos, false, raioDeAreaDoMonstro, raioDeAreaDoMonstro)
+        
+        for i = 1, #mobsAoRedorDoAlvo do
+            local mob = mobsAoRedorDoAlvo[i]
+            if mob and mob:isMonster() and mob:getHealthPercent() > 0 then
+                local mobPos = mob:getPosition()
+                if mobPos and mobPos.z == targetPos.z then
+                    -- Conta o monstro se ele estiver na área de acerto da sua magia de área
+                    local distX = math.abs(targetPos.x - mobPos.x)
+                    local distY = math.abs(targetPos.y - mobPos.y)
+                    
+                    if distX <= raioDeAreaDoMonstro and distY <= raioDeAreaDoMonstro then
+                        specAmount = specAmount + 1
+                        if specAmount >= amountOfMonsters then break end
+                    end
+                end
             end
         end
     end
     
-    -- Condição 1: Solta área (2 ou mais monstros e alvo não é Player)
+    -- Condição 1: Solta área (2 ou mais monstros na área do alvo)
     if specAmount >= amountOfMonsters and not atacandoPlayer then
         local totalArea = #cacheAreaSpells
         if totalArea > 0 then
@@ -1480,7 +1504,7 @@ combo = macro(100, "Smart Cast", function()
     end
 end)
 
--- Interface Gráfica (UI) com gatilho de atualização de cache
+-- Interface Gráfica (UI)
 UI.Separator()
 UI.Label("Area Spells (2+ Mobs)"):setColor('#FFEA99')
 UI.Separator()
@@ -1493,7 +1517,6 @@ UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text; atualizarCacheSpells() end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text; atualizarCacheSpells() end)
 
--- Executa uma vez ao iniciar o script para carregar as magias já salvas
 atualizarCacheSpells()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Others ~"):setColor('#EBDEF0')
@@ -3313,7 +3336,7 @@ macro(100, function()
   end
 end)
 
--- Magic wall & Wild growth timer (Otimização Máxima Sem getGround)
+-- Magic wall & Wild growth timer (Otimização Suprema do setTimer)
 local magicWallId = 10980
 local magicWallTime = 20000
 local wildGrowthId = 2130
@@ -3342,7 +3365,7 @@ onAddThing(function(tile, thing)
   elseif itemId == wildGrowthId then
     timer = wildGrowthTime
   else
-    return
+    return -- Aborta instantaneamente para qualquer outro item, poupando CPU
   end
 
   local tileKey = obterChaveTile(tile)
@@ -3350,21 +3373,24 @@ onAddThing(function(tile, thing)
   
   local tempoAgora = tempoAtual()
 
-  if not activeTimers[tileKey] or activeTimers[tileKey] < tempoAgora then    
-    activeTimers[tileKey] = tempoAgora + timer
+  -- OTIMIZAÇÃO CRÍTICA: Se já existe um timer idêntico rodando nesse exato piso, 
+  -- ignora e pula o código para não resetar nem engasgar a função setTimer nativa
+  if activeTimers[tileKey] and activeTimers[tileKey] > tempoAgora then
+    return
   end
 
-  tile:setTimer(math.max(0, activeTimers[tileKey] - tempoAgora))
+  activeTimers[tileKey] = tempoAgora + timer
+  
+  -- Só chama a função pesada de interface uma única vez por criação de barreira
+  tile:setTimer(timer)
 end)
 
 onRemoveThing(function(tile, thing)
   if not tile or not thing then return end
   
-  -- Filtro Relâmpago: Aborta se o item que sumiu não for MWall ou WildGrowth
   local itemId = thing:getId()
   if itemId ~= magicWallId and itemId ~= wildGrowthId then return end
 
-  -- OTIMIZAÇÃO CRÍTICA: Removeu o getGround() causador de lag na linha 3363
   local tileKey = obterChaveTile(tile)
   if tileKey ~= 0 then
     activeTimers[tileKey] = nil
@@ -3766,7 +3792,7 @@ if CaveBot and type(CaveBot.delay) == "function" then
 end
 
 -- ====================================================================
--- INJEÇÃO CIRÚRGICA DE ALTA PERFORMANCE - TARGETBOT V5 (DEFINITIVA)
+-- INJEÇÃO DE PERFORMANCE DEFINITIVA - TARGETBOT V8 (BLINDAGEM DE INTERFACE)
 -- ====================================================================
 
 -- 1. Alimentação estável da variável global 'now'
@@ -3782,77 +3808,65 @@ macro(1, function()
     now = obterTempoReal()
 end)
 
--- 2. INTERCEPTADOR DIRETO DA FUNÇÃO DA LINHA 50 (calculateParams)
-if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams) == "function" then
-    local oldCalculateParams = TargetBot.Creature.calculateParams
-    local ultimoCalculoParams = 0
-    local cacheParams = {}
-
-    TargetBot.Creature.calculateParams = function(creature, path, ...)
-        if not creature then return {danger = 0, priority = 0} end
-
-        local player = g_game.getLocalPlayer()
-        if not player then return oldCalculateParams(creature, path, ...) end
-
-        local playerPos = player:getPosition()
-        local cPos = creature:getPosition()
-
-        if playerPos and cPos then
-            -- FILTRO 1: Ignora na hora monstros em outros andares (Z diferente)
-            if cPos.z ~= playerPos.z then
-                return {danger = 0, priority = 0, config = {name = creature:getName() or ""}}
-            end
-
-            -- FILTRO 2: Ignora monstros fora da área de combate imediata (raio maior que 4 SQMs)
-            local distX = math.abs(playerPos.x - cPos.x)
-            local distY = math.abs(playerPos.y - cPos.y)
-            if distX > 4 or distY > 4 then
-                return {danger = 0, priority = 0, config = {name = creature:getName() or ""}}
-            end
-        end
-
-        -- OTIMIZAÇÃO DE MEMÓRIA: Cache dos parâmetros por ID do Monstro por 300ms
-        local agora = obterTempoReal()
-        if agora - ultimoCalculoParams > 300 then
-            cacheParams = {}
-            ultimoCalculoParams = agora
-        end
-
-        local cId = creature:getId()
-        if cacheParams[cId] ~= nil then
-            return cacheParams[cId]
-        end
-
-        -- Executa o cálculo original apenas se o monstro estiver colado e o cache expirado
-        local resultado = oldCalculateParams(creature, path, ...)
-        cacheParams[cId] = resultado
-        return resultado
-    end
+-- 2. DESATIVAÇÃO INTELIGENTE DE TEXTO DE DEBUG (Zera o lag gráfico da Linha 50)
+-- Força a interface gráfica de depuração a ficar sempre desligada no motor do bot
+if ui and ui.editor and ui.editor.debug then
+    ui.editor.debug.isOn = function() return false end
+    ui.editor.debug:setOn(false)
 end
 
--- 3. Cache para a função findPath nativa
+-- 3. SEQUESTRO DA FUNÇÃO FINDPATH OTIMIZADA PARA MONITORAMENTO DE TELA
 if type(findPath) == "function" then
     local oldFindPath = findPath
     local ultimoCalculoPath = 0
     local cachePaths = {}
     
     findPath = function(startPos, endPos, maxDist, params, ...)
+        local localPlayer = g_game.getLocalPlayer()
+        if not localPlayer or not endPos then return oldFindPath(startPos, endPos, maxDist, params, ...) end
+        
+        local playerPos = localPlayer:getPosition()
+        if not playerPos then return oldFindPath(startPos, endPos, maxDist, params, ...) end
+
+        -- Trava de andar para não processar monstros no teto/subsolo
+        if endPos.z ~= playerPos.z then
+            return false
+        end
+
+        local distX = math.abs(playerPos.x - endPos.x)
+        local distY = math.abs(playerPos.y - endPos.y)
+
+        -- Limite de tela para o Follow funcionar perfeitamente (9 SQMs)
+        if distX > 9 or distY > 9 then
+            return false 
+        end
+
+        -- Cache temporal dinâmico para poupar o processador de rotas idênticas
         local atual = obterTempoReal()
-        if atual - ultimoCalculoPath > 400 then
+        if atual - ultimoCalculoPath > 300 then
             cachePaths = {}
             ultimoCalculoPath = atual
         end
 
-        if endPos then
-            local hashChave = string.format("%d,%d,%d", endPos.x, endPos.y, endPos.z)
-            if cachePaths[hashChave] ~= nil then
-                return cachePaths[hashChave]
-            end
-            local rota = oldFindPath(startPos, endPos, maxDist, params, ...)
-            cachePaths[hashChave] = rota or false
-            return rota
+        local hashChave = string.format("%d,%d", endPos.x, endPos.y)
+        if cachePaths[hashChave] ~= nil then
+            return cachePaths[hashChave]
         end
-        return oldFindPath(startPos, endPos, maxDist, params, ...)
+
+        local rota = oldFindPath(startPos, endPos, maxDist, params, ...)
+        cachePaths[hashChave] = rota or false
+        return rota
+    end
+end
+
+-- 4. Interceptador complementar de parâmetros (Garantia de segurança)
+if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams) == "function" then
+    local oldCalculateParams = TargetBot.Creature.calculateParams
+    TargetBot.Creature.calculateParams = function(creature, path, ...)
+        if not path or not creature then 
+            return {danger = 0, priority = 0, config = {name = creature and creature:getName() or ""}} 
+        end
+        return oldCalculateParams(creature, path, ...)
     end
 end
 print("[Loader] TargetBot otimizado com sucesso.")
