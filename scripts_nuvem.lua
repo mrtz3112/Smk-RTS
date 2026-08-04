@@ -472,7 +472,7 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
 end)
 UI.Separator()
 --Deposit Gold & Stack Items
-macro(500, "DepositGold & StackItems", function()
+macro(1000, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
   
   local coinIds = {3031, 3035, 3043, 10137} 
@@ -493,53 +493,50 @@ macro(500, "DepositGold & StackItems", function()
     return
   end
 
-  -- [NOVO] 2. CHECAGEM RÁPIDA DE AGRUPAMENTO (Dorme se não houver itens duplicados soltos)
+  -- 2 e 3. MAPEAR ITENS AGRUPÁVEIS (Varredura Única Otimizada)
   local containers = g_game.getContainers()
-  local idsEncontrados = {}
+  local itensMapeados = {}
   local precisaAgrupar = false
 
   for _, container in pairs(containers) do
     local items = container:getItems()
     for index = 1, #items do
       local item = items[index]
-      if item and item:isStackable() and item:getCount() < 10000 then -- 100 é o limite padrão do Tibia
-        local itemId = item:getId()
-        -- Se já vimos esse ID antes em outro slot/backpack, significa que eles precisam ser juntados
-        if idsEncontrados[itemId] then
-          precisaAgrupar = true
-          break
-        else
-          idsEncontrados[itemId] = true
-        end
-      end
-    end
-    if precisaAgrupar then break end
-  end
-
-  -- Se não tem ouro E não tem nada para agrupar, o script "dorme" e ignora o resto do código pesado
-  if not precisaAgrupar then
-    return
-  end
-
-  -- 3. MAPEAR ITENS AGRUPÁVEIS (Só roda se a checagem acima disser que precisa)
-  local itensMapeados = {}
-  for _, container in pairs(containers) do
-    local items = container:getItems()
-    for index = 1, #items do
-      local item = items[index]
-      if item and item:isStackable() and item:getCount() < 10000 then
+      if item and item:isStackable() and item:getCount() < 10000 then 
         local itemId = item:getId()
         local count = item:getCount()
         local posicaoAtual = container:getSlotPosition(index - 1)
 
-        if posicaoAtual and (not itensMapeados[itemId] or count > itensMapeados[itemId].count) then
-          itensMapeados[itemId] = {
-            posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
-            count = count
-          }
+        if posicaoAtual then
+          if itensMapeados[itemId] then
+            -- Se já mapeamos esse ID antes, detectamos itens divididos
+            precisaAgrupar = true
+            -- Define o destino preferencial como o slot que já tiver mais itens acumulados
+            if count > itensMapeados[itemId].count then
+              itensMapeados[itemId] = {
+                posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
+                count = count,
+                containerId = container:getId(),
+                slotIndex = index - 1
+              }
+            end
+          else
+            -- Primeiro registro do item
+            itensMapeados[itemId] = {
+              posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
+              count = count,
+              containerId = container:getId(),
+              slotIndex = index - 1
+            }
+          end
         end
       end
     end
+  end
+
+  -- Se não houver itens duplicados espalhados, encerra
+  if not precisaAgrupar then
+    return
   end
 
   -- 4. EXECUTAR A MOVIMENTAÇÃO
@@ -552,11 +549,14 @@ macro(500, "DepositGold & StackItems", function()
         local destino = itensMapeados[itemId]
 
         if destino then
-          local posicaoAtual = container:getSlotPosition(index - 1)
+          local slotAtualIndex = index - 1
+          local mesmoContainer = (container:getId() == destino.containerId)
+          local mesmoSlot = (slotAtualIndex == destino.slotIndex)
 
-          if posicaoAtual and (posicaoAtual.x ~= destino.posicao.x or posicaoAtual.y ~= destino.posicao.y or posicaoAtual.slot ~= destino.posicao.slot) then
+          -- Só move se NÃO for exatamente o mesmo slot físico
+          if not (mesmoContainer and mesmoSlot) then
             g_game.move(item, destino.posicao, item:getCount())
-            delay(200) 
+            delay(300) -- Um delay ligeiramente maior garante que o servidor processe o stack
             return "retry"
           end
         end
