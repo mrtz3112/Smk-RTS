@@ -3319,32 +3319,60 @@ local magicWallTime = 20000
 local wildGrowthId = 2130
 local wildGrowthTime = 45000
 local activeTimers = {}
+
+-- Função rápida para obter o tempo atual via variável global do bot
+local function tempoAtual()
+  return now or (os.time() * 1000)
+end
+
+-- Função interna otimizada para gerar uma chave numérica sem gerar lixo na memória RAM
+local function obterChaveTile(tile)
+  if not tile then return 0 end
+  local pos = tile:getPosition()
+  if not pos then return 0 end
+  -- Cria um ID numérico único combinando X e Y matematicamente (ex: 3230052100)
+  return (pos.x * 100000) + pos.y
+end
+
 onAddThing(function(tile, thing)
-  if not thing:isItem() then
-    return
-  end
+  if not tile or not thing or not thing:isItem() then return end
+
+  local itemId = thing:getId()
   local timer = 0
-  if thing:getId() == magicWallId then
+
+  if itemId == magicWallId then
     timer = magicWallTime
-  elseif thing:getId() == wildGrowthId then
+  elseif itemId == wildGrowthId then
     timer = wildGrowthTime
   else
     return
   end
-  local pos = tile:getPosition().x .. "," .. tile:getPosition().y .. "," .. tile:getPosition().z
-  if not activeTimers[pos] or activeTimers[pos] < now then    
-    activeTimers[pos] = now + timer
+
+  local tileKey = obterChaveTile(tile)
+  if tileKey == 0 then return end
+  
+  local tempoAgora = tempoAtual()
+
+  if not activeTimers[tileKey] or activeTimers[tileKey] < tempoAgora then    
+    activeTimers[tileKey] = tempoAgora + timer
   end
-  tile:setTimer(activeTimers[pos] - now)
+
+  tile:setTimer(math.max(0, activeTimers[tileKey] - tempoAgora))
 end)
+
 onRemoveThing(function(tile, thing)
-  if not thing:isItem() then
-    return
-  end
-  if (thing:getId() == magicWallId or thing:getId() == wildGrowthId) and tile:getGround() then
-    local pos = tile:getPosition().x .. "," .. tile:getPosition().y .. "," .. tile:getPosition().z
-    activeTimers[pos] = nil
-    tile:setTimer(0)
+  if not tile or not thing then return end
+  
+  -- Aborta imediatamente se não for um dos dois itens rastreados
+  local itemId = thing:getId()
+  if itemId ~= magicWallId and itemId ~= wildGrowthId then return end
+
+  if tile:getGround() then
+    local tileKey = obterChaveTile(tile)
+    if tileKey ~= 0 then
+      activeTimers[tileKey] = nil
+      tile:setTimer(0)
+    end
   end  
 end)
 
