@@ -8,30 +8,19 @@ local chavesPermitidasLoader = {}
 local carregamentoConcluido = false
 
 local function processarConteudo(content)
-    -- Varia strings entre aspas, garantindo que o tamanho seja maior que zero
     for word in content:gmatch('["\']([%a%d_%s%-]+)["\']') do 
-        if word and word:len() > 0 then
-            chavesPermitidasLoader[word] = true 
-        end
+        if word and word:len() > 0 then chavesPermitidasLoader[word] = true end
     end
-    
-    -- Captura métodos e propriedades com ponto
     for word in content:gmatch('%.([%a%d_]+)') do 
-        if word and word:len() > 0 then
-            chavesPermitidasLoader[word] = true 
-        end
+        if word and word:len() > 0 then chavesPermitidasLoader[word] = true end
     end
     
-    -- Chaves estruturais protegidas explicitamente
     chavesPermitidasLoader["alarms"] = true
     chavesPermitidasLoader["_macros"] = true
     chavesPermitidasLoader["_configs"] = true
     chavesPermitidasLoader["painelSalvo"] = true
     chavesPermitidasLoader["petItemCooldowns"] = true
-    
-    -- Remove explicitamente qualquer entrada vazia acidental
     chavesPermitidasLoader[""] = nil
-    
     carregamentoConcluido = true
 end
 
@@ -51,6 +40,61 @@ elseif type(g_http) == "table" and type(g_http.get) == "function" then
             print("[Loader] Storage Cleaner importada com sucesso via g_http.")
         end
     end)
+end
+
+-- ====================================================================
+-- [NOVO] INTERCEPTADOR E CORRETOR AUTOMÁTICO DE TABELAS INVÁLIDAS
+-- ====================================================================
+local function sanitizarTabelaParaJson(t)
+    if type(t) ~= "table" then return end
+    
+    local temChaveTexto = false
+    local temChaveNumerica = false
+    local chavesParaRemover = {}
+
+    for k, v in pairs(t) do
+        -- Remove chaves vazias imediatas
+        if k == "" then
+            table.insert(chavesParaRemover, k)
+        else
+            if type(k) == "string" then temChaveTexto = true end
+            if type(k) == "number" then temChaveNumerica = true end
+            if type(v) == "table" then sanitizarTabelaParaJson(v) end
+        end
+    end
+
+    -- Remove chaves vazias detectadas
+    for _, chave in ipairs(chavesParaRemover) do t[chave] = nil end
+
+    -- CORREÇÃO CRÍTICA: Se a tabela misturar texto e número (mista), converte números para texto
+    if temChaveTexto and temChaveNumerica then
+        local mudancas = {}
+        for k, v in pairs(t) do
+            if type(k) == "number" then
+                mudancas[tostring(k)] = v
+                t[k] = nil
+            end
+        end
+        for k, v in pairs(mudancas) do t[k] = v end
+    end
+end
+
+-- Intercepta a função de salvar do Cavebot para limpar a estrutura corrompida antes do crash
+if CaveBot and type(CaveBot.save) == "function" then
+    local oldCavebotSave = CaveBot.save
+    CaveBot.save = function(...)
+        if storage then
+            sanitizarTabelaParaJson(storage)
+        end
+        return oldCavebotSave(...)
+    end
+elseif type(g_resources) == "table" and type(g_resources.setOption) == "function" then
+    -- Alternativa genérica caso use o sistema de opções padrão do OTClient
+    local oldSetOption = g_resources.setOption
+    g_resources.setOption = function(key, value, ...)
+        if type(value) == "table" then sanitizarTabelaParaJson(value) end
+        return oldSetOption(key, value, ...)
+    end
 end
 
 setDefaultTab("Main")
