@@ -8,13 +8,30 @@ local chavesPermitidasLoader = {}
 local carregamentoConcluido = false
 
 local function processarConteudo(content)
-    for word in content:gmatch('["\']([%a%d_%s%-]+)["\']') do chavesPermitidasLoader[word] = true end
-    for word in content:gmatch('%.([%a%d_]+)') do chavesPermitidasLoader[word] = true end
+    -- Varia strings entre aspas, garantindo que o tamanho seja maior que zero
+    for word in content:gmatch('["\']([%a%d_%s%-]+)["\']') do 
+        if word and word:len() > 0 then
+            chavesPermitidasLoader[word] = true 
+        end
+    end
+    
+    -- Captura métodos e propriedades com ponto
+    for word in content:gmatch('%.([%a%d_]+)') do 
+        if word and word:len() > 0 then
+            chavesPermitidasLoader[word] = true 
+        end
+    end
+    
+    -- Chaves estruturais protegidas explicitamente
     chavesPermitidasLoader["alarms"] = true
     chavesPermitidasLoader["_macros"] = true
     chavesPermitidasLoader["_configs"] = true
     chavesPermitidasLoader["painelSalvo"] = true
     chavesPermitidasLoader["petItemCooldowns"] = true
+    
+    -- Remove explicitamente qualquer entrada vazia acidental
+    chavesPermitidasLoader[""] = nil
+    
     carregamentoConcluido = true
 end
 
