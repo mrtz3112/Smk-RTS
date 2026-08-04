@@ -408,7 +408,7 @@ local function stableWalk(targetPos)
 end
 
 -- 1. DECLARAÇÃO DO MACRO (Aparecerá primeiro na interface)
-macro(40, "Smart Follow", function() 
+macro(1, "Smart Follow", function() 
     if not g_game.isOnline() then return end
     
     local targetName = tostring(storage.followTargetName or "")
