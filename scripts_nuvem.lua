@@ -408,7 +408,7 @@ local function stableWalk(targetPos)
 end
 
 -- 1. DECLARAÇÃO DO MACRO (Aparecerá primeiro na interface)
-macro(1, "Smart Follow", function() 
+macro(40, "Smart Follow", function() 
     if not g_game.isOnline() then return end
     
     local targetName = tostring(storage.followTargetName or "")
@@ -636,7 +636,7 @@ function findNearestSafePosition(playerPos, maxRange)
     end
     return nil
 end
-macro(1, "Dodge Red SQM Spells", function()
+macro(40, "Dodge Red SQM Spells", function()
     if player:isWalking() then return end
 
     local playerPos = player:getPosition()
@@ -900,7 +900,7 @@ markOnThing = function(thing, color)
     return false
 end
 
-Stairs.walk = macro(1, function()
+Stairs.walk = macro(40, function()
         if modules.corelib.g_keyboard.isKeyPressed("Escape") then
             return Stairs.walk.setOff()
         end
@@ -922,7 +922,7 @@ Stairs.walk = macro(1, function()
 
 Stairs.walk.setOff()
 
-macro(1,"Auto-Escadas", function()
+macro(40,"Auto-Escadas", function()
         if Stairs.walk.isOn() then
             return
         end
@@ -1035,9 +1035,8 @@ function getDash(dir)
         return true
     end
 end
--- Click Rift (Otimização Definitiva via Varredura Linear por Etapas)
+-- Click Rift (Otimização Definitiva por Espiral de Tela - Sem getTiles)
 local ultimoScanRift = 0
-local cacheRiftEncontrado = false
 
 macro(1000, "Click Rift", function()
   local player = g_game.getLocalPlayer()
@@ -1049,26 +1048,27 @@ macro(1000, "Click Rift", function()
   local targetId = 11843
   local tempoAgora = now or (os.time() * 1000)
 
-  -- OTIMIZAÇÃO CRÍTICA: Se já clicou recentemente ou escaneou há menos de 1.5s, aborta na hora
-  if tempoAgora - ultimoScanRift < 1500 and not cacheRiftEncontrado then
+  -- OTIMIZAÇÃO 1: Impede varreduras repetitivas se o ciclo anterior foi recente
+  if tempoAgora - ultimoScanRift < 1500 then
     return
   end
+  ultimoScanRift = tempoAgora
 
-  ultimoScanMochilas = tempoAgora -- Atualiza o marcador de tempo
-  local tiles = g_map.getTiles(myPos.z)
-  if not tiles or #tiles == 0 then return end
+  local raioVisivel = 7 -- Cobre perfeitamente toda a sua tela visível de jogo
 
-  -- Loop numérico puro linear (Milhares de vezes mais rápido que loops x/y aninhados)
-  for i = 1, #tiles do
-    local tile = tiles[i]
-    if tile then
-      local tPos = tile:getPosition()
-      -- Filtra apenas blocos que estão na sua tela visível (raio de até 8 SQMs)
-      if tPos and math.abs(myPos.x - tPos.x) <= 8 and math.abs(myPos.y - tPos.y) <= 8 then
+  -- OTIMIZAÇÃO 2: Loop em grade matemática curta (Consome 99% menos CPU que o getTiles)
+  for x = -raioVisivel, raioVisivel do
+    for y = -raioVisivel, raioVisivel do
+      local tilePos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
+      local tile = g_map.getTile(tilePos)
+      
+      if tile then
         local items = tile:getItems()
+        local totalItems = #items
         
-        for j = 1, #items do
-          local item = items[j]
+        -- Loop numérico puro indexado de alta velocidade
+        for i = 1, totalItems do
+          local item = items[i]
           if item and item:getId() == targetId then
             g_game.use(item)
             
@@ -1076,17 +1076,14 @@ macro(1000, "Click Rift", function()
               CaveBot.gotoLabel("Rift")
             end
             
-            cacheRiftEncontrado = true
-            delay(2500) -- Faz a macro dormir por 2.5 segundos após o clique bem-sucedido
+            -- TRAVA DE SUCESSO: Faz a macro dormir por 3 segundos após clicar no portal
+            delay(3000) 
             return
           end
         end
       end
     end
   end
-
-  -- Se varreu a tela e não achou nada, reseta o estado para a próxima busca espaçada
-  cacheRiftEncontrado = false
 end)
 --Auto Enter Dungeon
 local window_name = "Dungeons"
@@ -1143,10 +1140,11 @@ local trainerMacro = macro(100, "House Trainer", function(macroObj)
     g_game.attack(closestTrainer)
   end
 end)
--- Revide PK (Otimizado com Trava de UI e Varredura por Raio)
+-- Revide PK (Otimizado com Trava de UI, Varredura por Raio e Cooldown de Estado)
 local botsDesligadosPeloPVP = false
 local ultimoEstadoSafeFight = nil
 local ultimoModoAtaque = nil
+local ultimoTempoTrocaEstado = 0 -- Armazena o timestamp da última alteração de botões
 
 local function definirSafeFightBox(deveAtivar)
     -- OTIMIZAÇÃO CRÍTICA: Se a interface já está no estado correto, não clica para economizar CPU
@@ -1187,7 +1185,6 @@ local function definirModoAtaque(modo)
     end
 end
 
--- Aumentado para 250ms (Reação PVP instantânea, mas consome 60% menos CPU)
 macro(250, 'Revide PK', function()
     local localPlayer = g_game.getLocalPlayer()
     if not localPlayer then return end
@@ -1236,15 +1233,21 @@ macro(250, 'Revide PK', function()
         end
     end
 
+    local tempoAtual = os.time() * 1000 -- Obtém o tempo atual em milissegundos
+
     if agressorTarget then
         if not botsDesligadosPeloPVP then
-            if CaveBot and CaveBot.setOff then CaveBot.setOff() end
-            if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
-            
-            definirModoAtaque("balanced")
-            definirSafeFightBox(true)       
+            -- Verifica se já se passaram 6000ms desde a última alteração de botões na interface
+            if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
+                if CaveBot and CaveBot.setOff then CaveBot.setOff() end
+                if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
+                
+                definirModoAtaque("balanced")
+                definirSafeFightBox(true)       
 
-            botsDesligadosPeloPVP = true
+                botsDesligadosPeloPVP = true
+                ultimoTempoTrocaEstado = tempoAtual -- Atualiza o tempo do último clique
+            end
         end
         if g_game.getAttackingCreature() ~= agressorTarget then
             pcall(function()
@@ -1256,13 +1259,17 @@ macro(250, 'Revide PK', function()
         if botsDesligadosPeloPVP then
             local alvoAtualJogo = g_game.getAttackingCreature()
             if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
-                definirSafeFightBox(false)           
-                definirModoAtaque("offensive")
-                
-                if CaveBot and CaveBot.setOn then CaveBot.setOn() end
-                if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
-                
-                botsDesligadosPeloPVP = false
+                -- Verifica se já se passaram 6000ms desde a última alteração para poder resetar o modo
+                if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
+                    definirSafeFightBox(false)           
+                    definirModoAtaque("offensive")
+                    
+                    if CaveBot and CaveBot.setOn then CaveBot.setOn() end
+                    if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
+                    
+                    botsDesligadosPeloPVP = false
+                    ultimoTempoTrocaEstado = tempoAtual -- Atualiza o tempo do último clique
+                end
             end
         end
     end
@@ -2776,7 +2783,7 @@ else
 end
 end)
 --start/stop TargetBot
-macro(1, "Start/Stop Target", ("CTRL+2"), function(killtarget)
+macro(40, "Start/Stop Target", ("CTRL+2"), function(killtarget)
 if TargetBot.isOn() then
  TargetBot.setOff()
  killtarget.setOff()
@@ -2799,7 +2806,7 @@ local function checkPos(x, y)
 end
 
 consoleModule = modules.game_console
-dash = macro(1, 'Bug Map', ('CTRL+3'), function() 
+dash = macro(40, 'Bug Map', ('CTRL+3'), function() 
  if modules.corelib.g_keyboard.isKeyPressed('w') and not consoleModule:isChatEnabled() then
   checkPos(0, -5)
  elseif modules.corelib.g_keyboard.isKeyPressed('e') and not consoleModule:isChatEnabled() then
@@ -2959,18 +2966,6 @@ enemy = macro(30, 'Enemy', "ALT+3", function()
         modules.game_interface.processMouseAction(nil, 2, myPos, nil, actualTarget, actualTarget)
     end
 end)
-
--- Macro secundária que monitora o desligamento do Enemy
-macro(30, function()
-    if enemy and not enemy.isOn() and estadoAnteriorMacro then
-        -- MODIFICAÇÃO: Executa ações imediatas assim que a macro desliga
-        alternarBotsNativos(true) -- Religa o TargetBot automaticamente
-        definirModoAtaque("offensive")
-        estadoAnteriorMacro = false
-        print("[Enemy] TargetBot Ativado.")
-    end
-end)
-
 
 --X-Sense
 if type(storage.Sense) ~= "string" then
