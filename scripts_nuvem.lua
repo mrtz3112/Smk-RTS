@@ -38,7 +38,7 @@ elseif type(g_http) == "table" and type(g_http.get) == "function" then
     end)
 end
 
--- INTERCEPTADOR E CORRETOR AUTOMÁTICO DE TABELAS INVÁLIDAS (Versão Blindada com Faxina Real)
+-- INTERCEPTADOR E CORRETOR AUTOMÁTICO DE TABELAS INVÁLIDAS
 local function sanitizarTabelaParaJson(t)
     if type(t) ~= "table" then return t end
     
@@ -83,53 +83,18 @@ local function sanitizarTabelaParaJson(t)
     return t
 end
 
--- Intercepta as rotinas de salvamento global de forma externa e segura
+-- Executa uma higienização rápida preventiva apenas no momento em que você liga o script
 if storage then
     pcall(function() sanitizarTabelaParaJson(storage) end)
 end
 
-if CaveBot and type(CaveBot.save) == "function" then
-    local oldCavebotSave = CaveBot.save
-    CaveBot.save = function(...)
-        if storage then pcall(function() sanitizarTabelaParaJson(storage) end) end
-        return oldCavebotSave(...)
+function terminate()
+    -- No exato instante em que você fecha o client ou desloga, limpa tudo antes do save final do JSON
+    if storage then 
+        pcall(function() sanitizarTabelaParaJson(storage) end) 
     end
+    print("[Storage Cleaner] Faxina de fechamento concluida com sucesso.")
 end
-
-if TargetBot and type(TargetBot.save) == "function" then
-    local oldTargetbotSave = TargetBot.save
-    TargetBot.save = function(...)
-        if storage then pcall(function() sanitizarTabelaParaJson(storage) end) end
-        return oldTargetbotSave(...)
-    end
-end
-
-if type(g_resources) == "table" and type(g_resources.setOption) == "function" then
-    local oldSetOption = g_resources.setOption
-    g_resources.setOption = function(key, value, ...)
-        if type(value) == "table" then pcall(function() sanitizarTabelaParaJson(value) end) end
-        return oldSetOption(key, value, ...)
-    end
-end
-
-if type(g_settings) == "table" and type(g_settings.setNode) == "function" then
-    local oldSetNode = g_settings.setNode
-    g_settings.setNode = function(key, value, ...)
-        if type(value) == "table" then pcall(function() sanitizarTabelaParaJson(value) end) end
-        return oldSetNode(key, value, ...)
-    end
-end
-
-macro(500, function()
-    if not g_game.isOnline() then return end
-    
-    -- Verifica se o personagem morreu sem interceptar nenhuma função nativa gráfica
-    if hppercent() <= 0 then
-        if storage then pcall(function() sanitizarTabelaParaJson(storage) end) end
-        if CaveBot and type(CaveBot.save) == "function" then pcall(CaveBot.save) end
-        if TargetBot and type(TargetBot.save) == "function" then pcall(TargetBot.save) end
-    end
-end)
 
 setDefaultTab("Main")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
@@ -2937,26 +2902,61 @@ end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ HUD Hotkeys ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---Start/Stop CaveBot
-macro(100, "Start/Stop Cave", ("CTRL+1"), function(killcave)
-if CaveBot.isOn() then
- CaveBot.setOff()
- killcave.setOff()
-else
- CaveBot.setOn()
- killcave.setOff()
+
+--Start/Stop CaveBot (Hotkey Nativa - Sem Loops de Tempo)
+local function alternarStatusCaveBot()
+    if not g_game.isOnline() then return end
+    
+    if CaveBot and type(CaveBot.isOn) == "function" then
+        if CaveBot.isOn() then
+            if type(CaveBot.setOff) == "function" then CaveBot.setOff() end
+            -- Busca o widget killcave diretamente no escopo global de forma segura
+            pcall(function() 
+                local widget = _G.killcave or g_ui.getRootWidget():recursiveGetChildById('killcave')
+                if widget and type(widget.setOff) == "function" then widget:setOff() end 
+            end)
+            print("[CaveBot]: DESATIVADO.")
+        else
+            if type(CaveBot.setOn) == "function" then CaveBot.setOn() end
+            pcall(function() 
+                local widget = _G.killcave or g_ui.getRootWidget():recursiveGetChildById('killcave')
+                if widget and type(widget.setOff) == "function" then widget:setOff() end 
+            end)
+            print("[CaveBot]: ATIVADO.")
+        end
+    end
 end
-end)
---start/stop TargetBot
-macro(100, "Start/Stop Target", ("CTRL+2"), function(killtarget)
-if TargetBot.isOn() then
- TargetBot.setOff()
- killtarget.setOff()
-else
- TargetBot.setOn()
- killtarget.setOff()
+--Registra o atalho diretamente no teclado do jogo de forma nativa (0% de CPU)
+g_keyboard.bindKeyDown("Ctrl+1", alternarStatusCaveBot)
+
+
+--Start/Stop TargetBot (Hotkey Nativa - Sem Loops de Tempo)
+local function alternarStatusTargetBot()
+    if not g_game.isOnline() then return end
+    
+    if TargetBot and type(TargetBot.isOn) == "function" then
+        if TargetBot.isOn() then
+            if type(TargetBot.setOff) == "function" then TargetBot.setOff() end
+            pcall(function() 
+                local widget = _G.killtarget or g_ui.getRootWidget():recursiveGetChildById('killtarget')
+                if widget and type(widget.setOff) == "function" then widget:setOff() end 
+            end)
+            print("[TargetBot]: DESATIVADO.")
+        else
+            if type(TargetBot.setOn) == "function" then TargetBot.setOn() end
+            pcall(function() 
+                local widget = _G.killtarget or g_ui.getRootWidget():recursiveGetChildById('killtarget')
+                if widget and type(widget.setOff) == "function" then widget:setOff() end 
+            end)
+            print("[TargetBot]: ATIVADO.")
+        end
+    end
 end
-end)
+-- Registra o atalho diretamente no teclado do jogo de forma nativa (0% de CPU)
+g_keyboard.bindKeyDown("Ctrl+2", alternarStatusTargetBot)
+
+print("[Loader] Hotkeys de Cave/Target configuradas de forma nativa e sem lag.")
+
 --BugMap AWSD/Setas/NumPad
 local function checkPos(x, y)
  xyz = g_game.getLocalPlayer():getPosition()
