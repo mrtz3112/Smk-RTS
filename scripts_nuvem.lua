@@ -439,7 +439,7 @@ local function stableWalk(targetPos)
 end
 
 -- 1. DECLARAÇÃO DO MACRO (Aparecerá primeiro na interface)
-macro(100, "Smart Follow", function() 
+macro(200, "Smart Follow", function() 
     if not g_game.isOnline() then return end
     
     local targetName = tostring(storage.followTargetName or "")
@@ -1522,7 +1522,7 @@ local function atualizarCacheSpells()
 end
 
 -- Aumentado para 150ms (Diferença imperceptível de 0.05 segundos, mas corta o lag pela metade)
-combo = macro(150, "Smart Cast", function()
+combo = macro(200, "Smart Cast", function()
     if not g_game.isOnline() or not g_game.isAttacking() then return end     
     
     local target = g_game.getAttackingCreature()
@@ -2998,7 +2998,7 @@ enemy = macro(30, 'Enemy', "ALT+3", function()
     end
 end)
 
---X-Sense
+--X-Sense (Correção de Extração Bruta e Sem Lag)
 if type(storage.Sense) ~= "string" then
     storage.Sense = ""
 end
@@ -3015,29 +3015,33 @@ end)
 onTalk(function(...)
     local args = {...}
     local text = nil
+    -- 1. Varredura bruta convertendo tudo para texto (Força o client a extrair strings de objetos)
     for i = 1, #args do
-        if type(args[i]) == "string" and #args[i] > 0 then
-            if not player or args[i] ~= player:getName() then
-                text = args[i]
+        if args[i] then
+            local strConvertida = tostring(args[i])
+            -- Procura pela string que começa com 'x' ou 'X' de forma direta e sem lag
+            local primeiroChar = string.sub(strConvertida, 1, 1)
+            if primeiroChar == 'x' or primeiroChar == 'X' then
+                text = strConvertida
                 break
             end
         end
     end
+    -- 2. Se nenhuma das mensagens capturadas começou com 'x', descarta instantaneamente (CPU em 0%)
     if not text then return end
+    -- 3. Execução segura do comando "x"
     local msg = text:trim()
-    if string.sub(msg, 1, 1):lower() == 'x' then
-        local checkMsg = string.sub(msg, 2, #msg):trim()
-        
-        if checkMsg == '0' then
-            storage.Sense = ""
-            modules.game_textmessage.displayStatusMessage("[xSense] Alvo limpado com sucesso!")
-        else
-            storage.Sense = checkMsg
-            say('sense "' .. storage.Sense)
-        end
-        return true
+    local checkMsg = string.sub(msg, 2, #msg):trim()
+    if checkMsg == '0' then
+        storage.Sense = ""
+        modules.game_textmessage.displayStatusMessage("[xSense] Alvo limpado com sucesso!")
+    else
+        storage.Sense = checkMsg
+        say('sense "' .. storage.Sense)
     end
+    return true
 end)
+
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 --CaveBotConfigs
 local cavebotTab = "Cave"
@@ -3412,59 +3416,50 @@ macro(100, function()
   end
 end)
 
--- Magic wall & Wild growth timer
+-- Magic wall & Wild growth timer (Otimizado contra Gargalo de CPU)
 local magicWallId = 10980
 local magicWallTime = 20000
 local wildGrowthId = 2130
 local wildGrowthTime = 45000
 local activeTimers = {}
-
 local function tempoAtual()
   return now or (os.time() * 1000)
 end
-
 local function obterChaveTile(tile)
   if not tile then return 0 end
   local pos = tile:getPosition()
   if not pos then return 0 end
   return (pos.x * 100000) + pos.y
 end
-
 -- EVENTO DE ADICIONAR: Mostra o tempo imediatamente na tela
 onAddThing(function(tile, thing)
-  if not thing then return end
-
-  -- FILTRO RELÂMPAGO: Se o item que apareceu não for MWall ou WG, aborta na hora.
-  -- Isso impede o bot de processar corpos, golds e loots, zerando o lag.
+  -- FILTRO DE PERFORMANCE ABSOLUTO: Se não for um objeto válido ou não for um ITEM, aborta na hora.
+  -- Isso impede o bot de tentar ler propriedades de Criaturas, Efeitos e Tiros, eliminando os 103ms de lag.
+  if not thing or type(thing) ~= "userdata" or not thing.isItem or not thing:isItem() then return end
+  if not tile then return end
   local itemId = thing:getId()
   if itemId ~= magicWallId and itemId ~= wildGrowthId then return end
-  if not tile then return end
 
   local timer = (itemId == magicWallId) and magicWallTime or wildGrowthTime
   local tileKey = obterChaveTile(tile)
   if tileKey == 0 then return end
-  
   local tempoAgora = tempoAtual()
-
   -- Impede o reset visual se o timer já estiver rodando perfeitamente neste piso
   if activeTimers[tileKey] and activeTimers[tileKey] > tempoAgora then
     return
   end
-
   activeTimers[tileKey] = tempoAgora + timer
-  
   -- Injeta o tempo regressivo de forma estável na tela
   tile:setTimer(timer)
 end)
-
 -- EVENTO DE REMOVER: Apaga o tempo se a barreira sumir antes da hora
 onRemoveThing(function(tile, thing)
-  if not thing then return end
-  
-  -- Aborta na primeira linha se o item removido não for do nosso interesse
+  -- Aplica o mesmo filtro rápido de tipo na remoção
+  if not thing or type(thing) ~= "userdata" or not thing.isItem or not thing:isItem() then return end
+  if not tile then return end
+
   local itemId = thing:getId()
   if itemId ~= magicWallId and itemId ~= wildGrowthId then return end
-  if not tile then return end
 
   local tileKey = obterChaveTile(tile)
   if tileKey ~= 0 then
