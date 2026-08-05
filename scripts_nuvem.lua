@@ -3967,50 +3967,86 @@ end
 print("[Loader] TargetBot otimizado com sucesso.")
 
 --Extensão pos_check para o CaveBot
-CaveBot.Extensions.PosCheck = {}
+-- Injeção Automática de Extensão para o CaveBot (PosCheck - Lógica de Retorno para Hunt)
+if not CaveBot then CaveBot = {} end
+if not CaveBot.Extensions then CaveBot.Extensions = {} end
 
+CaveBot.Extensions.PosCheck = {}
 local posCheckRetries = 0
+
 CaveBot.Extensions.PosCheck.setup = function()
-  CaveBot.registerAction("PosCheck", "#00FFFF", function(value, retries)
-    local tilePos
+  -- Remove registros antigos para evitar avisos de duplicidade na memória
+  if CaveBot.Actions and type(CaveBot.Actions) == "table" then
+    CaveBot.Actions["PosCheck"] = nil
+    CaveBot.Actions["poscheck"] = nil
+    CaveBot.Actions["pos_check"] = nil
+  end
+
+  -- Função interna da lógica do waypoint
+  local function executarPosCheck(value, retries)
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer then return false end
+
     local data = string.split(value, ",")
     if #data ~= 5 then
-     warn("wrong travel format, should be: label, distance, x, y, z")
-     return false
+      warn("CaveBot[CheckPos]: Formato errado! Use: label, distancia, x, y, z")
+      return false
     end
 
-    local tilePos = player:getPosition()
+    local labelAlvo = tostring(data[1]):trim()
+    local distanciaAceita = tonumber(data[2])
+    
+    local destinoPos = {
+      x = tonumber(data[3]),
+      y = tonumber(data[4]),
+      z = tonumber(data[5])
+    }
 
-    tilePos.x = tonumber(data[3])
-    tilePos.y = tonumber(data[4])
-    tilePos.z = tonumber(data[5])
+    local playerPos = localPlayer:getPosition()
 
-    if posCheckRetries > 10 then
+    -- CASO REAL: Se você REALMENTE CAIU NO TELEPORT (Está perto da coordenada do Rift)
+    if (destinoPos.z == playerPos.z) and (getDistanceBetween(playerPos, destinoPos) <= distanciaAceita) then
         posCheckRetries = 0
-        print("CaveBot[CheckPos]: waypoints locked, too many tries, unclogging cavebot and proceeding")
-        return false
-    elseif (tilePos.z == player:getPosition().z) and (getDistanceBetween(player:getPosition(), tilePos) <= tonumber(data[2])) then
-        posCheckRetries = 0
-        print("CaveBot[CheckPos]: position reached, proceeding")
-        return true
+        print("CaveBot[CheckPos]: Teleport detectado! Entrando na rota de fuga da sala: " .. labelAlvo)
+        return true -- Retorna true para ler a linha de baixo (label:rift) e limpar a sala
     else
-        posCheckRetries = posCheckRetries + 1
-        if data[1] == "last" then
-          CaveBot.gotoFirstPreviousReachableWaypoint()
-          print("CaveBot[CheckPos]: position not-reached, going back to first reachable waypoint.")
-          return false
-        else
-          CaveBot.gotoLabel(data[1])
-          print("CaveBot[CheckPos]: position not-reached, going back to label: " .. data[1])
-          return false
-        end
-    end
-  end)
+        -- CASO CONTRÁRIO: Você não está no Rift (Está caçando normal). Força o retorno para a Hunt!
+        if type(CaveBot.clearWalk) == "function" then CaveBot.clearWalk() end
+        if type(g_game.stop) == "function" then g_game.stop() end
 
-  CaveBot.Editor.registerAction("poscheck", "pos check", {
-    value=function() return "last" .. "," .. "10" .. "," .. posx() .. "," .. posy() .. "," .. posz() end,
-    title="Location Check",
-    description="label name, accepted dist from coordinates, x, y, z",
-    multiline=false,
-})
+        if type(CaveBot.gotoLabel) == "function" then
+          -- Ignora a label do script e força o salto direto para o início do seu farm
+          CaveBot.gotoLabel("hunt")
+        end
+        
+        print("CaveBot[CheckPos]: Personagem seguro na hunt. Forcando retorno para a label: hunt")
+        return true -- Retorna true para o CaveBot aplicar a mudança de rota imediatamente
+    end
+  end
+
+  -- Registra as variações nativas
+  CaveBot.registerAction("PosCheck", "#00FFFF", executarPosCheck)
+  CaveBot.registerAction("poscheck", "#00FFFF", executarPosCheck)
+  CaveBot.registerAction("pos_check", "#00FFFF", executarPosCheck)
+
+  -- Registra no editor visual do CaveBot
+  if CaveBot.Editor and CaveBot.Editor.registerAction then
+    CaveBot.Editor.registerAction("poscheck", "pos check", {
+      value = function() 
+        return "rift" .. "," .. "100" .. "," .. posx() .. "," .. posy() .. "," .. posz() 
+      end,
+      title = "Location Check",
+      description = "nome da label, distancia aceita das coordenadas, x, y, z",
+      multiline = false,
+    })
+  end
+  
+  if type(CaveBot.reloadActions) == "function" then
+    pcall(function() CaveBot.reloadActions() end)
+  end
 end
+
+-- Inicializa a extensão
+pcall(function() CaveBot.Extensions.PosCheck.setup() end)
+
+
