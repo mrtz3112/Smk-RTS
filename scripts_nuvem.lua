@@ -41,53 +41,84 @@ end
 
 -- INTERCEPTADOR E CORRETOR AUTOMÁTICO DE TABELAS INVÁLIDAS
 local function sanitizarTabelaParaJson(t)
-    if type(t) ~= "table" then return end
+    if type(t) ~= "table" then return t end
     
     local temChaveTexto = false
     local temChaveNumerica = false
-    local chavesParaRemover = {}
-
-    for k, v in pairs(t) do
-        -- Remove chaves vazias imediatas
-        if k == "" then
-            table.insert(chavesParaRemover, k)
-        else
+    
+    -- Primeiro passo: Identifica os tipos de chaves presentes nesta tabela
+    for k, _ in pairs(t) do
+        if k ~= "" then
             if type(k) == "string" then temChaveTexto = true end
             if type(k) == "number" then temChaveNumerica = true end
-            if type(v) == "table" then sanitizarTabelaParaJson(v) end
         end
     end
 
-    -- Remove chaves vazias detectadas
-    for _, chave in ipairs(chavesParaRemover) do t[chave] = nil end
+    -- Cria uma tabela temporária limpa para não quebrar o ponteiro do loop pairs
+    local tabelaLimpa = {}
+    local houveMudanca = false
 
-    -- CORREÇÃO CRÍTICA: Se a tabela misturar texto e número (mista), converte números para texto
-    if temChaveTexto and temChaveNumerica then
-        local mudancas = {}
-        for k, v in pairs(t) do
-            if type(k) == "number" then
-                mudancas[tostring(k)] = v
-                t[k] = nil
+    for k, v in pairs(t) do
+        if k ~= "" then
+            local novaChave = k
+            -- Se a tabela for mista, força todas as chaves numéricas a virarem strings
+            if temChaveTexto and temChaveNumerica and type(k) == "number" then
+                novaChave = tostring(k)
+                houveMudanca = true
             end
+
+            -- Processa recursivamente se o valor interno for outra tabela
+            if type(v) == "table" then
+                tabelaLimpa[novaChave] = sanitizarTabelaParaJson(v)
+            else
+                tabelaLimpa[novaChave] = v
+            end
+        else
+            houveMudanca = true -- Identificou e removeu uma chave vazia ""
         end
-        for k, v in pairs(mudancas) do t[k] = v end
     end
+
+    -- Se houve modificação estrutural, limpa a tabela original e repopula com a versão corrigida
+    if houveMudanca then
+        for k, _ in pairs(t) do t[k] = nil end
+        for k, v in pairs(tabelaLimpa) do t[k] = v end
+    end
+
+    return t
 end
 
--- Intercepta a função de salvar do Cavebot para limpar a estrutura corrompida antes do crash
+-- Intercepta a rotina de salvamento global do bot
+if storage then
+    -- Executa uma limpeza preventiva imediata ao carregar o script
+    pcall(function() sanitizarTabelaParaJson(storage) end)
+end
+
 if CaveBot and type(CaveBot.save) == "function" then
     local oldCavebotSave = CaveBot.save
     CaveBot.save = function(...)
         if storage then
-            sanitizarTabelaParaJson(storage)
+            pcall(function() sanitizarTabelaParaJson(storage) end)
         end
         return oldCavebotSave(...)
     end
-elseif type(g_resources) == "table" and type(g_resources.setOption) == "function" then
-    -- Alternativa genérica caso use o sistema de opções padrão do OTClient
+end
+
+if TargetBot and type(TargetBot.save) == "function" then
+    local oldTargetbotSave = TargetBot.save
+    TargetBot.save = function(...)
+        if storage then
+            pcall(function() sanitizarTabelaParaJson(storage) end)
+        end
+        return oldTargetbotSave(...)
+    end
+end
+
+if type(g_resources) == "table" and type(g_resources.setOption) == "function" then
     local oldSetOption = g_resources.setOption
     g_resources.setOption = function(key, value, ...)
-        if type(value) == "table" then sanitizarTabelaParaJson(value) end
+        if type(value) == "table" then 
+            pcall(function() sanitizarTabelaParaJson(value) end) 
+        end
         return oldSetOption(key, value, ...)
     end
 end
@@ -408,7 +439,7 @@ local function stableWalk(targetPos)
 end
 
 -- 1. DECLARAÇÃO DO MACRO (Aparecerá primeiro na interface)
-macro(40, "Smart Follow", function() 
+macro(100, "Smart Follow", function() 
     if not g_game.isOnline() then return end
     
     local targetName = tostring(storage.followTargetName or "")
