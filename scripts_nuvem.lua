@@ -513,96 +513,112 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
     end
 end)
 UI.Separator()
---Deposit Gold & Stack Items
+
+-- Deposit Gold & Stack Items (Correção de Leitura e Performance Máxima)
+local ultimoMovimentoStack = 0
+
 macro(1000, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
   
+  -- Trava de tempo interna para dar fôlego ao processador (Substitui o "retry" perigoso)
+  local agora = os.time() * 1000
+  if type(g_clock) == "table" and type(g_clock.millis) == "function" then agora = g_clock.millis() end
+  if agora - ultimoMovimentoStack < 500 then return end
+
   local coinIds = {3031, 3035, 3043, 10137} 
   local minAmount = 1
   local shouldDeposit = false
 
   -- 1. CHECAGEM RÁPIDA DE DINHEIRO
-  for _, id in ipairs(coinIds) do
-    local item = findItem(id)
+  for i = 1, #coinIds do
+    local item = findItem(coinIds[i])
     if item and item:getCount() >= minAmount then
       shouldDeposit = true
       break
     end
   end
+  
   if shouldDeposit then
     say("!deposit all")
-    delay(500)
+    ultimoMovimentoStack = agora + 500
     return
   end
 
-  -- 2 e 3. MAPEAR ITENS AGRUPÁVEIS (Varredura Única Otimizada)
+  -- 2. MAPEAR ITENS AGRUPÁVEIS (Usa a estrutura idêntica à sua original para ler todas as mochilas)
   local containers = g_game.getContainers()
   local itensMapeados = {}
   local precisaAgrupar = false
 
   for _, container in pairs(containers) do
-    local items = container:getItems()
-    for index = 1, #items do
-      local item = items[index]
-      if item and item:isStackable() and item:getCount() < 10000 then 
-        local itemId = item:getId()
-        local count = item:getCount()
-        local posicaoAtual = container:getSlotPosition(index - 1)
+    if container then
+        local items = container:getItems()
+        -- Roda o loop baseado exatamente no tamanho bruto (#items) como no seu script funcional
+        for index = 1, #items do
+          local item = items[index]
+          -- Aceita qualquer quantia por slot (suporte a itens massivos de ATS como os 8828)
+          if item and item:isStackable() then 
+            local itemId = item:getId()
+            local count = item:getCount()
+            local posicaoAtual = container:getSlotPosition(index - 1)
 
-        if posicaoAtual then
-          if itensMapeados[itemId] then
-            -- Se já mapeamos esse ID antes, detectamos itens divididos
-            precisaAgrupar = true
-            -- Define o destino preferencial como o slot que já tiver mais itens acumulados
-            if count > itensMapeados[itemId].count then
-              itensMapeados[itemId] = {
-                posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
-                count = count,
-                containerId = container:getId(),
-                slotIndex = index - 1
-              }
+            if posicaoAtual then
+              if itensMapeados[itemId] then
+                -- Detectou item separado no inventário
+                precisaAgrupar = true
+                -- LÓGICA DO MAIOR MONTANTE: Atualiza o destino preferencial se este slot tiver mais itens
+                if count > itensMapeados[itemId].count then
+                  itensMapeados[itemId] = {
+                    posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
+                    count = count,
+                    containerId = container:getId(),
+                    slotIndex = index - 1
+                  }
+                end
+              else
+                -- Primeiro registro do item
+                itensMapeados[itemId] = {
+                  posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
+                  count = count,
+                  containerId = container:getId(),
+                  slotIndex = index - 1
+                }
+              end
             end
-          else
-            -- Primeiro registro do item
-            itensMapeados[itemId] = {
-              posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
-              count = count,
-              containerId = container:getId(),
-              slotIndex = index - 1
-            }
           end
         end
-      end
     end
   end
 
-  -- Se não houver itens duplicados espalhados, encerra
+  -- Se o mapa inteiro de mochilas estiver perfeitamente agrupado, encerra o ciclo de 1s de forma leve
   if not precisaAgrupar then
     return
   end
 
-  -- 4. EXECUTAR A MOVIMENTAÇÃO
+  -- 3. EXECUTAR A MOVIMENTAÇÃO (Do menor para o maior montante encontrado)
   for _, container in pairs(containers) do
-    local items = container:getItems()
-    for index = 1, #items do
-      local item = items[index]
-      if item and item:isStackable() and item:getCount() < 10000 then
-        local itemId = item:getId()
-        local destino = itensMapeados[itemId]
+    if container then
+        local items = container:getItems()
+        for index = 1, #items do
+          local item = items[index]
+          if item and item:isStackable() then
+            local itemId = item:getId()
+            local destino = itensMapeados[itemId]
 
-        if destino then
-          local slotAtualIndex = index - 1
-          local mesmoContainer = (container:getId() == destino.containerId)
-          local mesmoSlot = (slotAtualIndex == destino.slotIndex)
+            if destino then
+              local slotAtualIndex = index - 1
+              local mesmoContainer = (container:getId() == destino.containerId)
+              local mesmoSlot = (slotAtualIndex == destino.slotIndex)
 
-          -- Só move se NÃO for exatamente o mesmo slot físico
-          if not (mesmoContainer and mesmoSlot) then
-            g_game.move(item, destino.posicao, item:getCount())
-            delay(300) -- Um delay ligeiramente maior garante que o servidor processe o stack
-            return "retry"
+              -- Só move se o slot de origem for diferente do slot de destino final maior
+              if not (mesmoContainer and mesmoSlot) then
+                g_game.move(item, destino.posicao, item:getCount())
+                -- CORREÇÃO DO SLOW: Seta o delay de recarga real em memória sem travar a thread do bot
+                ultimoMovimentoStack = agora + 350 
+                return -- Executa um movimento por ciclo para não floodar e zerar o lag
+              end
+            end
           end
         end
-      end
     end
   end
 end)
