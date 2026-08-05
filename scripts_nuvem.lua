@@ -39,7 +39,7 @@ elseif type(g_http) == "table" and type(g_http.get) == "function" then
     end)
 end
 
--- INTERCEPTADOR E CORRETOR AUTOMÁTICO DE TABELAS INVÁLIDAS
+-- INTERCEPTADOR E CORRETOR AUTOMÁTICO DE TABELAS INVÁLIDAS (Versão Blindada)
 local function sanitizarTabelaParaJson(t)
     if type(t) ~= "table" then return t end
     
@@ -50,8 +50,11 @@ local function sanitizarTabelaParaJson(t)
     
     -- Primeiro passo: Identifica problemas sem alterar a tabela durante o loop pairs
     for k, v in pairs(t) do
-        if k == "" or k == nil then
-            table.insert(keysToRemove, k)
+        -- No Lua, chaves válidas para JSON só podem ser strings ou números. 
+        -- Chaves vazias, booleanas ou nulas são terminantemente proibidas no formato JSON do OTClient.
+        if k == "" or k == nil or type(k) == "boolean" or type(k) == "table" then
+            -- Guarda a chave problemática usando ela mesma como índice para evitar inserir 'nil' em arrays
+            keysToRemove[k] = true
         else
             if type(k) == "string" then temChaveTexto = true end
             if type(k) == "number" then temChaveNumerica = true end
@@ -63,19 +66,20 @@ local function sanitizarTabelaParaJson(t)
         end
     end
 
-    -- Remove chaves vazias com segurança sem quebrar referências
-    for _, k in ipairs(keysToRemove) do
+    -- CORREÇÃO: Remove chaves inválidas de forma isolada usando um loop pairs seguro
+    for k, _ in pairs(keysToRemove) do
         t[k] = nil
     end
 
-    -- Se a tabela for mista, mapeia as chaves numéricas que precisam virar strings
+    -- Se a tabela for mista (possui texto e número no mesmo nível), força TUDO a virar String.
+    -- O json.lua do OTClientV8 crasha se encontrar {"1", 2, teste = true} na mesma tabela.
     if temChaveTexto and temChaveNumerica then
         for k, _ in pairs(t) do
             if type(k) == "number" then
                 keysToConvert[k] = tostring(k)
             end
         end
-        -- Aplica a conversão de chaves mistas com segurança
+        -- Aplica a conversão de chaves mistas sem destruir referências de memória
         for oldKey, newKey in pairs(keysToConvert) do
             t[newKey] = t[oldKey]
             t[oldKey] = nil
@@ -93,9 +97,7 @@ end
 if CaveBot and type(CaveBot.save) == "function" then
     local oldCavebotSave = CaveBot.save
     CaveBot.save = function(...)
-        if storage then
-            pcall(function() sanitizarTabelaParaJson(storage) end)
-        end
+        if storage then pcall(function() sanitizarTabelaParaJson(storage) end) end
         return oldCavebotSave(...)
     end
 end
@@ -103,20 +105,48 @@ end
 if TargetBot and type(TargetBot.save) == "function" then
     local oldTargetbotSave = TargetBot.save
     TargetBot.save = function(...)
-        if storage then
-            pcall(function() sanitizarTabelaParaJson(storage) end)
-        end
+        if storage then pcall(function() sanitizarTabelaParaJson(storage) end) end
         return oldTargetbotSave(...)
     end
 end
 
+-- CORREÇÃO INTERCEPTADORA: Garante que qualquer salvamento de opções de interface e configurações limpe as tabelas
 if type(g_resources) == "table" and type(g_resources.setOption) == "function" then
     local oldSetOption = g_resources.setOption
     g_resources.setOption = function(key, value, ...)
-        if type(value) == "table" then 
-            pcall(function() sanitizarTabelaParaJson(value) end) 
-        end
+        if type(value) == "table" then pcall(function() sanitizarTabelaParaJson(value) end) end
         return oldSetOption(key, value, ...)
+    end
+end
+
+if type(g_settings) == "table" and type(g_settings.setNode) == "function" then
+    local oldSetNode = g_settings.setNode
+    g_settings.setNode = function(key, value, ...)
+        if type(value) == "table" then pcall(function() sanitizarTabelaParaJson(value) end) end
+        return oldSetNode(key, value, ...)
+    end
+end
+
+-- ============================================================================
+-- GATILHO DE EMERGÊNCIA: Executa a higienização forçada no milissegundo da morte
+-- antes que o OTClient deslogue ou feche o arquivo temporário do boneco
+-- ============================================================================
+if g_game then
+    local localPlayer = g_game.getLocalPlayer()
+    if localPlayer then
+        -- Se o evento nativo já existir, faz um gancho seguro sem deletar a função original
+        local oldOnHealthChange = localPlayer.onHealthChange
+        localPlayer.onHealthChange = function(creature, health, maxHealth, ...)
+            if creature:isLocalPlayer() and health <= 0 then
+                if storage then pcall(function() sanitizarTabelaParaJson(storage) end) end
+                if type(CaveBot) == "table" and type(CaveBot.save) == "function" then pcall(CaveBot.save) end
+                if type(TargetBot) == "table" and type(TargetBot.save) == "function" then pcall(TargetBot.save) end
+                print("[Storage Cleaner] Morte detectada! Tabelas sanitizadas com sucesso para evitar erro de JSON.")
+            end
+            if type(oldOnHealthChange) == "function" then
+                return oldOnHealthChange(creature, health, maxHealth, ...)
+            end
+        end
     end
 end
 
@@ -633,10 +663,11 @@ macro(1000, "DepositGold & StackItems", function()
 end)
 
 -- Auto Dodge Definitivo - Alta Performance (Anti-Slow Macro)
+-- Auto Dodge Definitivo - Alta Performance e Compatível com JSON (Anti-Crash na Morte)
 local effectIdToAvoid = 237
-local maxSearchRange = 13 -- Mantém o radar completo de tela cheia
+local maxSearchRange = 13 
 local moveFlags = { ignoreNonPathable = true }
-local dangerDuration = 2500 
+local dangerDuration = 1600 
 
 local dangerTilesCache = {}
 local dodgeBlockBots = false
@@ -657,7 +688,7 @@ local function hasEffect(tile, effectId)
     return false
 end
 
--- Mapeia a zona de perigo usando indexação matemática pura (Ultra rápido)
+-- CORREÇÃO CRÍTICA: Usa concatenação simples de string para a chave. É rápido e 100% aceito pelo json.lua
 local function updateDangerZone(playerPos)
     if not playerPos or not playerPos.x or not playerPos.y or not playerPos.z then return end
 
@@ -673,9 +704,9 @@ local function updateDangerZone(playerPos)
             
             if tile and checkPos.x and checkPos.y then
                 if hasEffect(tile, effectIdToAvoid) then
-                    -- Cria sub-tabelas dinâmicas por coordenada numérica direta (Sem usar string.format)
-                    if not dangerTilesCache[checkPos.x] then dangerTilesCache[checkPos.x] = {} end
-                    dangerTilesCache[checkPos.x][checkPos.y] = now + dangerDuration
+                    -- A chave vira uma string pura (ex: "k123_456"), o que impede o erro de mixed key types no JSON
+                    local key = "k" .. checkPos.x .. "_" .. checkPos.y
+                    dangerTilesCache[key] = now + dangerDuration
                 end
             end
         end
@@ -690,18 +721,17 @@ local function isTileDangerous(pos)
         now = g_clock.millis()
     end
 
-    local xCache = dangerTilesCache[pos.x]
-    local dangerUntil = xCache and xCache[pos.y]
+    local key = "k" .. pos.x .. "_" .. pos.y
+    local dangerUntil = dangerTilesCache[key]
     
     if dangerUntil and now < dangerUntil then
         return true
     else
-        if dangerUntil then dangerTilesCache[pos.x][pos.y] = nil end
+        if dangerUntil then dangerTilesCache[key] = nil end
         return false
     end
 end
 
--- Varre o mapa em formato circular progressivo buscando brechas livres
 local function findMassiveSafePosition(playerPos)
     if not playerPos or not playerPos.x or not playerPos.y or not playerPos.z then return nil end
 
@@ -726,7 +756,6 @@ local function findMassiveSafePosition(playerPos)
     return nil
 end
 
--- Execução inteligente da macro para poupar CPU do OTClient
 macro(10, "Dodge Red SQM Spells", function()
     if not g_game.isOnline() then return end
     
@@ -738,11 +767,9 @@ macro(10, "Dodge Red SQM Spells", function()
     local agora = os.time() * 1000
     if type(g_clock) == "table" and type(g_clock.millis) == "function" then agora = g_clock.millis() end
 
-    -- OTIMIZAÇÃO CRÍTICA: Só atualiza a zona de perigo se você estiver sob perigo ou aguardando o fim do ciclo
     if magiaEmbaixoDeMim or isTileDangerous(playerPos) or agora < manterBotsDesativadosAte then
         updateDangerZone(playerPos)
     else
-        -- Se está totalmente seguro e fora do delay, desliga o bloqueio e encerra sem processar o loop
         if dodgeBlockBots then
             if CaveBot and type(CaveBot.setEnabled) == "function" then CaveBot.setEnabled(true) end
             if TargetBot and type(TargetBot.setEnabled) == "function" then TargetBot.setEnabled(true) end
@@ -755,7 +782,6 @@ macro(10, "Dodge Red SQM Spells", function()
 
     manterBotsDesativadosAte = agora + 450 
 
-    -- Ignora a trava de tempo se uma nova magia nascer sob os pés
     if not magiaEmbaixoDeMim then
         if meuDestinoAtual and agora < travaMovimentoAte then
             if not isTileDangerous(meuDestinoAtual) then
@@ -764,7 +790,6 @@ macro(10, "Dodge Red SQM Spells", function()
         end
     end
 
-    -- Desativa os bots padrões de ataque e andada
     if not dodgeBlockBots then
         if CaveBot and type(CaveBot.isEnabled) == "function" and CaveBot.isEnabled() then 
             if type(CaveBot.setEnabled) == "function" then CaveBot.setEnabled(false) end 
@@ -775,7 +800,6 @@ macro(10, "Dodge Red SQM Spells", function()
         dodgeBlockBots = true
     end
 
-    -- Encontra o corredor azul mais próximo e executa o passo
     local safePos = findMassiveSafePosition(playerPos)
     if safePos then
         meuDestinoAtual = safePos
@@ -783,6 +807,21 @@ macro(10, "Dodge Red SQM Spells", function()
         autoWalk(safePos, maxSearchRange, moveFlags)
     end
 end)
+
+-- ============================================================================
+-- VACINA ADICIONAL: Sempre que o boneco morrer, limpa a tabela temporária da memória
+-- antes que o OTClient tente salvar o arquivo do bot corrompido
+-- ============================================================================
+local localPlayer = g_game.getLocalPlayer()
+if localPlayer then
+    localPlayer.onHealthChange = function(creature, health, maxHealth)
+        if creature:isLocalPlayer() and health <= 0 then
+            dangerTilesCache = {}
+            meuDestinoAtual = nil
+            print("[Dodge] Personagem morreu. Cache limpo preventivamente para evitar erro de JSON.")
+        end
+    end
+end
 
 --AutoEscadas
 Stairs = {}
