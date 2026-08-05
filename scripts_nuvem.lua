@@ -3828,6 +3828,42 @@ local function isMonsterOfOtherPlayer(creature, myId, localPlayer)
     return false
 end
 
+-- ============================================================================
+-- INTERCEPTADOR DE REDE SEGURO: Bloqueia o pacote de ataque enviado pelo C++
+-- ============================================================================
+if g_game and type(g_game.attack) == "function" then
+    -- CORREÇÃO DE RELOAD: Captura o ponteiro original de forma real se ele já não for o nosso gancho
+    if not g_game._antiKsOldAttackOriginal then
+        g_game._antiKsOldAttackOriginal = g_game.attack
+    end
+    
+    local oldGameAttack = g_game._antiKsOldAttackOriginal
+
+    g_game.attack = function(creature, ...)
+        if creature and creature:isMonster() then
+            local localPlayer = g_game.getLocalPlayer()
+            if localPlayer and not localPlayer:isPartyMember() then
+                local myId = localPlayer:getId()
+                
+                -- Detecta se o clique veio de você manualmente pelo mouse
+                local mouseCreature = g_game.getAttackingCreature()
+                local isTargetManual = (mouseCreature and mouseCreature:getId() == creature:getId()) or (g_ui and g_ui.isKeyPressed and g_ui.isKeyPressed("LButton"))
+
+                -- Se for o bot tentando atacar um bicho alheio sem o seu clique do mouse, joga o pacote fora
+                if isMonsterOfOtherPlayer(creature, myId, localPlayer) and not isTargetManual then
+                    -- Cancela o ataque no motor visual para o bot não travar tentando focar
+                    if TargetBot and type(TargetBot.isTargeting) == "function" and TargetBot.isTargeting() then
+                        g_game.cancelAttack()
+                    end
+                    return false -- CORTE CRÍTICO: Bloqueia o envio do pacote ao servidor de Tibia
+                end
+            end
+        end
+        return oldGameAttack(creature, ...)
+    end
+end
+-- ============================================================================
+
 -- INTERCEPTADOR 1: SOME COM OS BICHOS ALHEIOS DA LISTA DO TARGET
 if TargetBot and type(TargetBot.getCreatures) == "function" then
     local oldGetCreatures = TargetBot.getCreatures
@@ -3900,7 +3936,8 @@ if CaveBot and type(CaveBot.doWalking) == "function" then
     end
 end
 
-print("[Loader] Anti-KS habilitado com sucesso.")
+print("[Loader] Anti-KS por gancho de rede g_game.attack habilitado com seguranca de Reload.")
+
 
 -- CREATURE_PRIORITY
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
