@@ -2804,7 +2804,7 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ HUD Hotkeys ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 --Start/Stop CaveBot
-macro(1, "Start/Stop Cave", ("CTRL+1"), function(killcave)
+macro(100, "Start/Stop Cave", ("CTRL+1"), function(killcave)
 if CaveBot.isOn() then
  CaveBot.setOff()
  killcave.setOff()
@@ -2814,7 +2814,7 @@ else
 end
 end)
 --start/stop TargetBot
-macro(40, "Start/Stop Target", ("CTRL+2"), function(killtarget)
+macro(100, "Start/Stop Target", ("CTRL+2"), function(killtarget)
 if TargetBot.isOn() then
  TargetBot.setOff()
  killtarget.setOff()
@@ -3043,35 +3043,6 @@ onTalk(function(...)
 end)
 
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---CaveBotConfigs
-local cavebotTab = "Cave"
-local targetingTab = "Target"
-setDefaultTab(cavebotTab)
-CaveBot = {}
-CaveBot.Extensions = {}
-importStyle("/cavebot/cavebot.otui")
-importStyle("/cavebot/config.otui")
-importStyle("/cavebot/editor.otui")
-importStyle("/cavebot/supply.otui")
-dofile("/cavebot/actions.lua")
-dofile("/cavebot/config.lua")
-dofile("/cavebot/editor.lua")
-dofile("/cavebot/example_functions.lua")
-dofile("/cavebot/recorder.lua")
-dofile("/cavebot/walking.lua")
-dofile("/cavebot/depositer.lua")
-dofile("/cavebot/supply.lua")
-dofile("/cavebot/cavebot.lua")
-setDefaultTab(targetingTab)
-TargetBot = {} -- global namespace
-importStyle("/targetbot/target.otui")
-importStyle("/targetbot/creature_editor.otui")
-dofile("/targetbot/creature.lua")
-dofile("/targetbot/creature_attack.lua")
-dofile("/targetbot/creature_editor.lua")
-dofile("/targetbot/creature_priority.lua")
-dofile("/targetbot/walking.lua")
-dofile("/targetbot/target.lua")
 
 local pvehud = setupUI([[
 Panel
@@ -3573,6 +3544,37 @@ macro(100, function()
     updateTargetWidget(name, percent, hasTarget)
 end)
 
+--CaveBotConfigs
+local cavebotTab = "Cave"
+local targetingTab = "Target"
+setDefaultTab(cavebotTab)
+CaveBot = {}
+CaveBot.Extensions = {}
+importStyle("/cavebot/cavebot.otui")
+importStyle("/cavebot/config.otui")
+importStyle("/cavebot/editor.otui")
+importStyle("/cavebot/supply.otui")
+dofile("/cavebot/actions.lua")
+dofile("/cavebot/config.lua")
+dofile("/cavebot/editor.lua")
+dofile("/cavebot/example_functions.lua")
+dofile("/cavebot/recorder.lua")
+dofile("/cavebot/walking.lua")
+dofile("/cavebot/pos_check.lua")
+dofile("/cavebot/depositer.lua")
+dofile("/cavebot/supply.lua")
+dofile("/cavebot/cavebot.lua")
+setDefaultTab(targetingTab)
+TargetBot = {} -- global namespace
+importStyle("/targetbot/target.otui")
+importStyle("/targetbot/creature_editor.otui")
+dofile("/targetbot/creature.lua")
+dofile("/targetbot/creature_attack.lua")
+dofile("/targetbot/creature_editor.lua")
+dofile("/targetbot/creature_priority.lua")
+dofile("/targetbot/walking.lua")
+dofile("/targetbot/target.lua")
+
 -- ANTI-KS SEGURO COM TRAVA DE LURE INTELIGENTE (FILTRO DE PROXIMIDADE)
 local function isMonsterOfOtherPlayer(creature, myId, localPlayer)
     if not creature or not creature:isMonster() then return false end
@@ -3866,7 +3868,7 @@ local function obterTempoReal()
     return math.floor(os.clock() * 1000)
 end
 
-macro(1, function()
+macro(100, function()
     now = obterTempoReal()
 end)
 
@@ -3965,88 +3967,3 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
     end
 end
 print("[Loader] TargetBot otimizado com sucesso.")
-
---Extensão pos_check para o CaveBot
--- Injeção Automática de Extensão para o CaveBot (PosCheck - Lógica de Retorno para Hunt)
-if not CaveBot then CaveBot = {} end
-if not CaveBot.Extensions then CaveBot.Extensions = {} end
-
-CaveBot.Extensions.PosCheck = {}
-local posCheckRetries = 0
-
-CaveBot.Extensions.PosCheck.setup = function()
-  -- Remove registros antigos para evitar avisos de duplicidade na memória
-  if CaveBot.Actions and type(CaveBot.Actions) == "table" then
-    CaveBot.Actions["PosCheck"] = nil
-    CaveBot.Actions["poscheck"] = nil
-    CaveBot.Actions["pos_check"] = nil
-  end
-
-  -- Função interna da lógica do waypoint
-  local function executarPosCheck(value, retries)
-    local localPlayer = g_game.getLocalPlayer()
-    if not localPlayer then return false end
-
-    local data = string.split(value, ",")
-    if #data ~= 5 then
-      warn("CaveBot[CheckPos]: Formato errado! Use: label, distancia, x, y, z")
-      return false
-    end
-
-    local labelAlvo = tostring(data[1]):trim()
-    local distanciaAceita = tonumber(data[2])
-    
-    local destinoPos = {
-      x = tonumber(data[3]),
-      y = tonumber(data[4]),
-      z = tonumber(data[5])
-    }
-
-    local playerPos = localPlayer:getPosition()
-
-    -- CASO REAL: Se você REALMENTE CAIU NO TELEPORT (Está perto da coordenada do Rift)
-    if (destinoPos.z == playerPos.z) and (getDistanceBetween(playerPos, destinoPos) <= distanciaAceita) then
-        posCheckRetries = 0
-        print("CaveBot[CheckPos]: Teleport detectado! Entrando na rota de fuga da sala: " .. labelAlvo)
-        return true -- Retorna true para ler a linha de baixo (label:rift) e limpar a sala
-    else
-        -- CASO CONTRÁRIO: Você não está no Rift (Está caçando normal). Força o retorno para a Hunt!
-        if type(CaveBot.clearWalk) == "function" then CaveBot.clearWalk() end
-        if type(g_game.stop) == "function" then g_game.stop() end
-
-        if type(CaveBot.gotoLabel) == "function" then
-          -- Ignora a label do script e força o salto direto para o início do seu farm
-          CaveBot.gotoLabel("hunt")
-        end
-        
-        print("CaveBot[CheckPos]: Personagem seguro na hunt. Forcando retorno para a label: hunt")
-        return true -- Retorna true para o CaveBot aplicar a mudança de rota imediatamente
-    end
-  end
-
-  -- Registra as variações nativas
-  CaveBot.registerAction("PosCheck", "#00FFFF", executarPosCheck)
-  CaveBot.registerAction("poscheck", "#00FFFF", executarPosCheck)
-  CaveBot.registerAction("pos_check", "#00FFFF", executarPosCheck)
-
-  -- Registra no editor visual do CaveBot
-  if CaveBot.Editor and CaveBot.Editor.registerAction then
-    CaveBot.Editor.registerAction("poscheck", "pos check", {
-      value = function() 
-        return "rift" .. "," .. "100" .. "," .. posx() .. "," .. posy() .. "," .. posz() 
-      end,
-      title = "Location Check",
-      description = "nome da label, distancia aceita das coordenadas, x, y, z",
-      multiline = false,
-    })
-  end
-  
-  if type(CaveBot.reloadActions) == "function" then
-    pcall(function() CaveBot.reloadActions() end)
-  end
-end
-
--- Inicializa a extensão
-pcall(function() CaveBot.Extensions.PosCheck.setup() end)
-
-
