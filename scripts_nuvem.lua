@@ -16,7 +16,7 @@ local function processarConteudo(content)
     chavesPermitidasLoader["_macros"] = true
     chavesPermitidasLoader["_configs"] = true
     chavesPermitidasLoader["painelSalvo"] = true
-    chavesPermitidasLoader[""] = nil -- Removida petItemCooldowns da lista de permitidas
+    chavesPermitidasLoader[""] = nil 
     carregamentoConcluido = true
 end
 
@@ -47,19 +47,14 @@ local function sanitizarTabelaParaJson(t)
     local temChaveTexto = false
     local temChaveNumerica = false
     
-    -- Primeiro passo: Identifica problemas sem alterar a tabela durante o loop pairs
     for k, v in pairs(t) do
-        -- FAXINA ATIVA: Força a remoção imediata da antiga tabela do pet se ela existir no arquivo do boneco
         if k == "petItemCooldowns" or k == "" or k == nil or type(k) == "boolean" or type(k) == "table" then
-            -- Guarda a chave problemática usando ela mesma como índice para evitar inserir 'nil' em arrays
             keysToRemove[k] = true
         else
             if type(k) == "string" then temChaveTexto = true end
             if type(k) == "number" then temChaveNumerica = true end
             
-            -- Se o valor for outra tabela, processa recursivamente primeiro
             if type(v) == "table" then
-                -- Se a sub-tabela estiver totalmente vazia e abandonada no arquivo, remove ela também
                 if next(v) == nil then
                     keysToRemove[k] = true
                 else
@@ -69,19 +64,16 @@ local function sanitizarTabelaParaJson(t)
         end
     end
 
-    -- CORREÇÃO: Remove chaves inválidas e chaves deletadas de forma definitiva do arquivo .json
     for k, _ in pairs(keysToRemove) do
         t[k] = nil
     end
 
-    -- Se a tabela for mista (possui texto e número no mesmo nível), força TUDO a virar String.
     if temChaveTexto and temChaveNumerica then
         for k, _ in pairs(t) do
             if type(k) == "number" then
                 keysToConvert[k] = tostring(k)
             end
         end
-        -- Aplica a conversão de chaves mistas sem destruir referências de memória
         for oldKey, newKey in pairs(keysToConvert) do
             t[newKey] = t[oldKey]
             t[oldKey] = nil
@@ -91,7 +83,7 @@ local function sanitizarTabelaParaJson(t)
     return t
 end
 
--- Intercepta a rotina de salvamento global do bot
+-- Intercepta as rotinas de salvamento global de forma externa e segura
 if storage then
     pcall(function() sanitizarTabelaParaJson(storage) end)
 end
@@ -112,7 +104,6 @@ if TargetBot and type(TargetBot.save) == "function" then
     end
 end
 
--- CORREÇÃO INTERCEPTADORA: Garante que qualquer salvamento de opções de interface e configurações limpe as tabelas
 if type(g_resources) == "table" and type(g_resources.setOption) == "function" then
     local oldSetOption = g_resources.setOption
     g_resources.setOption = function(key, value, ...)
@@ -129,24 +120,16 @@ if type(g_settings) == "table" and type(g_settings.setNode) == "function" then
     end
 end
 
-if g_game then
-    local localPlayer = g_game.getLocalPlayer()
-    if localPlayer then
-        -- Se o evento nativo já existir, faz um gancho seguro sem deletar a função original
-        local oldOnHealthChange = localPlayer.onHealthChange
-        localPlayer.onHealthChange = function(creature, health, maxHealth, ...)
-            if creature:isLocalPlayer() and health <= 0 then
-                if storage then pcall(function() sanitizarTabelaParaJson(storage) end) end
-                if type(CaveBot) == "table" and type(CaveBot.save) == "function" then pcall(CaveBot.save) end
-                if type(TargetBot) == "table" and type(TargetBot.save) == "function" then pcall(TargetBot.save) end
-                print("[Storage Cleaner] Morte detectada! Tabelas sanitizadas com sucesso para evitar erro de JSON.")
-            end
-            if type(oldOnHealthChange) == "function" then
-                return oldOnHealthChange(creature, health, maxHealth, ...)
-            end
-        end
+macro(500, function()
+    if not g_game.isOnline() then return end
+    
+    -- Verifica se o personagem morreu sem interceptar nenhuma função nativa gráfica
+    if hppercent() <= 0 then
+        if storage then pcall(function() sanitizarTabelaParaJson(storage) end) end
+        if CaveBot and type(CaveBot.save) == "function" then pcall(CaveBot.save) end
+        if TargetBot and type(TargetBot.save) == "function" then pcall(TargetBot.save) end
     end
-end
+end)
 
 setDefaultTab("Main")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
@@ -1194,10 +1177,10 @@ function getDash(dir)
         return true
     end
 end
--- Click Rift (Otimização Definitiva por Espiral de Tela - Sem getTiles)
+-- Click Rift (Correção Nativa de Métodos e Alta Performance)
 local ultimoScanRift = 0
 
-macro(1000, "Click Rift", function()
+macro(500, "Click Rift", function() -- Reduzido para 500ms para clicar mais rápido assim que spawnar
   local player = g_game.getLocalPlayer()
   if not player then return end
 
@@ -1205,40 +1188,55 @@ macro(1000, "Click Rift", function()
   if not myPos then return end
 
   local targetId = 11843
-  local tempoAgora = now or (os.time() * 1000)
+  
+  -- Sincroniza o timestamp usando o relógio interno nativo do OTClientV8
+  local tempoAgora = os.time() * 1000
+  if type(g_clock) == "table" and type(g_clock.millis) == "function" then
+    tempoAgora = g_clock.millis()
+  end
 
-  -- OTIMIZAÇÃO 1: Impede varreduras repetitivas se o ciclo anterior foi recente
+  -- Trava de recarga para não floodar cliques e causar lag de rede
   if tempoAgora - ultimoScanRift < 1500 then
     return
   end
-  ultimoScanRift = tempoAgora
 
-  local raioVisivel = 7 -- Cobre perfeitamente toda a sua tela visível de jogo
+  local raioVisivel = 7 -- Raio visual da tela de jogo
 
-  -- OTIMIZAÇÃO 2: Loop em grade matemática curta (Consome 99% menos CPU que o getTiles)
+  -- Varredura em grade matemática de alta velocidade
   for x = -raioVisivel, raioVisivel do
     for y = -raioVisivel, raioVisivel do
       local tilePos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
       local tile = g_map.getTile(tilePos)
       
       if tile then
-        local items = tile:getItems()
-        local totalItems = #items
-        
-        -- Loop numérico puro indexado de alta velocidade
-        for i = 1, totalItems do
-          local item = items[i]
-          if item and item:getId() == targetId then
-            g_game.use(item)
-            
-            if CaveBot and type(CaveBot.gotoLabel) == "function" then
-              CaveBot.gotoLabel("Rift")
+        -- CORREÇÃO 1: O método correto no OTClientV8 é getThings e não getItems
+        local things = tile:getThings()
+        if things then
+            for i = 1, #things do
+              local thing = things[i]
+              -- Verifica se o objeto existe e possui a função de ID ativa
+              if thing and thing.getId and type(thing.getId) == "function" then
+                if thing:getId() == targetId then
+                  
+                  -- CORREÇÃO 2: Usa o objeto do topo interativo do tile de forma nativa e segura
+                  local topThing = tile:getTopUseThing()
+                  if topThing then
+                      g_game.use(topThing)
+                  else
+                      g_game.use(thing) -- Fallback caso o topThing falhe
+                  end
+                  
+                  -- Redireciona o Cavebot para a label correta do Rift
+                  if CaveBot and type(CaveBot.gotoLabel) == "function" then
+                    CaveBot.gotoLabel("Rift")
+                  end
+                  
+                  -- CORREÇÃO 3: Aplica o delay real empurrando o scan 3 segundos para frente
+                  ultimoScanRift = tempoAgora + 3000
+                  return
+                end
+              end
             end
-            
-            -- TRAVA DE SUCESSO: Faz a macro dormir por 3 segundos após clicar no portal
-            delay(3000) 
-            return
-          end
         end
       end
     end
