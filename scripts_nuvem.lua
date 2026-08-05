@@ -2892,16 +2892,65 @@ if mwall and mwall.setOff then
 end
 --HoldAttack
 chaseatk = macro(100, "Hold Target", "ALT+2", function()
-  if g_game.isAttacking() 
-then
- oldTarget = g_game.getAttackingCreature()
-  end
-  if (oldTarget and oldTarget:getPosition()) 
-then
- if (not g_game.isAttacking() and getDistanceBetween(pos(), oldTarget:getPosition()) <= 8) then
+  local player = g_game.getLocalPlayer()
+  if not player then return end
 
-if (oldTarget:getPosition().z == posz()) then
-        g_game.attack(oldTarget)
+  local currentTarget = g_game.getAttackingCreature()
+
+  -- 1. Se você está atacando alguém ativamente, atualiza a memória
+  if currentTarget then
+    storage.uiTargetId = currentTarget:getId()
+    storage.manualStop = false
+    return
+  end
+
+  -- 2. Trava para o ESC / Stop: Se você não está atacando e o jogo não reporta target ativo
+  -- ao mesmo tempo em que a tecla ESC foi pressionada ou a ação de parar foi acionada
+  if g_keyboard.isKeyPressed("Escape") then
+    storage.uiTargetId = nil
+    storage.manualStop = true
+    return
+  end
+
+  -- 3. Se você cancelou manualmente (parou de atacar), não tenta re-atacar
+  if storage.manualStop then
+    return
+  end
+
+  -- 4. Se perdeu o target sem você apertar ESC (ex: monstro/player correu, tomou desinstância/poof)
+  if storage.uiTargetId then
+    local reattackDone = false
+
+    if modules.game_battle and modules.game_battle.battleButtons then
+      for _, button in pairs(modules.game_battle.battleButtons) do
+        -- Verifica se o botão pertence ao alvo salvo
+        if button and button.creature and button.creature:getId() == storage.uiTargetId then
+          if button.creature:getHealthPercent() > 0 then
+            
+            -- Simula o clique/soltura no botão da Battle para re-atacar
+            if modules.game_battle.onBattleButtonMouseRelease then
+              modules.game_battle.onBattleButtonMouseRelease(button, { x = 0, y = 0 }, 1)
+              reattackDone = true
+            end
+
+            if not reattackDone and button.onClick then
+              button:onClick()
+              reattackDone = true
+            end
+
+          end
+          break
+        end
+      end
+    end
+
+    -- Fallback caso a lista de battle falhar no momento
+    if not reattackDone then
+      for _, spec in ipairs(g_map.getSpectators(player:getPosition(), false)) do
+        if spec:getId() == storage.uiTargetId and spec:getHealthPercent() > 0 then
+          g_game.attack(spec)
+          break
+        end
       end
     end
   end
@@ -2910,6 +2959,7 @@ end)
 if chaseatk and chaseatk.setOff then
     chaseatk.setOff()
 end
+--Enemy
 local function definirModoAtaque(modo)
     local rootWidget = g_ui.getRootWidget()
     if not rootWidget then return end 
