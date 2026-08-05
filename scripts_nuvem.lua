@@ -2952,7 +2952,7 @@ local function checkPos(x, y)
 end
 
 -- CORREÇÃO 2: Loop inteligente de baixa frequência (100ms). Só lê se a macro estiver ativa!
-dash = macro(1, 'Bug Map', 'CTRL+3', function()
+dash = macro(40, 'Bug Map', 'CTRL+3', function()
     -- Se o chat estiver aberto, não faz nada para poupar processamento
     if consoleModule and type(consoleModule.isChatEnabled) == "function" and consoleModule:isChatEnabled() then
         return
