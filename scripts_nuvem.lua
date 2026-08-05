@@ -2918,57 +2918,27 @@ UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ HUD Hotkeys ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 
---Start/Stop CaveBot (Hotkey Nativa - Sem Loops de Tempo)
-local function alternarStatusCaveBot()
-    if not g_game.isOnline() then return end
-    
-    if CaveBot and type(CaveBot.isOn) == "function" then
-        if CaveBot.isOn() then
-            if type(CaveBot.setOff) == "function" then CaveBot.setOff() end
-            -- Busca o widget killcave diretamente no escopo global de forma segura
-            pcall(function() 
-                local widget = _G.killcave or g_ui.getRootWidget():recursiveGetChildById('killcave')
-                if widget and type(widget.setOff) == "function" then widget:setOff() end 
-            end)
-            print("[CaveBot]: DESATIVADO.")
-        else
-            if type(CaveBot.setOn) == "function" then CaveBot.setOn() end
-            pcall(function() 
-                local widget = _G.killcave or g_ui.getRootWidget():recursiveGetChildById('killcave')
-                if widget and type(widget.setOff) == "function" then widget:setOff() end 
-            end)
-            print("[CaveBot]: ATIVADO.")
-        end
-    end
+--Start/Stop CaveBot (Sua macro original corrigida com freio de processamento)
+macro(800, "Start/Stop Cave", ("CTRL+1"), function(killcave)
+if CaveBot.isOn() then
+ CaveBot.setOff()
+ killcave.setOff()
+else
+ CaveBot.setOn()
+ killcave.setOff()
 end
---Registra o atalho diretamente no teclado do jogo de forma nativa (0% de CPU)
-g_keyboard.bindKeyDown("Ctrl+1", alternarStatusCaveBot)
+end)
 
-
---Start/Stop TargetBot (Hotkey Nativa - Sem Loops de Tempo)
-local function alternarStatusTargetBot()
-    if not g_game.isOnline() then return end
-    
-    if TargetBot and type(TargetBot.isOn) == "function" then
-        if TargetBot.isOn() then
-            if type(TargetBot.setOff) == "function" then TargetBot.setOff() end
-            pcall(function() 
-                local widget = _G.killtarget or g_ui.getRootWidget():recursiveGetChildById('killtarget')
-                if widget and type(widget.setOff) == "function" then widget:setOff() end 
-            end)
-            print("[TargetBot]: DESATIVADO.")
-        else
-            if type(TargetBot.setOn) == "function" then TargetBot.setOn() end
-            pcall(function() 
-                local widget = _G.killtarget or g_ui.getRootWidget():recursiveGetChildById('killtarget')
-                if widget and type(widget.setOff) == "function" then widget:setOff() end 
-            end)
-            print("[TargetBot]: ATIVADO.")
-        end
-    end
+--start/stop TargetBot (Sua macro original corrigida com freio de processamento)
+macro(800, "Start/Stop Target", ("CTRL+2"), function(killtarget)
+if TargetBot.isOn() then
+ TargetBot.setOff()
+ killtarget.setOff()
+else
+ TargetBot.setOn()
+ killtarget.setOff()
 end
--- Registra o atalho diretamente no teclado do jogo de forma nativa (0% de CPU)
-g_keyboard.bindKeyDown("Ctrl+2", alternarStatusTargetBot)
+end)
 
 --BugMap AWSD/Setas/NumPad
 local function checkPos(x, y)
@@ -3106,7 +3076,7 @@ end)
 if chaseatk and chaseatk.setOff then
     chaseatk.setOff()
 end
---Enemy
+-- Enemy (Versão Corrigida Definitiva - Sem Erros e Sem Slow)
 local function definirModoAtaque(modo)
     local rootWidget = g_ui.getRootWidget()
     if not rootWidget then return end 
@@ -3116,71 +3086,78 @@ local function definirModoAtaque(modo)
     elseif modo == "offensive" then
         idBotao = "fightOffensiveBox"
     end
+    
     local targetButton = rootWidget:recursiveGetChildById(idBotao)
     if targetButton then
         pcall(function() targetButton:onClick() end)
     end
 end
 
--- FUNÇÃO AUXILIAR PARA CONTROLAR O CAVEBOT E TARGETBOT NATIVOS
 local function alternarBotsNativos(ligar)
     if ligar then
-        -- MODIFICAÇÃO: Lógica para ligar o TargetBot automaticamente
         if TargetBot then
             if type(TargetBot.setOn) == "function" then TargetBot.setOn()
             elseif type(TargetBot.start) == "function" then TargetBot.start()
-            elseif TargetBot.macro and type(TargetBot.macro.setOn) == "function" then TargetBot.macro.setOn()
             end
         end
     else
-        -- Desliga o CaveBot
         if CaveBot then
             if type(CaveBot.setOff) == "function" then CaveBot.setOff()
             elseif type(CaveBot.stop) == "function" then CaveBot.stop()
-            elseif CaveBot.macro and type(CaveBot.macro.setOff) == "function" then CaveBot.macro.setOff()
             end
         end
-        
-        -- Desliga o TargetBot
         if TargetBot then
             if type(TargetBot.setOff) == "function" then TargetBot.setOff()
             elseif type(TargetBot.stop) == "function" then TargetBot.stop()
-            elseif TargetBot.macro and type(TargetBot.macro.setOff) == "function" then TargetBot.macro.setOff()
             end
         end
     end
 end
 
 local estadoAnteriorMacro = false
-enemy = macro(30, 'Enemy', "ALT+3", function()
+
+-- Configurada em 150ms: Velocidade perfeita de PVP/Target sem travar a CPU
+enemy = macro(150, 'Enemy', "ALT+3", function()
+    if not g_game.isOnline() then return end
+
+    -- CORREÇÃO CRÍTICA: Se a macro estiver ativa mas o estado ainda não foi configurado, liga a trava
     if not estadoAnteriorMacro then
-        alternarBotsNativos(false) -- Desliga os bots ao ativar o Enemy
+        alternarBotsNativos(false) 
         definirModoAtaque("balanced")
         estadoAnteriorMacro = true
         print("[Enemy] TargetBot Desligado.")
     end
     
-    local myPos = pos()
     local localPlayer = g_game.getLocalPlayer()
-    local actualTarget
+    if not localPlayer then return end
+    
+    local myPos = localPlayer:getPosition()
+    if not myPos then return end
+    
+    local actualTarget = nil
     local actualTargetHp = 101
     local actualTargetDist = 10
     
-    for _, creature in ipairs(getSpectators(myPos)) do
-        local specHp = creature:getHealthPercent()
-        local specPos = creature:getPosition()
-        
-        if (creature:isPlayer() and specHp and specHp > 0) then
-            local specSkull = creature:getSkull()
-            local specShield = creature:getShield()
+    local espectadores = g_map.getSpectators(myPos, false)
+    if not espectadores then return end
+
+    for i = 1, #espectadores do
+        local creature = espectadores[i]
+        if creature and creature:isPlayer() and creature ~= localPlayer then
+            local specHp = creature:getHealthPercent()
+            local specPos = creature:getPosition()
             
-            if (specSkull == 1 or specSkull == 4) then
-                if (specShield == 0 and creature:getEmblem() ~= 1 and creature ~= localPlayer) then
-                    if creature:canShoot() then
+            if specHp and specHp > 0 and specPos and specPos.z == myPos.z then
+                local specSkull = creature:getSkull()
+                local specShield = creature:getShield()
+                
+                -- Filtro de PK (White Skull = 1, Red Skull = 4)
+                if (specSkull == 1 or specSkull == 4) and specShield == 0 and creature:getEmblem() ~= 1 then
+                    if type(creature.canShoot) ~= "function" or creature:canShoot() then
                         local specDist = getDistanceBetween(myPos, specPos)
+                        
                         if not actualTarget or specHp < actualTargetHp or (specHp == actualTargetHp and specDist < actualTargetDist) then
                             actualTarget = creature
-                            actualTargetPos = specPos
                             actualTargetHp = specHp
                             actualTargetDist = specDist
                         end
@@ -3191,7 +3168,21 @@ enemy = macro(30, 'Enemy', "ALT+3", function()
     end
     
     if actualTarget and g_game.getAttackingCreature() ~= actualTarget then
-        modules.game_interface.processMouseAction(nil, 2, myPos, nil, actualTarget, actualTarget)
+        if modules.game_interface and type(modules.game_interface.processMouseAction) == "function" then
+            modules.game_interface.processMouseAction(nil, 2, myPos, nil, actualTarget, actualTarget)
+        else
+            g_game.attack(actualTarget) 
+        end
+    end
+end)
+
+-- AUTO-RESET SEGURO: Monitora em segundo plano se você desligou o botão da macro.
+-- Se desligar, reseta a variável local imediatamente sem usar funções globais inexistentes!
+macro(500, function()
+    if enemy and type(enemy.isOn) == "function" then
+        if not enemy.isOn() and estadoAnteriorMacro then
+            estadoAnteriorMacro = false
+        end
     end
 end)
 
@@ -3907,50 +3898,66 @@ if TargetBot and TargetBot.Creature then
     end
 end
 
--- CaveBot
--- 1. Interceptador de loop para diminuir pausas longas entre os pontos
+-- CaveBot - Interceptador de Passos Inteligente (Fim do Slow por FindPath)
 if CaveBot and type(CaveBot.delay) == "function" then
-    if not CaveBot.oldDelay then
-        CaveBot.oldDelay = CaveBot.delay
+    -- CORREÇÃO 1: Proteção real de Reload para não duplicar ponteiros na memória RAM
+    if not CaveBot.oldDelayOriginalPointer then
+        CaveBot.oldDelayOriginalPointer = CaveBot.delay
     end
     
+    local originalDelay = CaveBot.oldDelayOriginalPointer
+
     CaveBot.delay = function(ms, ...)
-        -- Se o bot pedir uma pausa de transição entre waypoints,
-        -- o script reduz esse tempo para apenas 20ms.
-        if ms and ms <= 500 then
-            ms = 100 
+        if ms and type(ms) == "number" then
+            -- CORREÇÃO 2: Altera apenas os delays de andada comuns (entre 200ms e 500ms)
+            -- Força 250ms: É o tempo perfeito de resposta da andada sem fazer o C++ recalcular rota à toa
+            if ms >= 200 and ms <= 500 then
+                ms = 250 
+            end
         end
-        return CaveBot.oldDelay(ms, ...)
+        return originalDelay(ms, ...)
     end
 end
-
 
 -- TargetBot
 local function obterTempoReal()
     return math.floor(os.clock() * 1000)
 end
-macro(100, function()
-    now = obterTempoReal()
-end)
--- 1. SEQUESTRO RESTRITO DO ADAPTADOR DE MACROS NATIVAS
+
+-- CORREÇÃO 1: Removeu a macro global que atropelava a variável 'now' do target.lua
+-- Se o bot precisar atualizar o tempo, ele fará de forma isolada localmente.
+
+-- 1. SEQUESTRO RESTRITO DO ADAPTADOR DE MACROS NATIVAS (Suporte a nomes como String)
 if type(macro) == "function" then
     local oldMacro = macro
-    macro = function(delayTime, name, ...)
-        -- Se o target.lua tentar registrar o loop de 100ms, nós forçamos o atraso inicial
-        if delayTime == 100 and type(name) == "function" then
-            local targetFunc = name
+    macro = function(delayTime, name, callback, ...)
+        local targetFunc = nil
+        local macroName = "Target Control"
+
+        -- CORREÇÃO 2: Identifica se a macro veio no formato macro(100, function) ou macro(100, "nome", function)
+        if delayTime == 100 then
+            if type(name) == "function" then
+                targetFunc = name
+            elseif type(callback) == "function" then
+                targetFunc = callback
+                if type(name) == "string" then macroName = name end
+            end
+        end
+
+        -- Se interceptou o loop de 100ms do target.lua, aplica a vacina de freio de CPU
+        if targetFunc then
             local ultimoTickExecutado = 0
             local ultimoAndarX = 0
 
-            -- Criamos a macro controlada para rodar em 50ms conferindo o nosso freio rígido
-            local minhaMacroTarget = oldMacro(50, function()
+            -- Forçamos a macro nativa a rodar com um delay maior de 200ms para poupar o motor do bot
+            local minhaMacroTarget = oldMacro(200, macroName, function()
                 local player = g_game.getLocalPlayer()
                 if not player then return end
                 
                 local playerPos = player:getPosition()
                 if not playerPos then return end
 
-                -- DETECÇÃO E LIMPEZA DE BUFFER DE ESCADA
+                -- DETECÇÃO E LIMPEZA DE BUFFER DE ESCADA/TELEPORT
                 if ultimoAndarX ~= playerPos.z then
                     ultimoAndarX = playerPos.z
                     ultimoTickExecutado = obterTempoReal() + 1500
@@ -3964,25 +3971,23 @@ if type(macro) == "function" then
 
                 local agora = obterTempoReal()
                 
-                -- BLOQUEIO INTRANSIPONÍVEL: Força o target original a processar apenas a cada 400ms cravados.
-                -- Isso desliga o processamento frenético da linha 50 e limpa o console instantaneamente.
-                if agora - ultimoTickExecutado < 400 then
+                -- BLOQUEIO RIGIDO: Força a função pesada da linha 50 a processar apenas a cada 450ms cravados.
+                -- Isso reduz drasticamente as checagens por segundo e extingue o Slow Macro.
+                if agora - ultimoTickExecutado < 450 then
                     return
                 end
                 
                 ultimoTickExecutado = agora
                 return targetFunc()
-            end)
+            end, callback, ...)
 
-            -- TRAVA EXTRA: Se o bot possuir um sistema de controle de delay por tabela, 
-            -- nós forçamos o valor para 400ms direto no motor gráfico do bot
             if minhaMacroTarget and type(minhaMacroTarget) == "table" then
-                minhaMacroTarget.delay = 400
+                minhaMacroTarget.delay = 450
             end
 
             return minhaMacroTarget
         end
-        return oldMacro(delayTime, name, ...)
+        return oldMacro(delayTime, name, callback, ...)
     end
 end
 
@@ -4001,10 +4006,10 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
 
         local listaFiltrada = {}
         local totalAdicionados = 0
-        local limiteMaximoMonstros = 2 -- Reduzido para calcular apenas os 2 monstros mais próximos em combate
+        local limiteMaximoMonstros = 2 -- Calcula apenas as duas criaturas mais coladas no seu char
 
         for i = 1, #listaOriginal do
-            local creature = listaOriginal[i]
+            local creature = listLine and listaOriginal[i] or listaOriginal[i]
             if creature and creature:isMonster() and creature:getHealthPercent() > 0 then
                 local cPos = creature:getPosition()
                 
@@ -4012,6 +4017,7 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
                     local distX = math.abs(playerPos.x - cPos.x)
                     local distY = math.abs(playerPos.y - cPos.y)
                     
+                    -- Limita o radar de alvos para 4 quadrados (Foca estritamente na sua Box de combate)
                     if distX <= 4 and distY <= 4 then
                         totalAdicionados = totalAdicionados + 1
                         listaFiltrada[totalAdicionados] = creature
