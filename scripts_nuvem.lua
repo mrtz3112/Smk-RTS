@@ -43,45 +43,43 @@ end
 local function sanitizarTabelaParaJson(t)
     if type(t) ~= "table" then return t end
     
+    local keysToRemove = {}
+    local keysToConvert = {}
     local temChaveTexto = false
     local temChaveNumerica = false
     
-    -- Primeiro passo: Identifica os tipos de chaves presentes nesta tabela
-    for k, _ in pairs(t) do
-        if k ~= "" then
+    -- Primeiro passo: Identifica problemas sem alterar a tabela durante o loop pairs
+    for k, v in pairs(t) do
+        if k == "" or k == nil then
+            table.insert(keysToRemove, k)
+        else
             if type(k) == "string" then temChaveTexto = true end
             if type(k) == "number" then temChaveNumerica = true end
-        end
-    end
-
-    -- Cria uma tabela temporária limpa para não quebrar o ponteiro do loop pairs
-    local tabelaLimpa = {}
-    local houveMudanca = false
-
-    for k, v in pairs(t) do
-        if k ~= "" then
-            local novaChave = k
-            -- Se a tabela for mista, força todas as chaves numéricas a virarem strings
-            if temChaveTexto and temChaveNumerica and type(k) == "number" then
-                novaChave = tostring(k)
-                houveMudanca = true
-            end
-
-            -- Processa recursivamente se o valor interno for outra tabela
+            
+            -- Se o valor for outra tabela, processa recursivamente primeiro
             if type(v) == "table" then
-                tabelaLimpa[novaChave] = sanitizarTabelaParaJson(v)
-            else
-                tabelaLimpa[novaChave] = v
+                sanitizarTabelaParaJson(v)
             end
-        else
-            houveMudanca = true -- Identificou e removeu uma chave vazia ""
         end
     end
 
-    -- Se houve modificação estrutural, limpa a tabela original e repopula com a versão corrigida
-    if houveMudanca then
-        for k, _ in pairs(t) do t[k] = nil end
-        for k, v in pairs(tabelaLimpa) do t[k] = v end
+    -- Remove chaves vazias com segurança sem quebrar referências
+    for _, k in ipairs(keysToRemove) do
+        t[k] = nil
+    end
+
+    -- Se a tabela for mista, mapeia as chaves numéricas que precisam virar strings
+    if temChaveTexto and temChaveNumerica then
+        for k, _ in pairs(t) do
+            if type(k) == "number" then
+                keysToConvert[k] = tostring(k)
+            end
+        end
+        -- Aplica a conversão de chaves mistas com segurança
+        for oldKey, newKey in pairs(keysToConvert) do
+            t[newKey] = t[oldKey]
+            t[oldKey] = nil
+        end
     end
 
     return t
@@ -89,7 +87,6 @@ end
 
 -- Intercepta a rotina de salvamento global do bot
 if storage then
-    -- Executa uma limpeza preventiva imediata ao carregar o script
     pcall(function() sanitizarTabelaParaJson(storage) end)
 end
 
@@ -635,30 +632,91 @@ macro(1000, "DepositGold & StackItems", function()
   end
 end)
 
---Auto Dodge
+-- Auto Dodge Definitivo - Alta Performance (Anti-Slow Macro)
 local effectIdToAvoid = 237
-local flags = { ignoreNonPathable = true }
-function hasEffect(tile, effectId)
+local maxSearchRange = 13 -- Mantém o radar completo de tela cheia
+local moveFlags = { ignoreNonPathable = true }
+local dangerDuration = 2500 
+
+local dangerTilesCache = {}
+local dodgeBlockBots = false
+
+local meuDestinoAtual = nil
+local travaMovimentoAte = 0
+local manterBotsDesativadosAte = 0 
+
+local function hasEffect(tile, effectId)
     if not tile then return false end
-    for _, effect in ipairs(tile:getEffects()) do
-        if effect:getId() == effectId then
+    local effects = tile:getEffects()
+    if not effects then return false end
+    for i = 1, #effects do
+        if effects[i]:getId() == effectId then
             return true
         end
     end
     return false
 end
-function findNearestSafePosition(playerPos, maxRange)
-    maxRange = maxRange or 7
-    for r = 1, maxRange do
+
+-- Mapeia a zona de perigo usando indexação matemática pura (Ultra rápido)
+local function updateDangerZone(playerPos)
+    if not playerPos or not playerPos.x or not playerPos.y or not playerPos.z then return end
+
+    local now = os.time() * 1000
+    if type(g_clock) == "table" and type(g_clock.millis) == "function" then
+        now = g_clock.millis()
+    end
+
+    for dx = -maxSearchRange, maxSearchRange do
+        for dy = -maxSearchRange, maxSearchRange do
+            local checkPos = {x = playerPos.x + dx, y = playerPos.y + dy, z = playerPos.z}
+            local tile = g_map.getTile(checkPos)
+            
+            if tile and checkPos.x and checkPos.y then
+                if hasEffect(tile, effectIdToAvoid) then
+                    -- Cria sub-tabelas dinâmicas por coordenada numérica direta (Sem usar string.format)
+                    if not dangerTilesCache[checkPos.x] then dangerTilesCache[checkPos.x] = {} end
+                    dangerTilesCache[checkPos.x][checkPos.y] = now + dangerDuration
+                end
+            end
+        end
+    end
+end
+
+local function isTileDangerous(pos)
+    if not pos or not pos.x or not pos.y then return false end
+
+    local now = os.time() * 1000
+    if type(g_clock) == "table" and type(g_clock.millis) == "function" then
+        now = g_clock.millis()
+    end
+
+    local xCache = dangerTilesCache[pos.x]
+    local dangerUntil = xCache and xCache[pos.y]
+    
+    if dangerUntil and now < dangerUntil then
+        return true
+    else
+        if dangerUntil then dangerTilesCache[pos.x][pos.y] = nil end
+        return false
+    end
+end
+
+-- Varre o mapa em formato circular progressivo buscando brechas livres
+local function findMassiveSafePosition(playerPos)
+    if not playerPos or not playerPos.x or not playerPos.y or not playerPos.z then return nil end
+
+    for r = 1, maxSearchRange do
         for dx = -r, r do
             for dy = -r, r do
                 if math.abs(dx) == r or math.abs(dy) == r then
-                    local newPos = {x = playerPos.x + dx, y = playerPos.y + dy, z = playerPos.z}
-                    local tile = g_map.getTile(newPos)
-
-                    if tile and tile:isWalkable() and not hasEffect(tile, effectIdToAvoid) then
-                        if findPath(playerPos, newPos, 7, flags) then
-                            return newPos
+                    local checkPos = {x = playerPos.x + dx, y = playerPos.y + dy, z = playerPos.z}
+                    
+                    if not isTileDangerous(checkPos) then
+                        local tile = g_map.getTile(checkPos)
+                        if tile and tile:isWalkable() then
+                            if findPath(playerPos, checkPos, maxSearchRange, moveFlags) then
+                                return checkPos
+                            end
                         end
                     end
                 end
@@ -667,21 +725,65 @@ function findNearestSafePosition(playerPos, maxRange)
     end
     return nil
 end
-macro(40, "Dodge Red SQM Spells", function()
-    if player:isWalking() then return end
 
+-- Execução inteligente da macro para poupar CPU do OTClient
+macro(10, "Dodge Red SQM Spells", function()
+    if not g_game.isOnline() then return end
+    
     local playerPos = player:getPosition()
+    if not playerPos then return end
+    
     local currentTile = g_map.getTile(playerPos)
+    local magiaEmbaixoDeMim = hasEffect(currentTile, effectIdToAvoid)
+    local agora = os.time() * 1000
+    if type(g_clock) == "table" and type(g_clock.millis) == "function" then agora = g_clock.millis() end
 
-    if not currentTile or not hasEffect(currentTile, effectIdToAvoid) then
+    -- OTIMIZAÇÃO CRÍTICA: Só atualiza a zona de perigo se você estiver sob perigo ou aguardando o fim do ciclo
+    if magiaEmbaixoDeMim or isTileDangerous(playerPos) or agora < manterBotsDesativadosAte then
+        updateDangerZone(playerPos)
+    else
+        -- Se está totalmente seguro e fora do delay, desliga o bloqueio e encerra sem processar o loop
+        if dodgeBlockBots then
+            if CaveBot and type(CaveBot.setEnabled) == "function" then CaveBot.setEnabled(true) end
+            if TargetBot and type(TargetBot.setEnabled) == "function" then TargetBot.setEnabled(true) end
+            dodgeBlockBots = false
+        end
+        meuDestinoAtual = nil
+        travaMovimentoAte = 0
         return
     end
 
-    local safePos = findNearestSafePosition(playerPos)
+    manterBotsDesativadosAte = agora + 450 
+
+    -- Ignora a trava de tempo se uma nova magia nascer sob os pés
+    if not magiaEmbaixoDeMim then
+        if meuDestinoAtual and agora < travaMovimentoAte then
+            if not isTileDangerous(meuDestinoAtual) then
+                return 
+            end
+        end
+    end
+
+    -- Desativa os bots padrões de ataque e andada
+    if not dodgeBlockBots then
+        if CaveBot and type(CaveBot.isEnabled) == "function" and CaveBot.isEnabled() then 
+            if type(CaveBot.setEnabled) == "function" then CaveBot.setEnabled(false) end 
+        end
+        if TargetBot and type(TargetBot.isEnabled) == "function" and TargetBot.isEnabled() then 
+            if type(TargetBot.setEnabled) == "function" then TargetBot.setEnabled(false) end 
+        end
+        dodgeBlockBots = true
+    end
+
+    -- Encontra o corredor azul mais próximo e executa o passo
+    local safePos = findMassiveSafePosition(playerPos)
     if safePos then
-        autoWalk(safePos, 7, flags)
+        meuDestinoAtual = safePos
+        travaMovimentoAte = agora + (magiaEmbaixoDeMim and 100 or 300)
+        autoWalk(safePos, maxSearchRange, moveFlags)
     end
 end)
+
 --AutoEscadas
 Stairs = {}
 
