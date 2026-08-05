@@ -3759,7 +3759,7 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
--- CREATURE_PRIORITY
+-- CreaturePriority
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 local lastCheck = 0
 
@@ -3894,7 +3894,7 @@ if TargetBot and TargetBot.Creature then
     end
 end
 
--- CONTROLADOR DE DELAY ENTRE WAYPOINTS (FAST WAYPOINT)
+-- CaveBot
 -- 1. Interceptador de loop para diminuir pausas longas entre os pontos
 if CaveBot and type(CaveBot.delay) == "function" then
     if not CaveBot.oldDelay then
