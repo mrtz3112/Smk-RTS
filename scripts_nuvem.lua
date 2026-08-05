@@ -16,8 +16,7 @@ local function processarConteudo(content)
     chavesPermitidasLoader["_macros"] = true
     chavesPermitidasLoader["_configs"] = true
     chavesPermitidasLoader["painelSalvo"] = true
-    chavesPermitidasLoader["petItemCooldowns"] = true
-    chavesPermitidasLoader[""] = nil
+    chavesPermitidasLoader[""] = nil -- Removida petItemCooldowns da lista de permitidas
     carregamentoConcluido = true
 end
 
@@ -39,7 +38,7 @@ elseif type(g_http) == "table" and type(g_http.get) == "function" then
     end)
 end
 
--- INTERCEPTADOR E CORRETOR AUTOMÁTICO DE TABELAS INVÁLIDAS (Versão Blindada)
+-- INTERCEPTADOR E CORRETOR AUTOMÁTICO DE TABELAS INVÁLIDAS (Versão Blindada com Faxina Real)
 local function sanitizarTabelaParaJson(t)
     if type(t) ~= "table" then return t end
     
@@ -50,9 +49,8 @@ local function sanitizarTabelaParaJson(t)
     
     -- Primeiro passo: Identifica problemas sem alterar a tabela durante o loop pairs
     for k, v in pairs(t) do
-        -- No Lua, chaves válidas para JSON só podem ser strings ou números. 
-        -- Chaves vazias, booleanas ou nulas são terminantemente proibidas no formato JSON do OTClient.
-        if k == "" or k == nil or type(k) == "boolean" or type(k) == "table" then
+        -- FAXINA ATIVA: Força a remoção imediata da antiga tabela do pet se ela existir no arquivo do boneco
+        if k == "petItemCooldowns" or k == "" or k == nil or type(k) == "boolean" or type(k) == "table" then
             -- Guarda a chave problemática usando ela mesma como índice para evitar inserir 'nil' em arrays
             keysToRemove[k] = true
         else
@@ -61,18 +59,22 @@ local function sanitizarTabelaParaJson(t)
             
             -- Se o valor for outra tabela, processa recursivamente primeiro
             if type(v) == "table" then
-                sanitizarTabelaParaJson(v)
+                -- Se a sub-tabela estiver totalmente vazia e abandonada no arquivo, remove ela também
+                if next(v) == nil then
+                    keysToRemove[k] = true
+                else
+                    sanitizarTabelaParaJson(v)
+                end
             end
         end
     end
 
-    -- CORREÇÃO: Remove chaves inválidas de forma isolada usando um loop pairs seguro
+    -- CORREÇÃO: Remove chaves inválidas e chaves deletadas de forma definitiva do arquivo .json
     for k, _ in pairs(keysToRemove) do
         t[k] = nil
     end
 
     -- Se a tabela for mista (possui texto e número no mesmo nível), força TUDO a virar String.
-    -- O json.lua do OTClientV8 crasha se encontrar {"1", 2, teste = true} na mesma tabela.
     if temChaveTexto and temChaveNumerica then
         for k, _ in pairs(t) do
             if type(k) == "number" then
@@ -127,10 +129,6 @@ if type(g_settings) == "table" and type(g_settings.setNode) == "function" then
     end
 end
 
--- ============================================================================
--- GATILHO DE EMERGÊNCIA: Executa a higienização forçada no milissegundo da morte
--- antes que o OTClient deslogue ou feche o arquivo temporário do boneco
--- ============================================================================
 if g_game then
     local localPlayer = g_game.getLocalPlayer()
     if localPlayer then
@@ -662,12 +660,11 @@ macro(1000, "DepositGold & StackItems", function()
   end
 end)
 
--- Auto Dodge Definitivo - Alta Performance (Anti-Slow Macro)
--- Auto Dodge Definitivo - Alta Performance e Compatível com JSON (Anti-Crash na Morte)
+-- Auto Dodge
 local effectIdToAvoid = 237
-local maxSearchRange = 13 
+local maxSearchRange = 13 -- Mantém o radar de tela cheia para áreas massivas
 local moveFlags = { ignoreNonPathable = true }
-local dangerDuration = 1600 
+local dangerDuration = 2500 
 
 local dangerTilesCache = {}
 local dodgeBlockBots = false
@@ -688,7 +685,7 @@ local function hasEffect(tile, effectId)
     return false
 end
 
--- CORREÇÃO CRÍTICA: Usa concatenação simples de string para a chave. É rápido e 100% aceito pelo json.lua
+-- Mapeia a zona de perigo usando strings híbridas para evitar o erro do JSON
 local function updateDangerZone(playerPos)
     if not playerPos or not playerPos.x or not playerPos.y or not playerPos.z then return end
 
@@ -704,7 +701,7 @@ local function updateDangerZone(playerPos)
             
             if tile and checkPos.x and checkPos.y then
                 if hasEffect(tile, effectIdToAvoid) then
-                    -- A chave vira uma string pura (ex: "k123_456"), o que impede o erro de mixed key types no JSON
+                    -- Chave em string segura ("k123_456") aceita nativamente pelo json.lua
                     local key = "k" .. checkPos.x .. "_" .. checkPos.y
                     dangerTilesCache[key] = now + dangerDuration
                 end
@@ -732,6 +729,7 @@ local function isTileDangerous(pos)
     end
 end
 
+-- Varre o mapa de forma concêntrica progressiva buscando brechas azuis livres
 local function findMassiveSafePosition(playerPos)
     if not playerPos or not playerPos.x or not playerPos.y or not playerPos.z then return nil end
 
@@ -767,6 +765,7 @@ macro(10, "Dodge Red SQM Spells", function()
     local agora = os.time() * 1000
     if type(g_clock) == "table" and type(g_clock.millis) == "function" then agora = g_clock.millis() end
 
+    -- Otimização: Só processa a varredura se houver real ameaça ou delay de ciclo
     if magiaEmbaixoDeMim or isTileDangerous(playerPos) or agora < manterBotsDesativadosAte then
         updateDangerZone(playerPos)
     else
@@ -782,6 +781,7 @@ macro(10, "Dodge Red SQM Spells", function()
 
     manterBotsDesativadosAte = agora + 450 
 
+    -- Se uma nova magia nascer sob os pés, ignora a trava de tempo para correr na hora
     if not magiaEmbaixoDeMim then
         if meuDestinoAtual and agora < travaMovimentoAte then
             if not isTileDangerous(meuDestinoAtual) then
@@ -790,6 +790,7 @@ macro(10, "Dodge Red SQM Spells", function()
         end
     end
 
+    -- Desativa temporariamente os bots para priorizar a andada do desvio
     if not dodgeBlockBots then
         if CaveBot and type(CaveBot.isEnabled) == "function" and CaveBot.isEnabled() then 
             if type(CaveBot.setEnabled) == "function" then CaveBot.setEnabled(false) end 
@@ -803,25 +804,11 @@ macro(10, "Dodge Red SQM Spells", function()
     local safePos = findMassiveSafePosition(playerPos)
     if safePos then
         meuDestinoAtual = safePos
+        -- Janela adaptativa: 100ms para magias coladas nos pés, 300ms para deslocamentos normais
         travaMovimentoAte = agora + (magiaEmbaixoDeMim and 100 or 300)
         autoWalk(safePos, maxSearchRange, moveFlags)
     end
 end)
-
--- ============================================================================
--- VACINA ADICIONAL: Sempre que o boneco morrer, limpa a tabela temporária da memória
--- antes que o OTClient tente salvar o arquivo do bot corrompido
--- ============================================================================
-local localPlayer = g_game.getLocalPlayer()
-if localPlayer then
-    localPlayer.onHealthChange = function(creature, health, maxHealth)
-        if creature:isLocalPlayer() and health <= 0 then
-            dangerTilesCache = {}
-            meuDestinoAtual = nil
-            print("[Dodge] Personagem morreu. Cache limpo preventivamente para evitar erro de JSON.")
-        end
-    end
-end
 
 --AutoEscadas
 Stairs = {}
@@ -2497,7 +2484,7 @@ macro(100, function()
     end
 	end
 end)
---Pet on Hp
+-- Pet on Hp (Versão Simplificada e Sem Cooldown no Storage)
 local panelName = "selfpetconfig"
 local ui = setupUI([[
 Panel
@@ -2540,35 +2527,41 @@ Panel
     
 ]], parent)
 ui:setId(panelName)
+
 local COOLDOWN_PADRAO = 120000 
-if not storage.petItemCooldowns then storage.petItemCooldowns = {} end
+local ultimoUsoDoPet = 0 -- VARIÁVEL LOCAL: Controla o tempo em memória RAM sem tocar no .json
+
 if not storage[panelName] then
   storage[panelName] = {
-      id = 10480, 
+      id = 11688, 
       enabled = false,
       setting = true,
-      hp = 70
+      hp = 30
   }
 else
   if not storage[panelName].id or storage[panelName].id == 0 then
-      storage[panelName].id = 10480
+      storage[panelName].id = 11688
   end
 end
+
 ui.title:setOn(storage[panelName].enabled)
 ui.title.onClick = function(widget)
   storage[panelName].enabled = not storage[panelName].enabled
   widget:setOn(storage[panelName].enabled)
 end
+
 local updateHpText = function()
     if storage[panelName].setting then
     ui.help:setText("Health: < " .. storage[panelName].hp .. "%")
 	end
 end
 updateHpText()
+
 ui.HP.onValueChange = function(scroll, value)
   storage[panelName].hp = value
   updateHpText()
 end
+
 ui.item:setItemId(storage[panelName].id)
 ui.item.onItemChange = function(widget)
   local novaId = widget:getItemId()
@@ -2577,6 +2570,7 @@ ui.item.onItemChange = function(widget)
   end
 end
 ui.HP:setValue(storage[panelName].hp)
+
 petMacro = macro(100, function()
     if ui and ui.title then
         ui.title:setOn(storage[panelName].enabled)
@@ -2587,10 +2581,11 @@ petMacro = macro(100, function()
         if currentId and currentId > 0 then
             if hppercent() <= storage[panelName].hp then
                 local currentTime = now
-                local lastUsedTime = storage.petItemCooldowns[currentId] or 0
-                if currentTime - lastUsedTime >= COOLDOWN_PADRAO then
+                
+                -- CHECAGEM LIMPA: Usa a variável local interna que zera se o client reiniciar
+                if currentTime - ultimoUsoDoPet >= COOLDOWN_PADRAO then
                     use(currentId)
-                    storage.petItemCooldowns[currentId] = currentTime 
+                    ultimoUsoDoPet = currentTime 
                 end
             end
         end
@@ -3766,179 +3761,6 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
--- ANTI-KS SEGURO COM TRAVA DE LURE INTELIGENTE (FILTRO DE PROXIMIDADE)
-local function isMonsterOfOtherPlayer(creature, myId, localPlayer)
-    if not creature or not creature:isMonster() then return false end
-    
-    -- Captura com segurança o ID do alvo do monstro
-    local mTargetId = 0
-    if type(creature.getTargetId) == "function" then
-        mTargetId = creature:getTargetId() or 0
-    elseif creature.targetId then
-        mTargetId = creature.targetId
-    elseif type(creature.getTarget) == "function" then
-        local tgt = creature:getTarget()
-        if tgt then mTargetId = tgt:getId() end
-    end
-
-    -- CASO 1: O monstro está focando outro jogador explicitamente
-    local hasOtherTarget = (mTargetId > 0 and mTargetId ~= myId)
-    
-    -- CASO 2: O monstro está perdendo vida (AoE de terceiros) e o alvo NÃO é você
-    local isDamagedByOthers = (mTargetId ~= myId and creature:getHealthPercent() < 100)
-
-    -- CASO 3: SENSOR DE PROXIMIDADE (Bicho com 100% de vida colado em outro player)
-    local coladoEmOutroPlayer = false
-    if not hasOtherTarget and not isDamagedByOthers and localPlayer then
-        local cPos = creature:getPosition()
-        local myPos = localPlayer:getPosition()
-        
-        if cPos and myPos then
-            local specs = g_map.getSpectators(cPos, false)
-            for i = 1, #specs do
-                local spec = specs[i]
-                if spec:isPlayer() and spec:getId() ~= myId and not spec:isPartyMember() then
-                    local pPos = spec:getPosition()
-                    if pPos and pPos.z == cPos.z then
-                        local distX = math.abs(pPos.x - cPos.x)
-                        local distY = math.abs(pPos.y - cPos.y)
-                        
-                        if distX <= 1 and distY <= 1 then
-                            local meuDistX = math.abs(myPos.x - cPos.x)
-                            local meuDistY = math.abs(myPos.y - cPos.y)
-                            if meuDistX > 1 or meuDistY > 1 then
-                                coladoEmOutroPlayer = true
-                                break
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    if hasOtherTarget or isDamagedByOthers or coladoEmOutroPlayer then
-        local cName = creature:getName() or ""
-        local cNameLower = cName:lower()
-        if cNameLower:find("trainer") or cNameLower:find("guild boss") then
-            return false
-        end
-        return true
-    end
-    return false
-end
-
--- ============================================================================
--- INTERCEPTADOR DE REDE SEGURO: Bloqueia o pacote de ataque enviado pelo C++
--- ============================================================================
-if g_game and type(g_game.attack) == "function" then
-    -- CORREÇÃO DE RELOAD: Captura o ponteiro original de forma real se ele já não for o nosso gancho
-    if not g_game._antiKsOldAttackOriginal then
-        g_game._antiKsOldAttackOriginal = g_game.attack
-    end
-    
-    local oldGameAttack = g_game._antiKsOldAttackOriginal
-
-    g_game.attack = function(creature, ...)
-        if creature and creature:isMonster() then
-            local localPlayer = g_game.getLocalPlayer()
-            if localPlayer and not localPlayer:isPartyMember() then
-                local myId = localPlayer:getId()
-                
-                -- Detecta se o clique veio de você manualmente pelo mouse
-                local mouseCreature = g_game.getAttackingCreature()
-                local isTargetManual = (mouseCreature and mouseCreature:getId() == creature:getId()) or (g_ui and g_ui.isKeyPressed and g_ui.isKeyPressed("LButton"))
-
-                -- Se for o bot tentando atacar um bicho alheio sem o seu clique do mouse, joga o pacote fora
-                if isMonsterOfOtherPlayer(creature, myId, localPlayer) and not isTargetManual then
-                    -- Cancela o ataque no motor visual para o bot não travar tentando focar
-                    if TargetBot and type(TargetBot.isTargeting) == "function" and TargetBot.isTargeting() then
-                        g_game.cancelAttack()
-                    end
-                    return false -- CORTE CRÍTICO: Bloqueia o envio do pacote ao servidor de Tibia
-                end
-            end
-        end
-        return oldGameAttack(creature, ...)
-    end
-end
--- ============================================================================
-
--- INTERCEPTADOR 1: SOME COM OS BICHOS ALHEIOS DA LISTA DO TARGET
-if TargetBot and type(TargetBot.getCreatures) == "function" then
-    local oldGetCreatures = TargetBot.getCreatures
-    TargetBot.getCreatures = function(...)
-        local list = oldGetCreatures(...)
-        local localPlayer = g_game.getLocalPlayer()
-        
-        if not localPlayer or localPlayer:isPartyMember() then 
-            return list 
-        end
-        
-        local myId = localPlayer:getId()
-        local playerTarget = g_game.getAttackingCreature()
-        local filteredList = {}
-        
-        for i = 1, #list do
-            local creature = list[i]
-            local isTargetAlheio = isMonsterOfOtherPlayer(creature, myId, localPlayer)
-            local isMeuTargetManual = (playerTarget and playerTarget:getId() == creature:getId())
-            
-            if not isTargetAlheio or isMeuTargetManual then
-                table.insert(filteredList, creature)
-            end
-        end
-        
-        return filteredList
-    end
-end
-
--- INTERCEPTADOR 2: CONTROLADOR DE MOVIMENTO (SOMA APENAS OS SEUS MONSTROS)
-if CaveBot and type(CaveBot.doWalking) == "function" then
-    local oldDoWalking = CaveBot.doWalking
-    CaveBot.doWalking = function(...)
-        local localPlayer = g_game.getLocalPlayer()
-        if localPlayer and not localPlayer:isPartyMember() then
-            local myId = localPlayer:getId()
-            local playerPos = localPlayer:getPosition()
-            
-            if playerPos then
-                local totalMonstersBox = 0
-                local spectators = g_map.getSpectators(playerPos, false)
-                
-                for i = 1, #spectators do
-                    local spec = spectators[i]
-                    if spec:isMonster() and spec:getHealthPercent() > 0 then
-                        local mPos = spec:getPosition()
-                        if mPos and mPos.z == playerPos.z then
-                            -- CORREÇÃO DA VARIÁVEL AQUI (distToMeY corrigido)
-                            local distToMeX = math.abs(playerPos.x - mPos.x)
-                            local distToMeY = math.abs(playerPos.y - mPos.y)
-                            
-                            if distToMeX <= 4 and distToMeY <= 4 then
-                                if not isMonsterOfOtherPlayer(spec, myId, localPlayer) then
-                                    totalMonstersBox = totalMonstersBox + 1
-                                end
-                            end
-                        end
-                    end
-                end
-                
-                if totalMonstersBox >= 5 then
-                    if type(CaveBot.delay) == "function" then
-                        CaveBot.delay(500)
-                    end
-                    return false 
-                end
-            end
-        end
-        return oldDoWalking(...)
-    end
-end
-
-print("[Loader] Anti-KS por gancho de rede g_game.attack habilitado com seguranca de Reload.")
-
-
 -- CREATURE_PRIORITY
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 local lastCheck = 0
@@ -4091,15 +3913,14 @@ if CaveBot and type(CaveBot.delay) == "function" then
     end
 end
 
+
 -- TargetBot
 local function obterTempoReal()
     return math.floor(os.clock() * 1000)
 end
-
 macro(100, function()
     now = obterTempoReal()
 end)
-
 -- 1. SEQUESTRO RESTRITO DO ADAPTADOR DE MACROS NATIVAS
 if type(macro) == "function" then
     local oldMacro = macro
