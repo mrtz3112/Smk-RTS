@@ -2955,8 +2955,6 @@ end
 -- Registra o atalho diretamente no teclado do jogo de forma nativa (0% de CPU)
 g_keyboard.bindKeyDown("Ctrl+2", alternarStatusTargetBot)
 
-print("[Loader] Hotkeys de Cave/Target configuradas de forma nativa e sem lag.")
-
 --BugMap AWSD/Setas/NumPad
 local function checkPos(x, y)
  xyz = g_game.getLocalPlayer():getPosition()
