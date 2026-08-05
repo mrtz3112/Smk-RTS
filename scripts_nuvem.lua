@@ -2925,16 +2925,19 @@ else
 end
 end)
 
--- BugMap AWSD/Setas/NumPad
+-- BugMap AWSD/Setas/NumPad Otimizado (Sem onMacroToggle e Sem Slow)
 local consoleModule = modules.game_console
+
 local function checkPos(x, y)
     local player = g_game.getLocalPlayer()
     if not player or (consoleModule and type(consoleModule.isChatEnabled) == "function" and consoleModule:isChatEnabled()) then 
         return false 
     end
+
     -- CORREÇÃO 1: Variáveis locais blindadas para não vazar memória global
     local xyz = player:getPosition()
     if not xyz then return false end
+
     xyz.x = xyz.x + x
     xyz.y = xyz.y + y
 
@@ -2947,14 +2950,17 @@ local function checkPos(x, y)
     end
     return false
 end
+
 -- CORREÇÃO 2: Loop inteligente de baixa frequência (100ms). Só lê se a macro estiver ativa!
-dash = macro(100, 'Bug Map', 'CTRL+3', function()
+dash = macro(1, 'Bug Map', 'CTRL+3', function()
     -- Se o chat estiver aberto, não faz nada para poupar processamento
     if consoleModule and type(consoleModule.isChatEnabled) == "function" and consoleModule:isChatEnabled() then
         return
     end
+
     local gk = modules.corelib.g_keyboard
     if not gk or type(gk.isKeyPressed) ~= "function" then return end
+
     -- Varredura condicional: só gasta processamento no milissegundo em que você segurar a tecla
     if gk.isKeyPressed('w') then checkPos(0, -5)
     elseif gk.isKeyPressed('e') then checkPos(3, -3)
@@ -2971,6 +2977,8 @@ end)
 if dash and type(dash.setOff) == "function" then 
     dash:setOff() 
 end
+
+
 --Auto MWall na Frente do Alvo
 local MW_ID = 10571
 local ultimoUso = 0
