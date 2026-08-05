@@ -83,17 +83,16 @@ local function sanitizarTabelaParaJson(t)
     return t
 end
 
--- Executa uma higienização rápida preventiva apenas no momento em que você liga o script
+-- Executa uma única higienização preventiva segura quando você abre o bot/inicializa o script
 if storage then
     pcall(function() sanitizarTabelaParaJson(storage) end)
 end
 
 function terminate()
-    -- No exato instante em que você fecha o client ou desloga, limpa tudo antes do save final do JSON
     if storage then 
         pcall(function() sanitizarTabelaParaJson(storage) end) 
     end
-    print("[Storage Cleaner] Faxina de fechamento concluida com sucesso.")
+    print("[Storage Cleaner] Faxina preventiva concluida com sucesso.")
 end
 
 setDefaultTab("Main")
