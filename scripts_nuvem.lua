@@ -1157,10 +1157,10 @@ function getDash(dir)
         return true
     end
 end
--- Click Rift (Correção Nativa de Métodos e Alta Performance)
+-- Click Rift Otimizado (Grade Visivel Curta - Lag Zero)
 local ultimoScanRift = 0
 
-macro(500, "Click Rift", function() -- Reduzido para 500ms para clicar mais rápido assim que spawnar
+macro(500, "Click Rift", function()
   local player = g_game.getLocalPlayer()
   if not player then return end
 
@@ -1168,51 +1168,36 @@ macro(500, "Click Rift", function() -- Reduzido para 500ms para clicar mais ráp
   if not myPos then return end
 
   local targetId = 11843
-  
-  -- Sincroniza o timestamp usando o relógio interno nativo do OTClientV8
-  local tempoAgora = os.time() * 1000
-  if type(g_clock) == "table" and type(g_clock.millis) == "function" then
-    tempoAgora = g_clock.millis()
-  end
+  local agora = os.time() * 1000
+  if type(g_clock) == "table" and type(g_clock.millis) == "function" then agora = g_clock.millis() end
 
-  -- Trava de recarga para não floodar cliques e causar lag de rede
-  if tempoAgora - ultimoScanRift < 1500 then
-    return
-  end
+  -- Trava de segurança para não floodar cliques repetidos no mesmo segundo
+  if agora - ultimoScanRift < 1500 then return end
 
-  local raioVisivel = 7 -- Raio visual da tela de jogo
+  local raioVisivel = 13 -- Escaneia estritamente os quadrados visíveis ao redor do seu char
 
-  -- Varredura em grade matemática de alta velocidade
   for x = -raioVisivel, raioVisivel do
     for y = -raioVisivel, raioVisivel do
       local tilePos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
       local tile = g_map.getTile(tilePos)
       
       if tile then
-        -- CORREÇÃO 1: O método correto no OTClientV8 é getThings e não getItems
         local things = tile:getThings()
         if things then
             for i = 1, #things do
               local thing = things[i]
-              -- Verifica se o objeto existe e possui a função de ID ativa
               if thing and thing.getId and type(thing.getId) == "function" then
                 if thing:getId() == targetId then
                   
-                  -- CORREÇÃO 2: Usa o objeto do topo interativo do tile de forma nativa e segura
+                  -- Clica no portal interativo do topo de forma nativa e segura
                   local topThing = tile:getTopUseThing()
-                  if topThing then
-                      g_game.use(topThing)
-                  else
-                      g_game.use(thing) -- Fallback caso o topThing falhe
-                  end
+                  if topThing then g_game.use(topThing) else g_game.use(thing) end
                   
-                  -- Redireciona o Cavebot para a label correta do Rift
                   if CaveBot and type(CaveBot.gotoLabel) == "function" then
                     CaveBot.gotoLabel("Rift")
                   end
                   
-                  -- CORREÇÃO 3: Aplica o delay real empurrando o scan 3 segundos para frente
-                  ultimoScanRift = tempoAgora + 3000
+                  ultimoScanRift = agora + 3000 -- Faz a macro esperar 3s após o clique com sucesso
                   return
                 end
               end
