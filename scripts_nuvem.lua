@@ -1157,17 +1157,40 @@ function getDash(dir)
         return true
     end
 end
--- Click Rift Otimizado
-macro(500, "Click Rift",  function()
-  for i, tile in ipairs(g_map.getTiles(posz())) do
-    for u,item in ipairs(tile:getItems()) do
-      if (item and item:getId() == 11843) then
-        g_game.use(item)
-        CaveBot.gotoLabel("Rift")
-        return
-      end
+-- Enter Rift
+-- Configurações da Macro
+local PORTAL_ID = 11843 -- ID do seu portal
+local RANGE_X = 7       -- 7 SQMs para os lados
+local RANGE_Y = 7       -- 7 SQMs para cima/baixo
+local DELAY_MACRO = 500 -- Executa a cada meio segundo
+
+macro(DELAY_MACRO, "Enter Rift", function()
+    local player = g_game.getLocalPlayer()
+    if not player then return end
+
+    local playerPos = player:getPosition()
+
+    -- Varre a área de 7x7 ao redor do jogador
+    for x = -RANGE_X, RANGE_X do
+        for y = -RANGE_Y, RANGE_Y do
+            local searchPos = {x = playerPos.x + x, y = playerPos.y + y, z = playerPos.z}
+            local tile = g_map.getTile(searchPos)
+
+            if tile then
+                -- Obtém todos os itens presentes neste SQM
+                local items = tile:getItems()
+                if items then
+                    for _, item in pairs(items) do
+                        -- Compara o ID de cada item do SQM com o ID do portal
+                        if item:getId() == PORTAL_ID then
+                            g_game.use(item)
+                            return -- Encontrou o portal, clica e encerra o ciclo na hora
+                        end
+                    end
+                end
+            end
+        end
     end
-  end
 end)
 --Auto Enter Dungeon
 local window_name = "Dungeons"
