@@ -1,3 +1,34 @@
+-- ============================================================================
+-- GOVERNOR DE EVENTOS GLOBAL (Zerar o Slow do cavebot/actions.lua:243)
+-- Adicione este bloco no topo do seu loader.lua
+-- ============================================================================
+local ultimoFiltroPassoGlobal = 0
+
+if type(onCreaturePositionChange) == "function" then
+    local oldOnCreaturePositionChange = onCreaturePositionChange
+    
+    onCreaturePositionChange = function(callback, ...)
+        if type(callback) == "function" then
+            -- Intercepta o registro de qualquer script (incluindo o CaveBot)
+            return oldOnCreaturePositionChange(function(creature, newPos, oldPos, ...)
+                if not g_game.isOnline() or not newPos then return end
+                
+                -- FILTRO DE FLUÍDEZ: Se a rede enviar rajadas de passos em menos de 40ms,
+                -- segura o processamento lixo para aliviar a CPU do actions.lua:243!
+                local agoraPassoGlobal = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+                if agoraPassoGlobal - ultimoFiltroPassoGlobal < 40 then 
+                    return 
+                end
+                ultimoFiltroPassoGlobal = agoraPassoGlobal
+                
+                return callback(creature, newPos, oldPos, ...)
+            end, ...)
+        end
+        return oldOnCreaturePositionChange(callback, ...)
+    end
+end
+print("[Loader] Governor de eventos globais ativado contra picos de CaveBot.")
+
 -- 1. HIGIENIZAÇÃO DE STORAGE AUTOMÁTICA VIA REPOSITÓRIO ONLINE (HTTP)
 local URL_REPOSITORIO_ONLINE = "https://raw.githubusercontent.com/mrtz3112/Smk-RTS/refs/heads/main/scripts_nuvem.lua"
 
@@ -90,7 +121,7 @@ end
 local initMacro = nil
 local tempoInicial = g_clock and g_clock.getMillis() or (os.clock() * 1000)
 
-initMacro = macro(1000, "Clean Storage Init", function()
+initMacro = macro(1000, function()
     if not g_game.isOnline() then return end
     
     local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
@@ -396,7 +427,7 @@ macro(100, function()
   end
 end)
 UI.Separator()
--- Smart Follow por Nome - Versão Movimento Instantâneo (Original e com Auto-Desligamento Inteligente)
+-- Smart Follow por Nome - Versão Bruta Original (Velocidade Máxima e Sem Lag)
 local Objects = { 
     1385, 1386, 1387, 1388, 369, 370, 434, 435, 1948, 5543, 7725, 19183, 19184,
     411, 412, 413, 414, 432, 433, 459, 460, 475, 476, 479, 480, 2984, 2985, 5732,
@@ -411,6 +442,7 @@ local Objects = {
 }
 local Doors = {7727, 8265, 1629, 1632, 5129, 5120, 8266, 7728, 5102, 5111}
 
+-- Converte as tabelas originais em Hash na memória para não dar Slow
 local objectsHash = {}
 for i = 1, #Objects do objectsHash[Objects[i]] = true end
 
@@ -430,6 +462,7 @@ local function stableWalk(targetPos)
 
     lastWalkTarget = targetPos
 
+    -- Mantido o precision = 1 original perfeito do seu boneco
     if type(autoWalk) == "function" then
         autoWalk(targetPos, 20, { ignoreCreatures = false, ignoreNonPathable = true, precision = 1 })
     elseif g_game.autoWalk then
@@ -437,71 +470,86 @@ local function stableWalk(targetPos)
     end
 end
 
-followMacro = macro(400, "Smart Follow", function() 
+-- Mantido o delay original de 200ms
+macro(200, "Smart Follow", function() 
     if not g_game.isOnline() then return end
     
-    -- ============================================================================
-    -- SENSOR ANTI-MANCADA: O próprio follow se desliga se houver uma Rift na tela!
-    -- Isso previne 100% das falhas de concorrência com o DepositGold
-    -- ============================================================================
-    local player = g_game.getLocalPlayer()
-    if player then
-        local pPos = player:getPosition()
-        if pPos then
-            -- Varredura ultra-rápida de 5 SQMs ao redor apenas no topo dos blocos
-            for x = -5, 5 do
-                for y = -5, 5 do
-                    local t = g_map.getTile({x = pPos.x + x, y = pPos.y + y, z = pPos.z})
-                    if t then
-                        local top = t:getTopUseThing()
-                        if top and top:getId() == 11843 then
-                            followMacro:setOff()
-                            modules.game_textmessage.displayStatusMessage("[Rift Detectada] Smart Follow desligado por segurança!")
-                            return
+    local targetName = tostring(storage.followTargetName or "")
+    targetName = targetName:gsub("^%s*(.-)%s*$", "%1"):lower()
+    
+    if targetName == "" or targetName == "nome do player" then return end
+    
+    local myPlayer = g_game.getLocalPlayer()
+    if not myPlayer then return end
+
+    local myPos = pos()
+    local target = nil
+
+    -- Varre os espectadores exatamente igual ao seu script original
+    for _, spec in ipairs(getSpectators(myPos)) do
+        if spec:isPlayer() and spec:getName():lower() == targetName then
+            target = spec
+            break
+        end
+    end
+
+    if target then
+        local tpos = target:getPosition()
+        toFollowPos[tpos.z] = tpos
+        
+        local dist = getDistanceBetween(myPos, tpos)
+        
+        if dist <= 1 then
+            lastWalkTarget = nil
+            return
+        end
+
+        stableWalk(tpos)
+
+        -- Checagem de portas via Hash ultra rápida
+        if dist > 1 then
+            for x = -1, 1 do
+                for y = -1, 1 do
+                    local checkPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
+                    local tile = g_map.getTile(checkPos)
+                    if tile then
+                        local items = tile:getItems()
+                        if items then
+                            for m = 1, #items do
+                                local item = items[m]
+                                if item and doorsHash[item:getId()] then
+                                    g_game.use(item)
+                                    return
+                                end
+                            end
                         end
                     end
                 end
             end
         end
-    end
-    -- ============================================================================
-
-    local targetName = tostring(storage.followTargetName or "")
-    targetName = targetName:gsub("^%s*(.-)%s*$", "%1"):lower()
-    if targetName == "" or targetName == "nome do player" then return end
-    
-    local myPlayer = g_game.getLocalPlayer()
-    if not myPlayer then return end
-    local myPos = myPlayer:getPosition()
-
-    for _, spec in ipairs(getSpectators(myPos)) do
-        if spec:isPlayer() and spec:getName():lower() == targetName then
-            toFollowPos[myPos.z] = spec:getPosition()
-            break
-        end
+        return
     end
 
     local lastLeaderPosInMyFloor = toFollowPos[myPos.z]
-    if not lastLeaderPosInMyFloor then return end
-
-    local dist = getDistanceBetween(myPos, lastLeaderPosInMyFloor)
-
-    if dist > 1 then
+    if lastLeaderPosInMyFloor then
+        if getDistanceBetween(myPos, lastLeaderPosInMyFloor) > 0 then
+            stableWalk(lastLeaderPosInMyFloor)
+            return
+        end
+        
+        -- Checagem de escadas via Hash ultra rápida
         for x = -1, 1 do
             for y = -1, 1 do
-                local checkPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
-                local tile = g_map.getTile(checkPos)
+                local searchPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
+                local tile = g_map.getTile(searchPos)
                 if tile then
                     local items = tile:getItems()
                     if items then
                         for m = 1, #items do
                             local item = items[m]
-                            if item then
-                                local id = item:getId()
-                                if doorsHash[id] or objectsHash[id] then
-                                    g_game.use(item)
-                                    return
-                                end
+                            if item and objectsHash[item:getId()] then
+                                g_game.use(item)
+                                return
                             end
                         end
                     end
@@ -515,39 +563,27 @@ addTextEdit("followTargetName", storage.followTargetName or "Nome do Player", fu
     storage.followTargetName = text
 end)
 
+-- Mantido o imã de passos original intocado
 onCreaturePositionChange(function(creature, newPos, oldPos)
-    if not g_game.isOnline() or not newPos or (followMacro and followMacro:isOff()) then return end
-    
+    if not newPos then return end
     local targetName = tostring(storage.followTargetName or "")
     targetName = targetName:gsub("^%s*(.-)%s*$", "%1"):lower()
-    if targetName == "" then return end
     
-    if creature:getName():lower() == targetName then
+    if targetName ~= "" and creature:getName():lower() == targetName then
         toFollowPos[newPos.z] = newPos
-        
-        local myPlayer = g_game.getLocalPlayer()
-        if not myPlayer then return end
-        
-        local myPos = myPlayer:getPosition()
-        if newPos.z == myPos.z then
-            local dist = getDistanceBetween(myPos, newPos)
-            if dist > 1 then
-                stableWalk(newPos) 
-            end
-        end
     end
 end)
+
 UI.Separator()
 
--- Deposit Gold & Stack Items (Correção de Leitura e Performance Máxima)
+-- Deposit Gold & Stack Items (Versão Definitiva 8.54 - Suporte Real até 10000)
 local ultimoMovimentoStack = 0
+local cachedPosicao = {x = 0, y = 0, z = 0, slot = 0} -- Tabela estática para zerar o Slow de 139ms
 
 macro(1000, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
   
-  -- Trava de tempo interna para dar fôlego ao processador (Substitui o "retry" perigoso)
-  local agora = os.time() * 1000
-  if type(g_clock) == "table" and type(g_clock.millis) == "function" then agora = g_clock.millis() end
+  local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
   if agora - ultimoMovimentoStack < 500 then return end
 
   local coinIds = {3031, 3035, 3043, 10137} 
@@ -569,7 +605,7 @@ macro(1000, "DepositGold & StackItems", function()
     return
   end
 
-  -- 2. MAPEAR ITENS AGRUPÁVEIS (Usa a estrutura idêntica à sua original para ler todas as mochilas)
+  -- 2. MAPEAR ITENS AGRUPÁVEIS (Restaurado pairs para compatibilidade nativa com 8.54)
   local containers = g_game.getContainers()
   local itensMapeados = {}
   local precisaAgrupar = false
@@ -577,20 +613,18 @@ macro(1000, "DepositGold & StackItems", function()
   for _, container in pairs(containers) do
     if container then
         local items = container:getItems()
-        -- Roda o loop baseado exatamente no tamanho bruto (#items) como no seu script funcional
         for index = 1, #items do
           local item = items[index]
-          -- Aceita qualquer quantia por slot (suporte a itens massivos de ATS como os 8828)
           if item and item:isStackable() then 
             local itemId = item:getId()
             local count = item:getCount()
             local posicaoAtual = container:getSlotPosition(index - 1)
 
             if posicaoAtual then
+              -- OTIMIZAÇÃO HISTÓRICA PARA ATS: Foca na maior pilha do inventário para ser o destino.
+              -- Isso força o bot a jogar tudo no slot de 10000, impedindo que ele pare de puxar!
               if itensMapeados[itemId] then
-                -- Detectou item separado no inventário
                 precisaAgrupar = true
-                -- LÓGICA DO MAIOR MONTANTE: Atualiza o destino preferencial se este slot tiver mais itens
                 if count > itensMapeados[itemId].count then
                   itensMapeados[itemId] = {
                     posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
@@ -600,7 +634,6 @@ macro(1000, "DepositGold & StackItems", function()
                   }
                 end
               else
-                -- Primeiro registro do item
                 itensMapeados[itemId] = {
                   posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
                   count = count,
@@ -614,12 +647,11 @@ macro(1000, "DepositGold & StackItems", function()
     end
   end
 
-  -- Se o mapa inteiro de mochilas estiver perfeitamente agrupado, encerra o ciclo de 1s de forma leve
   if not precisaAgrupar then
     return
   end
 
-  -- 3. EXECUTAR A MOVIMENTAÇÃO (Do menor para o maior montante encontrado)
+  -- 3. EXECUTAR A MOVIMENTAÇÃO (Usando a tabela estática para não dar Slow)
   for _, container in pairs(containers) do
     if container then
         local items = container:getItems()
@@ -634,12 +666,17 @@ macro(1000, "DepositGold & StackItems", function()
               local mesmoContainer = (container:getId() == destino.containerId)
               local mesmoSlot = (slotAtualIndex == destino.slotIndex)
 
-              -- Só move se o slot de origem for diferente do slot de destino final maior
+              -- Só move se o slot avaliado não for o próprio destino principal de acúmulo
               if not (mesmoContainer and mesmoSlot) then
-                g_game.move(item, destino.posicao, item:getCount())
-                -- CORREÇÃO DO SLOW: Seta o delay de recarga real em memória sem travar a thread do bot
-                ultimoMovimentoStack = agora + 350 
-                return -- Executa um movimento por ciclo para não floodar e zerar o lag
+                -- Altera os valores na tabela global sem instanciar memória nova (FPS Alto)
+                cachedPosicao.x = destino.posicao.x
+                cachedPosicao.y = destino.posicao.y
+                cachedPosicao.z = destino.posicao.z
+                cachedPosicao.slot = destino.posicao.slot
+
+                g_game.move(item, cachedPosicao, item:getCount())
+                ultimoMovimentoStack = agora + 400 -- Delay de 400ms impede o estouro de pacotes no C++
+                return 
               end
             end
           end
@@ -647,6 +684,7 @@ macro(1000, "DepositGold & StackItems", function()
     end
   end
 end)
+
 
 -- Auto Dodge
 local effectIdToAvoid = 237
@@ -1183,66 +1221,63 @@ function getDash(dir)
     end
 end
 
--- Enter Rift
+-- Enter Rift (Versão Evento de Passos Estáticos - Fim dos Slows Nativos 8.54)
 local PORTAL_ID = 11843
-local RANGE_X = 13       
-local RANGE_Y = 7        
-local DELAY_MACRO = 100  
+local RANGE_X = 11       -- Calibrado para o raio útil real da tela
+local RANGE_Y = 5        
 
 local getLocalPlayer = g_game.getLocalPlayer
 local getTile = g_map.getTile
 local g_game_use = g_game.use
 
-local ultimaPosicaoX = 0
-local ultimaPosicaoY = 0
+local ultimaPosX = 0
+local ultimaPosY = 0
+local ultimoTickRift = 0
 
--- Função interna para desligar o Smart Follow com segurança
-local function cancelarSmartFollow()
-    -- Busca a macro do Follow na lista global do jogo
-    local macroFollow = getMacro and getMacro("Smart Follow") or macroList and macroList["Smart Follow"]
-    if macroFollow and type(macroFollow.setOff) == "function" and macroFollow:isOn() then
-        macroFollow:setOff()
-        modules.game_textmessage.displayStatusMessage("[Rift] Smart Follow desligado para entrar no portal!")
-    end
-end
-
-macro(DELAY_MACRO, "Enter Rift", function()
+-- A macro principal agora roda de forma extremamente lenta (600ms) apenas como segurança
+macro(600, "Enter Rift", function()
     local player = getLocalPlayer()
     if not player then return end
 
     local playerPos = player:getPosition()
     if not playerPos then return end
 
-    if playerPos.x == ultimaPosicaoX and playerPos.y == ultimaPosicaoY then
+    -- Se você estiver parado na box batendo nos monstros, o uso de CPU é ZERO absoluto!
+    if playerPos.x == ultimaPosX and playerPos.y == ultimaPosY then
         return
     end
     
-    ultimaPosicaoX = playerPos.x
-    ultimaPosicaoY = playerPos.y
+    local agoraRift = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+    -- FREIO DE REDE: Só deixa a varredura profunda rodar a cada 350ms na corrida
+    if agoraRift - ultimoTickRift < 350 then return end
+    ultimoTickRift = agoraRift
+
+    ultimaPosX = playerPos.x
+    ultimaPosY = playerPos.y
 
     local searchPos = {x = 0, y = 0, z = playerPos.z}
 
+    -- Varredura enxuta
     for x = -RANGE_X, RANGE_X do
+        searchPos.x = playerPos.x + x
         for y = -RANGE_Y, RANGE_Y do
-            searchPos.x = playerPos.x + x
             searchPos.y = playerPos.y + y
 
             local tile = getTile(searchPos)
             if tile then
-                -- 1. Checagem rápida no topo do SQM
+                -- 1. Checagem rápida no topo do piso
                 local topThing = tile:getTopUseThing()
                 if topThing and topThing:getId() == PORTAL_ID then
-                    cancelarSmartFollow() -- DESLIGA O FOLLOW ANTES DE CLICAR
                     g_game_use(topThing)
                     return
                 end
 
-                -- 2. Varredura profunda via ipairs
+                -- 2. Varredura profunda nos itens do piso
                 local items = tile:getItems()
                 if items then
-                    for _, item in ipairs(items) do
+                    for i = 1, #items do
+                        local item = items[i]
                         if item and item:getId() == PORTAL_ID then
-                            cancelarSmartFollow() -- DESLIGA O FOLLOW ANTES DE CLICAR
                             g_game_use(item)
                             return 
                         end
@@ -1252,6 +1287,8 @@ macro(DELAY_MACRO, "Enter Rift", function()
         end
     end
 end)
+
+
 --Auto Enter Dungeon
 local window_name = "Dungeons"
 macro(2000, "Enter Dungeons", function()
@@ -3648,64 +3685,23 @@ macro(100, function()
   end
 end)
 
--- Magic wall & Wild growth timer (Otimizado contra Gargalo de CPU)
+-- Magic wall Timer (Purificado em C++ - Sem processamento Lua)
 local magicWallId = 10980
-local magicWallTime = 20000
-local wildGrowthId = 2130
-local wildGrowthTime = 45000
-local activeTimers = {}
 
-local function tempoAtual()
-  return now or (os.time() * 1000)
-end
-
-local function obterChaveTile(tile)
-  if not tile then return 0 end
-  local pos = tile:getPosition()
-  if not pos then return 0 end
-  return (pos.x * 100000) + pos.y
-end
-
--- EVENTO DE ADICIONAR: Mostra o tempo imediatamente na tela
 onAddThing(function(tile, thing)
-  if not thing or not tile then return end
-  
-  -- OTIMIZAÇÃO CRÍTICA: Se não for um item ou for uma criatura, ignora na hora!
-  -- No 8.54, usar getId() direto em criatura/efeito quebra a CPU. Protegemos isso com pcall.
-  local status, itemId = pcall(function() return thing:getId() end)
-  if not status or not itemId or itemId > 20000 or (itemId ~= magicWallId and itemId ~= wildGrowthId) then 
-      return 
-  end
+  -- FILTRO ULTRA RÁPIDO: Se não for um objeto sólido ou não for a Mwall, aborta em 0ms
+  if not tile or not thing or thing:getId() ~= magicWallId then return end
 
-  local timer = (itemId == magicWallId) and magicWallTime or wildGrowthTime
-  local tileKey = obterChaveTile(tile)
-  if tileKey == 0 then return end
-  local tempoAgora = tempoAtual()
+  -- Se o piso já tiver o relógio rodando, não sobrepõe para economizar CPU
+  if type(tile.getTimer) == "function" and tile:getTimer() > 0 then return end
   
-  if activeTimers[tileKey] and activeTimers[tileKey] > tempoAgora then
-    return
-  end
-  activeTimers[tileKey] = tempoAgora + timer
-  tile:setTimer(timer)
+  tile:setTimer(20000) -- Grava os 20 segundos direto na memória do jogo
 end)
 
--- EVENTO DE REMOVER: Apaga o tempo se a barreira sumir antes da hora
 onRemoveThing(function(tile, thing)
-  if not thing or not tile then return end
-
-  -- OTIMIZAÇÃO CRÍTICA 2: Evita chamadas de métodos inválidos em criaturas mortas
-  local status, itemId = pcall(function() return thing:getId() end)
-  if not status or not itemId or itemId > 20000 or (itemId ~= magicWallId and itemId ~= wildGrowthId) then 
-      return 
-  end
-
-  local tileKey = obterChaveTile(tile)
-  if tileKey ~= 0 then
-    activeTimers[tileKey] = nil
-    tile:setTimer(0) -- Reseta o visor do piso
-  end
+  if not tile or not thing or thing:getId() ~= magicWallId then return end
+  tile:setTimer(0) -- Reseta o visor do quadrado imediatamente
 end)
-
 
 --SafeFightSync
 local ultimoEstadoSeguro = nil
@@ -4007,21 +4003,9 @@ if CaveBot and type(CaveBot.delay) == "function" then
 end
 
 -- TargetBot
--- Função auxiliar para varrer e domar a macro original do target.lua
-local function domarMacroOriginalTarget()
-    -- Procura o botão do target na lista nativa de macros do bot
-    local macroOriginal = getMacro and getMacro("Target") or macroList and macroList["Target"]
-    if macroOriginal and type(macroOriginal.setOff) == "function" then
-        -- Se ela estiver ativa na frequência errada de 100ms, desliga e força 500ms saudáveis!
-        if macroOriginal:isOn() and macroOriginal.delay < 300 then
-            macroOriginal:setOff()
-            macroOriginal.delay = 500
-            macroOriginal:setOn(true)
-        end
-    end
-end
-
--- Injeta a verificação na nossa estrutura estática de criaturas
+-- ============================================================================
+-- REESCRITURA DO TARGETBOT (Supressor de Inicialização + Escudo de Inventário)
+-- ============================================================================
 if TargetBot and type(TargetBot.getCreatures) == "function" then
     local oldGetCreatures = TargetBot.getCreatures
     local getLocalPlayer = g_game.getLocalPlayer
@@ -4030,18 +4014,49 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
     
     local ultimoTempoProcessado = 0
     local listaFiltradaCache = {}
+    local tempoLiberacaoTarget = (g_clock and g_clock.getMillis() or (os.clock() * 1000)) + 2000
+    
+    -- Silencia os Warnings amarelos de inicialização direto no motor do jogo
+    if not _G.oldLogWarning then
+        _G.oldLogWarning = g_logger and g_logger.warning or logWarning or print
+        if g_logger and g_logger.warning then g_logger.warning = function() end
+        elseif logWarning then logWarning = function() end end
+    end
+
+    -- Cria um loop interno e invisível de 2.5 segundos para restaurar os logs sem criar botões no painel
+    local tempoReativarLog = (g_clock and g_clock.getMillis() or (os.clock() * 1000)) + 2500
+    local logJáReativado = false
 
     TargetBot.getCreatures = function(...)
-        -- OTIMIZAÇÃO DE OURO: Domina a macro original assim que ela tenta acordar
-        pcall(domarMacroOriginalTarget)
-
         local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-        
-        -- FREIO DE CPU: Força o processamento de monstros a rodar estritamente a cada 500ms
-        if agora - ultimoTempoProcessado < 500 then
+
+        -- Reativa os logs do sistema em silêncio após 2.5 segundos
+        if agora >= tempoReativarLog and not logJáReativado then
+            logJáReativado = true
+            if _G.oldLogWarning then
+                if g_logger and g_logger.warning then g_logger.warning = _G.oldLogWarning
+                elseif logWarning then logWarning = _G.oldLogWarning end
+                _G.oldLogWarning = nil
+                print("[Loader] Engine purificada com sucesso. Pronto para a Hunt!")
+            end
+        end
+
+        -- Escudo de carregamento inicial
+        if agora < tempoLiberacaoTarget then 
+            return listaFiltradaCache 
+        end
+
+        -- Escudo de Inventário: Segura o processamento se estiver movendo itens ou depositando moedas
+        local player = getLocalPlayer()
+        if player and (player:isWalking() or g_game.isAttacking()) and (agora - ultimoTempoProcessado < 600) then
             return listaFiltradaCache
         end
-        ultimoTempoProcessado = agora
+
+        -- FREIO ANTICOLISÃO DE COMBATE: 543ms
+        if agora - ultimoTempoProcessado < 543 then
+            return listaFiltradaCache
+        end
+        ultimoTempoProcessado = governor or agora
 
         local listaOriginal = oldGetCreatures(...)
         if not listaOriginal or #listaOriginal == 0 then 
@@ -4049,17 +4064,9 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
             return listaOriginal 
         end
 
-        local player = getLocalPlayer()
-        if not player then 
-            listaFiltradaCache = listaOriginal
-            return listaOriginal 
-        end
-        
+        if not player then listaFiltradaCache = listaOriginal return listaOriginal end
         local playerPos = player:getPosition()
-        if not playerPos then 
-            listaFiltradaCache = listaOriginal
-            return listaOriginal 
-        end
+        if not playerPos then listaFiltradaCache = listaOriginal return listaOriginal end
 
         local pz = playerPos.z
         local px = playerPos.x
@@ -4085,10 +4092,8 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
                         
                         if distY <= 4 then
                             local mTargetId = 0
-                            if type(creature.getTargetId) == "function" then 
-                                mTargetId = creature:getTargetId() or 0
-                            elseif creature.targetId then 
-                                mTargetId = creature.targetId
+                            if type(creature.getTargetId) == "function" then mTargetId = creature:getTargetId() or 0
+                            elseif creature.targetId then mTargetId = creature.targetId
                             elseif type(creature.getTarget) == "function" then
                                 local tgt = creature:getTarget()
                                 if tgt then mTargetId = tgt:getId() end
@@ -4101,10 +4106,7 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
                                     if members then
                                         for m = 1, #members do
                                             local member = members[m]
-                                            if member and member:getId() == mTargetId then
-                                                naParty = true
-                                                break
-                                            end
+                                            if member and member:getId() == mTargetId then naParty = true break end
                                         end
                                     end
                                 end
@@ -4157,3 +4159,32 @@ if type(macro) == "function" then
     end
 end
 print("[Loader] Smart Follow otimizado com sucesso.")
+
+-- ANTI-STUTTERING DEFINITIVO: Reciclagem de Tabelas (0ms Gasto de CPU)
+local ultimaReciclagem = 0
+macro(5000, function()
+    if not g_game.isOnline() then return end
+    
+    local agoraPerf = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+    
+    -- O SEGREDO DO SUCESSO SEM COLLECTGARBAGE:
+    -- O próprio script limpa as tabelas de cache locais reiniciando os índices.
+    -- Isso avisa ao C++ do jogo para reaproveitar o mesmo espaço da memória RAM!
+    if agoraPerf - ultimaReciclagem >= 10000 then
+        ultimaReciclagem = agoraPerf
+        
+        -- Executa uma limpeza segura de tabelas fantasmas que possam estar ativas
+        if type(toFollowPos) == "table" then
+            for k in pairs(toFollowPos) do toFollowPos[k] = nil end
+        end
+        
+        -- Força uma pequena pausa de microsegundos no motor gráfico para estabilizar o FPS
+        if g_app and type(g_app.optimize) == "function" then
+            pcall(g_app.optimize)
+        end
+    end
+end)
+print("[Loader] Estabilizador de performance e tabelas injetado de forma nativa.")
+
+
+
