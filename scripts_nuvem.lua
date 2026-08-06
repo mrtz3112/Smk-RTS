@@ -2366,6 +2366,7 @@ macro(100, function()
   if storage[panelName].setting and cacheHealSpell ~= "" then
     if hppercent() <= storage[panelName].hp then
         say(cacheHealSpell)
+		delay(500)
     end
   end
 end)
@@ -2641,6 +2642,7 @@ macro(100, function()
  if storage[panelNameNameManaPot].setting then
     if manapercent() <= storage[panelNameNameManaPot].hp then
         use(storage[panelNameNameManaPot].id)
+		delay(250)
     end
  end
 end)
