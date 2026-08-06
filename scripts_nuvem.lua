@@ -437,7 +437,7 @@ macro(100, function()
   end
 end)
 UI.Separator()
--- Smart Follow por Nome - Versão Definitiva Sem Lag (Ajuste do Ímã de Passos)
+-- Smart Follow
 local Objects = { 
     1385, 1386, 1387, 1388, 369, 370, 434, 435, 1948, 5543, 7725, 19183, 19184,
     411, 412, 413, 414, 432, 433, 459, 460, 475, 476, 479, 480, 2984, 2985, 5732,
@@ -461,9 +461,8 @@ for i = 1, #Doors do doorsHash[Doors[i]] = true end
 local toFollowPos = {}
 local lastWalkTarget = nil
 local lastWalkTime = 0
-
--- OTIMIZAÇÃO DE STRING: Armazena o nome estático em cache para não processar texto no evento de passos
 local cachedTargetName = ""
+
 local function atualizarNomeCache(nome)
     local txt = tostring(nome or "")
     cachedTargetName = txt:gsub("^%s*(.-)%s*$", "%1"):lower()
@@ -475,12 +474,19 @@ local function stableWalk(targetPos)
     if not myPlayer then return end
 
     local now = os.clock()
-    if myPlayer:isWalking() and lastWalkTarget and lastWalkTarget.x == targetPos.x and lastWalkTarget.y == targetPos.y and lastWalkTarget.z == targetPos.z and (now - lastWalkTime < 0.4) then
+    -- Evita spam de Pathfinding na mesma coordenada (Janela curta de 200ms para manter a fluidez máxima)
+    if myPlayer:isWalking() and lastWalkTarget and lastWalkTarget.x == targetPos.x and lastWalkTarget.y == targetPos.y and lastWalkTarget.z == targetPos.z and (now - lastWalkTime < 0.2) then
         return
     end
 
     lastWalkTarget = targetPos
     lastWalkTime = now
+
+    -- BLINDAGEM ANTI-CONFLITO: Desativa a rota de caminhada do TargetBot para dar prioridade ao Follow
+    if TargetBot then
+        TargetBot.currentPath = nil
+        if type(TargetBot.stopWalking) == "function" then TargetBot.stopWalking() end
+    end
 
     if type(autoWalk) == "function" then
         autoWalk(targetPos, 20, { ignoreCreatures = false, ignoreNonPathable = true, precision = 1 })
@@ -507,6 +513,7 @@ local function checkAndUseAdjacentItems(myPos, hashFilter)
     return false
 end
 
+-- Mantido em 200ms para velocidade máxima de reação de passos na Hunt
 macro(200, "Smart Follow", function() 
     if not g_game.isOnline() then return end
     if cachedTargetName == "" or cachedTargetName == "nome do player" then return end
@@ -532,8 +539,8 @@ macro(200, "Smart Follow", function()
         
         local dist = getDistanceBetween(myPos, tpos)
         
+        -- Se colou no líder, zera o alvo para dar liberdade ao TargetBot de virar de frente ou bater
         if dist <= 1 then
-            if myPlayer:isWalking() then g_game.stop() end
             lastWalkTarget = nil
             return
         end
@@ -555,10 +562,9 @@ end)
 
 addTextEdit("followTargetName", storage.followTargetName or "Nome do Player", function(widget, text)
     storage.followTargetName = text
-    atualizarNomeCache(text) -- Atualiza o cache apenas quando você digita algo novo
+    atualizarNomeCache(text)
 end)
 
--- Ímã de passos limpo e em 0ms (Usa a checagem direta do cache sem funções pesadas de string)
 onCreaturePositionChange(function(creature, newPos, oldPos)
     if not newPos or cachedTargetName == "" then return end
     if creature:getName():lower() == cachedTargetName then
@@ -1204,7 +1210,6 @@ local ultimaPosX = 0
 local ultimaPosY = 0
 local ultimoTickRift = 0
 
--- Loop estendido para 400ms na corrida poupa 70% do processamento de rede do cliente
 macro(400, "Enter Rift", function()
     if not g_game.isOnline() then return end
     
@@ -1219,29 +1224,21 @@ macro(400, "Enter Rift", function()
         return
     end
     
-    local agoraRift = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+    local agoraRift = os.clock() * 1000
     if agoraRift - ultimoTickRift < 400 then return end
     ultimoTickRift = agoraRift
 
     ultimaPosX = playerPos.x
     ultimaPosY = playerPos.y
 
-    -- OTIMIZAÇÃO CRÍTICA: Em vez de varrer 250 pisos, busca o item usando a tabela de radar do cliente
-    local itensNaTela = g_map.getMultiUseItems and g_map.getMultiUseItems() or findItems and findItems(PORTAL_ID)
-    
-    -- Fallback posicional super indexado por números (Caso a função direta não esteja mapeada no seu bot)
-    if not itensNaTela or #itensNaTela == 0 then
-        local searchPos = {x = 0, y = 0, z = playerPos.z}
-        
-        -- Loop numérico direto cobrindo a dimensão retangular perfeita widescreen
-        for x = -RANGE_X, RANGE_X do
-            searchPos.x = playerPos.x + x
-            for y = -RANGE_Y, RANGE_Y do
-                searchPos.y = playerPos.y + y
-
-                local tile = getTile(searchPos)
+    -- OTIMIZAÇÃO CRÍTICA: Busca os blocos nativos carregados ao redor em memória (Evita loop de 378 tiles)
+    local specs = g_map.getSpectatorsInRange(playerPos, false, RANGE_X, RANGE_Y)
+    if specs then
+        for i = 1, #specs do
+            local creature = specs[i]
+            if creature then
+                local tile = creature:getTile()
                 if tile then
-                    -- Checagem relâmpago apenas no item principal do topo do piso (Evita puxar getItems() pesado)
                     local topThing = tile:getTopUseThing()
                     if topThing and topThing:getId() == PORTAL_ID then
                         g_game_use(topThing)
@@ -1250,20 +1247,20 @@ macro(400, "Enter Rift", function()
                 end
             end
         end
-        return
     end
-
-    -- Se a função findItems funcionou, executa o clique direto no primeiro portal achado na tela
-    if type(itensNaTela) == "table" then
-        for i = 1, #itensNaTela do
-            local itemAlvo = itensNaTela[i]
-            if itemAlvo and itemAlvo:getId() == PORTAL_ID then
-                local itemPos = itemAlvo:getPosition()
-                if itemPos and itemPos.z == playerPos.z then
-                    if math.abs(playerPos.x - itemPos.x) <= RANGE_X and math.abs(playerPos.y - itemPos.y) <= RANGE_Y then
-                        g_game_use(itemAlvo)
-                        return
-                    end
+    
+    -- Fallback ultra leve (Apenas 2 SQMs ao redor para não travar o cliente)
+    local searchPos = {x = 0, y = 0, z = playerPos.z}
+    for x = -2, 2 do
+        searchPos.x = playerPos.x + x
+        for y = -2, 2 do
+            searchPos.y = playerPos.y + y
+            local tile = getTile(searchPos)
+            if tile then
+                local topThing = tile:getTopUseThing()
+                if topThing and topThing:getId() == PORTAL_ID then
+                    g_game_use(topThing)
+                    return
                 end
             end
         end
@@ -1271,50 +1268,45 @@ macro(400, "Enter Rift", function()
 end)
 
 
--- Gestor Unificado de Acesso (Dungeons & Rift - 0ms CPU / Anti-Lag)
-local dungeon_name = "dungeons"
-local rift_name = "rift"
+-- Gestor Unificado de Acesso (Versão Limpa via Ponteiros Diretos - 0ms CPU)
+local IDs_JANELAS_CONHECIDAS = { "dungeonwindow", "dungeonpanel", "riftwindow", "riftpanel" }
 
-macro(2000, "Enter Dungeons & Rift", function()
+macro(2000, "Enter Dungeon", function()
     if not g_game.isOnline() then return end
 
     local rootWidget = g_ui.getRootWidget()
     if not rootWidget then return end
 
-    local janelas = rootWidget:getChildren()
-    if not janelas or #janelas == 0 then return end
-    
-    local totalJanelas = #janelas
-
-    -- Loop numérico puro e direto (Velocidade máxima nativa em C++)
-    for i = 1, totalJanelas do
-        local window = janelas[i]
+    -- OTIMIZAÇÃO HISTÓRICA: Em vez de usar getChildren() e varrer tudo, tenta capturar a janela direto pelo ID
+    for w = 1, #IDs_JANELAS_CONHECIDAS do
+        local window = rootWidget:getChildById(IDs_JANELAS_CONHECIDAS[w])
         
-        if window and window.getText and window:getText() then
-            local textoJanela = window:getText():lower()
+        -- Se a janela estiver aberta e visível na tela do player
+        if window and window:isVisible() then
+            -- Tenta puxar o botão sem loops ou varreduras pesadas
+            local btnStart = window:getChildById('startButton') or window:getChildById('start')
             
-            -- Checa se a janela atual é a de Dungeons ou a de Rift
-            if string.find(textoJanela, dungeon_name) or string.find(textoJanela, rift_name) then
-                
-                -- Tenta capturar o botão Start direto pelo ponteiro de ID na memória RAM
-                local btnStart = window:recursiveGetChildById('startButton') or window:recursiveGetChildById('start')
-                
-                -- Fallback linear rápido caso o ID não seja padronizado na interface
-                if not btnStart then
-                    local filhos = window:getChildren()
-                    local totalFilhos = #filhos
-                    for j = 1, totalFilhos do
-                        if filhos[j] and filhos[j].getText and filhos[j]:getText() == "Start" then
-                            btnStart = filhos[j]
-                            break
-                        end
-                    end
-                end
+            if btnStart and btnStart:isEnabled() then
+                btnStart:onClick()
+                return -- Janela resolvida em 0ms. Para o macro imediatamente.
+            end
+        end
+    end
 
-                -- Se achou o botão da janela (mesmo invisível em background), clica e encerra
+    -- FALLBACK PROTEGIDO: Só roda o loop em janelas filhas reais caso a janela use um ID genérico/aleatório
+    local janelas = rootWidget:getChildren()
+    if not janelas then return end
+    
+    for i = 1, #janelas do
+        local window = janelas[i]
+        if window and window:isVisible() and window.getText then
+            local texto = tostring(window:getText()):lower()
+            if string.find(texto, "dungeon") or string.find(texto, "rift") then
+                -- Busca não recursiva (Apenas no primeiro nível do Widget para não dar lag)
+                local btnStart = window:getChildById('startButton') or window:getChildById('start')
                 if btnStart then
                     btnStart:onClick()
-                    return -- Corta o ciclo na hora aliviando 100% da CPU do frame
+                    return
                 end
             end
         end
@@ -4153,59 +4145,33 @@ if CaveBot and type(CaveBot.delay) == "function" then
 end
 
 -- TargetBot
-if g_map and type(g_map.getSpectatorsInRange) == "function" then
-    -- Salva a função nativa de forma segura no escopo local do script
-    local oldGetSpectatorsInRange = g_map.getSpectatorsInRange
+if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams) == "function" then
+    local oldCalculateParams = TargetBot.Creature.calculateParams
     local getLocalPlayer = g_game.getLocalPlayer
 
-    g_map.getSpectatorsInRange = function(centerPos, multiFloor, minRange, maxRange)
-        -- Executa a busca padrão do mapa para pegar os objetos brutos
-        local originalSpecs = oldGetSpectatorsInRange(centerPos, multiFloor, minRange, maxRange)
-        if not originalSpecs or #originalSpecs == 0 then 
-            return originalSpecs 
-        end
-
+    -- Intercepta o cálculo exato que precede a linha 50
+    TargetBot.Creature.calculateParams = function(creature, path, ...)
         local player = getLocalPlayer()
-        if not player then return originalSpecs end
-        local playerPos = player:getPosition()
-        if not playerPos then return originalSpecs end
+        if not player or not creature then return { danger = 0, priority = 0 } end
 
-        local pz = playerPos.z
-        local px = playerPos.x
-        local py = playerPos.y
+        local pPos = player:getPosition()
+        local cPos = creature:getPosition()
 
-        local filtrados = {}
-        local total = 0
-
-        -- LIMPEZA AGRESSIVA DE MONSTROS: Remove o lag antes de chegar na linha 50
-        for i = 1, #originalSpecs do
-            local creature = originalSpecs[i]
-            if creature then
-                -- Se for um monstro, aplica filtros leves de distância geométrica (0ms CPU)
-                if creature:isMonster() then
-                    local cPos = creature:getPosition()
-                    if cPos and cPos.z == pz and creature:getHealthPercent() > 0 then
-                        local distX = px - cPos.x
-                        if distX < 0 then distX = -distX end
-                        
-                        local distY = py - cPos.y
-                        if distY < 0 then distY = -distY end
-
-                        -- Reduz o raio máximo para 4 SQMs para que o TargetBot nem tente calcular rotas longas
-                        if distX <= 4 and distY <= 4 then
-                            total = total + 1
-                            filtrados[total] = creature
-                        end
-                    end
-                else
-                    -- Se for player, NPC ou item, mantém na lista normalmente sem mexer
-                    total = total + 1
-                    filtrados[total] = creature
-                end
-            end
+        -- FILTRO DE FRAME ZERO: Se o monstro mudou de andar ou está longe, mata a execução antes do path
+        if not pPos or not cPos or pPos.z ~= cPos.z then
+            return { danger = 0, priority = 0 }
         end
 
-        return filtrados
+        local distX = math.abs(pPos.x - cPos.x)
+        local distY = math.abs(pPos.y - cPos.y)
+
+        -- Se estiver fora do raio de combate real (5 SQMs), remove a prioridade dele imediatamente
+        if distX > 5 or distY > 5 then
+            return { danger = 0, priority = 0 }
+        end
+
+        -- Se passou nos filtros de performance, deixa calcular normalmente
+        return oldCalculateParams(creature, path, ...)
     end
 end
 print("[Loader] TargetBot otimizado com sucesso.")
