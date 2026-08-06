@@ -1352,7 +1352,8 @@ local trainerMacro = macro(100, "House Trainer", function(macroObj)
     g_game.attack(closestTrainer)
   end
 end)
--- Revide PK (Versão Ultra-Otimizada com Ataque Nativo C++ - Lag Zero)
+
+-- Revide PK (Versão Corrigida e Otimizada em Tela Cheia - 13x7 Widescreen)
 local botsDesligadosPeloPVP = false
 local ultimoEstadoSafeFight = nil
 local ultimoModoAtaque = nil
@@ -1361,7 +1362,6 @@ local ultimoTempoTentativaAtaque = 0
 
 local function definirSafeFightBox(deveAtivar)
     if ultimoEstadoSafeFight == deveAtivar then return end
-    
     local mapPanel = modules.game_interface and modules.game_interface.gameMapPanel
     local root = mapPanel and mapPanel:getParent()
     if root then
@@ -1378,17 +1378,9 @@ end
 
 local function definirModoAtaque(modo)
     if ultimoModoAtaque == modo then return end
-    
     local rootWidget = g_ui.getRootWidget()
     if not rootWidget then return end
-    
-    local idBotao = ""
-    if modo == "balanced" then
-        idBotao = "fightBalancedBox"
-    elseif modo == "offensive" then
-        idBotao = "fightOffensiveBox"
-    end
-    
+    local idBotao = (modo == "balanced") and "fightBalancedBox" or "fightOffensiveBox"
     local targetButton = rootWidget:recursiveGetChildById(idBotao)
     if targetButton then
         pcall(function() targetButton:onClick() end)
@@ -1409,12 +1401,14 @@ macro(250, 'Revide PK', function()
     local agressorHp = 101
     local agressorDist = 100
 
-    local specs = g_map.getSpectatorsInRange(myPos, false, 8, 8)
+    -- CALIBRAÇÃO WIDESCREEN: 13 SQMs de largura (X) e 7 SQMs de altura (Y) cobre a tela visível de ponta a ponta
+    local specs = g_map.getSpectatorsInRange(myPos, false, 13, 7)
     if not specs then return end
     local totalSpecs = #specs
 
     for i = 1, totalSpecs do
         local creature = specs[i]
+        -- FILTRO RELÂMPAGO: Ignora hordas de monstros instantaneamente para manter o consumo de CPU em 0ms
         if creature and creature:isPlayer() and creature ~= localPlayer then
             
             local estaMeAtacando = false
@@ -1428,15 +1422,15 @@ macro(250, 'Revide PK', function()
                 local specPos = creature:getPosition()
                 if specPos and specPos.z == myPos.z then
                     local specHp = creature:getHealthPercent()
-                    local specDist = math.abs(myPos.x - specPos.x) + math.abs(myPos.y - specPos.y)
+                    local distX = math.abs(myPos.x - specPos.x)
+                    local distY = math.abs(myPos.y - specPos.y)
+                    local specDist = distX + distY
                     
-                    if specHp and specHp > 0 then
-                        if creature:canShoot() then
-                            if not agressorTarget or specHp < agressorHp or (specHp == agressorHp and specDist < agressorDist) then
-                                agressorTarget = creature
-                                agressorHp = specHp
-                                agressorDist = specDist
-                            end
+                    if specHp and specHp > 0 and creature:canShoot() then
+                        if not agressorTarget or specHp < agressorHp or (specHp == agressorHp and specDist < agressorDist) then
+                            agressorTarget = creature
+                            agressorHp = specHp
+                            agressorDist = specDist
                         end
                     end
                 end
@@ -1444,28 +1438,22 @@ macro(250, 'Revide PK', function()
         end
     end
 
-    -- Relógio interno de alta precisão do cliente
     local tempoAtual = g_clock and g_clock.getMillis() or (os.clock() * 1000)
 
     if agressorTarget then
         if not botsDesligadosPeloPVP then
-            -- Trava de interface de 6 segundos corrigida para milissegundos reais (6000ms)
             if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
                 if CaveBot and CaveBot.setOff then CaveBot.setOff() end
                 if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
-                
                 definirModoAtaque("balanced")
                 definirSafeFightBox(true)       
-
                 botsDesligadosPeloPVP = true
                 ultimoTempoTrocaEstado = tempoAtual 
             end
         end
         
-        -- OTIMIZAÇÃO CRÍTICA: Só envia o pacote de ataque se você já não estiver batendo nele,
-        -- e aplica um freio de 1000ms entre tentativas para não flodar a rede e dar Slow!
         if g_game.getAttackingCreature() ~= agressorTarget and (tempoAtual - ultimoTempoTentativaAtaque >= 1000) then
-            g_game.attack(agressorTarget) -- Comando nativo em C++ direto ao servidor (0ms CPU)
+            g_game.attack(agressorTarget) 
             ultimoTempoTentativaAtaque = tempoAtual
         end
     else
@@ -1475,10 +1463,8 @@ macro(250, 'Revide PK', function()
                 if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
                     definirSafeFightBox(false)           
                     definirModoAtaque("offensive")
-                    
                     if CaveBot and CaveBot.setOn then CaveBot.setOn() end
                     if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
-                    
                     botsDesligadosPeloPVP = false
                     ultimoTempoTrocaEstado = tempoAtual 
                 end
@@ -1486,7 +1472,6 @@ macro(250, 'Revide PK', function()
         end
     end
 end)
-
 UI.Separator()
 --Eat Food
 local panelName = "AutoFood"
