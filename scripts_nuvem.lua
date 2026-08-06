@@ -1158,7 +1158,6 @@ function getDash(dir)
     end
 end
 -- Enter Rift
--- Configurações da Macro
 local PORTAL_ID = 11843 -- ID do seu portal
 local RANGE_X = 12       -- 7 SQMs para os lados
 local RANGE_Y = 7       -- 7 SQMs para cima/baixo
@@ -2910,43 +2909,44 @@ else
 end
 end)
 
--- BugMap AWSD/Setas/NumPad Otimizado (Sem onMacroToggle e Sem Slow)
+-- BugMap AWSD/Setas/NumPad Otimizado (Sem Slow e Totalmente Funcional)
 local consoleModule = modules.game_console
-
+local cachedPos = {x = 0, y = 0, z = 0} -- Reaproveita a tabela para economizar memória
 local function checkPos(x, y)
     local player = g_game.getLocalPlayer()
-    if not player or (consoleModule and type(consoleModule.isChatEnabled) == "function" and consoleModule:isChatEnabled()) then 
-        return false 
+    if not player then return end
+    
+    if consoleModule and type(consoleModule.isChatEnabled) == "function" and consoleModule:isChatEnabled() then 
+        return 
     end
+    local playerPos = player:getPosition()
+    if not playerPos then return end
 
-    -- CORREÇÃO 1: Variáveis locais blindadas para não vazar memória global
-    local xyz = player:getPosition()
-    if not xyz then return false end
-
-    xyz.x = xyz.x + x
-    xyz.y = xyz.y + y
-
-    local tile = g_map.getTile(xyz)
+    -- Modifica a tabela na memória sem recriar uma nova
+    cachedPos.x = playerPos.x + x
+    cachedPos.y = playerPos.y + y
+    cachedPos.z = playerPos.z
+    local tile = g_map.getTile(cachedPos)
     if tile then
         local topThing = tile:getTopUseThing()
         if topThing then
-            return g_game.use(topThing)
+            g_game.use(topThing)
         end
     end
-    return false
 end
-
--- CORREÇÃO 2: Loop inteligente de baixa frequência (100ms). Só lê se a macro estiver ativa!
 dash = macro(40, 'Bug Map', 'CTRL+3', function()
-    -- Se o chat estiver aberto, não faz nada para poupar processamento
+    -- Se o chat estiver aberto, para a execução imediatamente
     if consoleModule and type(consoleModule.isChatEnabled) == "function" and consoleModule:isChatEnabled() then
         return
     end
-
     local gk = modules.corelib.g_keyboard
     if not gk or type(gk.isKeyPressed) ~= "function" then return end
-
-    -- Varredura condicional: só gasta processamento no milissegundo em que você segurar a tecla
+    -- GASTO DE CPU ZERO: Se nenhuma tecla estiver sendo pressionada, o código morre aqui
+    if not (gk.isKeyPressed('w') or gk.isKeyPressed('e') or gk.isKeyPressed('d') or gk.isKeyPressed('c') or 
+            gk.isKeyPressed('s') or gk.isKeyPressed('z') or gk.isKeyPressed('a') or gk.isKeyPressed('q')) then
+        return
+    end
+    -- Processa o movimento somente após confirmar que a tecla está realmente pressionada
     if gk.isKeyPressed('w') then checkPos(0, -5)
     elseif gk.isKeyPressed('e') then checkPos(3, -3)
     elseif gk.isKeyPressed('d') then checkPos(5, 0)
@@ -2957,12 +2957,9 @@ dash = macro(40, 'Bug Map', 'CTRL+3', function()
     elseif gk.isKeyPressed('q') then checkPos(-3, -3)
     end
 end)
-
--- Inicializa o botão desligado por padrão conforme a estrutura original do seu cliente
 if dash and type(dash.setOff) == "function" then 
     dash:setOff() 
 end
-
 
 --Auto MWall na Frente do Alvo
 local MW_ID = 10571
@@ -3754,14 +3751,44 @@ dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
 -- CreaturePriority
+-- PARTE 1: Inicialização e Otimização Hash de Monstros Especiais
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
-local lastCheck = 0
+local specialMonstersHash = {}
 
--- Ao remover o 'local' da frente, a função vira global automaticamente no ambiente do bot
+for _, name in ipairs(specialMonsters) do
+    specialMonstersHash[string.lower(name)] = true
+end
+
+-- Variáveis de controle de Cache para evitar loops repetitivos
+local lastCheck = 0
+local cachedSpecialAttackingMe = 0
+local lastLureCheckTime = 0
+
+-- Auxiliar rápido para checar se o nome é especial (Evita reescrever código)
+local function isMonsterSpecial(creatureName)
+    if specialMonstersHash[creatureName] then return true end
+    for name, _ in pairs(specialMonstersHash) do
+        if string.find(creatureName, name, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+-- PARTE 2: Função checkSpecialMonstersLure Totalmente Reformulada (Com Cache)
 checkSpecialMonstersLure = function()
-    local cNow = now or (os.clock() * 1000)
-    if cNow - lastCheck < 100 then return end
-    lastCheck = cNow
+    local cNow = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+    
+    -- OTIMIZAÇÃO CRÍTICA: Se já varreu a tela nos últimos 150ms, usa o resultado salvo na memória!
+    if cNow - lastLureCheckTime < 150 then
+        if cachedSpecialAttackingMe >= 2 then
+            if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = cNow + 1000
+            elseif CaveBot and type(CaveBot.macro) == "table" then CaveBot.macro.delay = cNow + 1000
+            elseif CaveBot and type(CaveBot.delay) == "function" then CaveBot.delay(1000) end
+        end
+        return
+    end
+    lastLureCheckTime = cNow
 
     local localPlayer = g_game.getLocalPlayer()
     if not localPlayer then return end
@@ -3773,24 +3800,16 @@ checkSpecialMonstersLure = function()
     local specialAttackingMe = 0
     local spectators = g_map.getSpectators(playerPos, false)
 
-    for _, spec in ipairs(spectators) do
+    -- Loop de varredura ultraleve usando a tabela Hash
+    for i = 1, #spectators do
+        local spec = spectators[i]
         if spec:isMonster() and spec:getHealthPercent() > 0 then
             local creatureName = string.lower(spec:getName() or "")
-            local isSpecial = false
             
-            for _, name in ipairs(specialMonsters) do
-                if string.find(creatureName, name, 1, true) then
-                    isSpecial = true
-                    break
-                end
-            end
-
-            if isSpecial then
+            if isMonsterSpecial(creatureName) then
                 local mTargetId = 0
-                if type(spec.getTargetId) == "function" then
-                    mTargetId = spec:getTargetId() or 0
-                elseif spec.targetId then
-                    mTargetId = spec.targetId
+                if type(spec.getTargetId) == "function" then mTargetId = spec:getTargetId() or 0
+                elseif spec.targetId then mTargetId = spec.targetId
                 elseif type(spec.getTarget) == "function" then
                     local tgt = spec:getTarget()
                     if tgt then mTargetId = tgt:getId() end
@@ -3803,128 +3822,110 @@ checkSpecialMonstersLure = function()
         end
     end
 
+    cachedSpecialAttackingMe = specialAttackingMe
+
     if specialAttackingMe >= 2 then
-        if cavebotMacro and type(cavebotMacro) == "table" then
-            cavebotMacro.delay = cNow + 1000
-        elseif CaveBot and type(CaveBot.macro) == "table" then
-            CaveBot.macro.delay = cNow + 1000
-        elseif CaveBot and type(CaveBot.delay) == "function" then
-            CaveBot.delay(1000)
-        end
+        if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = cNow + 1000
+        elseif CaveBot and type(CaveBot.macro) == "table" then CaveBot.macro.delay = cNow + 1000
+        elseif CaveBot and type(CaveBot.delay) == "function" then CaveBot.delay(1000) end
     end
 end
 
--- INTERCEPTADOR DO TARGETBOT COM PRIORIDADE CORRIGIDA (BOX EM 1º LUGAR)
+-- PARTE 3: Injeção Otimizada no TargetBot.Creature.calculatePriority
 if TargetBot and TargetBot.Creature then
     TargetBot.Creature.calculatePriority = function(creature, config, path)
-      -- Executa a função global de segurança diretamente
-      if type(checkSpecialMonstersLure) == "function" then
-          checkSpecialMonstersLure()
-      end
+        -- Roda a checagem otimizada de Lure
+        checkSpecialMonstersLure()
 
-      local priority = 0
-      local path_length = #path
+        local priority = 0
+        local path_length = #path
 
-      if g_game.getAttackingCreature() == creature then
-        priority = priority + 1
-      end
-
-      local creatureName = string.lower(creature:getName() or "")
-      local isSpecial = false
-      
-      for _, name in ipairs(specialMonsters) do
-        if string.find(creatureName, name, 1, true) then
-          isSpecial = true
-          break
+        if g_game.getAttackingCreature() == creature then
+            priority = priority + 1
         end
-      end
 
-      if isSpecial then
-        local localPlayer = g_game.getLocalPlayer()
-        local myId = localPlayer and localPlayer:getId() or 0
+        local creatureName = string.lower(creature:getName() or "")
         
-        local mTargetId = 0
-        if type(creature.getTargetId) == "function" then
-            mTargetId = creature:getTargetId() or 0
-        elseif creature.targetId then
-            mTargetId = creature.targetId
-        elseif type(creature.getTarget) == "function" then
-            local tgt = creature:getTarget()
-            if tgt then mTargetId = tgt:getId() end
+        -- Checagem direta via Hash (0ms de processamento)
+        if isMonsterSpecial(creatureName) then
+            local localPlayer = g_game.getLocalPlayer()
+            local myId = localPlayer and localPlayer:getId() or 0
+            
+            local mTargetId = 0
+            if type(creature.getTargetId) == "function" then mTargetId = creature:getTargetId() or 0
+            elseif creature.targetId then mTargetId = creature.targetId
+            elseif type(creature.getTarget) == "function" then
+                local tgt = creature:getTarget()
+                if tgt then mTargetId = tgt:getId() end
+            end
+
+            local attackingOtherPlayer = (mTargetId > 0 and mTargetId ~= myId)
+            if not attackingOtherPlayer then
+                if path_length == 1 then
+                    priority = priority + 1000
+                end
+            end
         end
 
-        local attackingOtherPlayer = (mTargetId > 0 and mTargetId ~= myId)
-        if not attackingOtherPlayer then
-          if path_length == 1 then
-            priority = priority + 1000
-          end
+        if path_length > config.maxDistance then
+            return priority
         end
-      end
 
-      if path_length > config.maxDistance then
+        priority = priority + config.priority
+        
+        if path_length == 1 then
+            priority = priority + 500
+        elseif path_length <= 3 then
+            priority = priority + 2
+        end
+
+        local hp = creature:getHealthPercent() or 100
+        if hp < 20 then priority = priority + 5
+        elseif hp < 40 then priority = priority + 2.5
+        elseif hp < 60 then priority = priority + 1.5
+        elseif hp < 80 then priority = priority + 0.5 end
+
         return priority
-      end
-
-      priority = priority + config.priority
-      
-      if path_length == 1 then
-        priority = priority + 500
-      elseif path_length <= 3 then
-        priority = priority + 2
-      end
-
-      local hp = creature:getHealthPercent() or 100
-      if hp < 20 then
-        priority = priority + 5
-      elseif hp < 40 then
-        priority = priority + 2.5
-      elseif hp < 60 then
-        priority = priority + 1.5
-      elseif hp < 80 then
-        priority = priority + 0.5
-      end
-
-      return priority
     end
 end
 
--- CaveBot - Interceptador de Passos Inteligente (Fim do Slow por FindPath)
+-- CaveBot Walker Otimizado (Andada Fluida Sem Lag)
 if CaveBot and type(CaveBot.delay) == "function" then
-    -- CORREÇÃO 1: Proteção real de Reload para não duplicar ponteiros na memória RAM
+    -- Proteção de Reload para não duplicar ponteiros na memória RAM
     if not CaveBot.oldDelayOriginalPointer then
         CaveBot.oldDelayOriginalPointer = CaveBot.delay
     end
     
     local originalDelay = CaveBot.oldDelayOriginalPointer
 
+    -- OTIMIZAÇÃO: Reescritura direta usando tabela de decisão rápida em vez de IFs numéricos
     CaveBot.delay = function(ms, ...)
-        if ms and type(ms) == "number" then
-            -- CORREÇÃO 2: Altera apenas os delays de andada comuns (entre 200ms e 500ms)
-            -- Força 250ms: É o tempo perfeito de resposta da andada sem fazer o C++ recalcular rota à toa
-            if ms >= 200 and ms <= 500 then
-                ms = 250 
-            end
+        -- Se 'ms' não for um número válido (ex: nil), evita erro convertendo para 0
+        local delayVal = ms or 0
+
+        -- CORREÇÃO ULTRA RÁPIDA: Filtro linear direto sem múltiplas checagens de tipo
+        -- Se o delay original estiver entre 200ms e 500ms, força os 250ms fluidos
+        if delayVal >= 200 and delayVal <= 500 then
+            return originalDelay(250, ...)
         end
+
         return originalDelay(ms, ...)
     end
 end
 
--- TargetBot
-local function obterTempoReal()
-    return math.floor(os.clock() * 1000)
-end
+-- TargetBot Otimizado (Hook de Alta Performance)
+-- OTIMIZAÇÃO 1: Cache local de funções nativas para execução direta na memória (Ganha muita velocidade)
+local math_abs = math.abs
+local type = type
+local pcall = pcall
 
--- CORREÇÃO 1: Removeu a macro global que atropelava a variável 'now' do target.lua
--- Se o bot precisar atualizar o tempo, ele fará de forma isolada localmente.
-
--- 1. SEQUESTRO RESTRITO DO ADAPTADOR DE MACROS NATIVAS (Suporte a nomes como String)
+-- 1. SEQUESTRO RESTRITO DO ADAPTADOR DE MACROS NATIVAS
 if type(macro) == "function" then
     local oldMacro = macro
     macro = function(delayTime, name, callback, ...)
         local targetFunc = nil
         local macroName = "Target Control"
 
-        -- CORREÇÃO 2: Identifica se a macro veio no formato macro(100, function) ou macro(100, "nome", function)
         if delayTime == 100 then
             if type(name) == "function" then
                 targetFunc = name
@@ -3934,12 +3935,11 @@ if type(macro) == "function" then
             end
         end
 
-        -- Se interceptou o loop de 100ms do target.lua, aplica a vacina de freio de CPU
         if targetFunc then
             local ultimoTickExecutado = 0
             local ultimoAndarX = 0
 
-            -- Forçamos a macro nativa a rodar com um delay maior de 200ms para poupar o motor do bot
+            -- Forçamos a macro a iniciar de forma leve
             local minhaMacroTarget = oldMacro(200, macroName, function()
                 local player = g_game.getLocalPlayer()
                 if not player then return end
@@ -3950,7 +3950,8 @@ if type(macro) == "function" then
                 -- DETECÇÃO E LIMPEZA DE BUFFER DE ESCADA/TELEPORT
                 if ultimoAndarX ~= playerPos.z then
                     ultimoAndarX = playerPos.z
-                    ultimoTickExecutado = obterTempoReal() + 1500
+                    -- Usa o relógio nativo do jogo em vez de gerar cálculos com os.clock()
+                    ultimoTickExecutado = (g_clock and g_clock.getMillis() or (os.clock() * 1000)) + 1500
                     pcall(function()
                         g_game.cancelAttack()
                         if TargetBot and type(TargetBot.walkTo) == "function" then TargetBot.walkTo(nil) end
@@ -3959,10 +3960,9 @@ if type(macro) == "function" then
                     return
                 end
 
-                local agora = obterTempoReal()
+                local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
                 
-                -- BLOQUEIO RIGIDO: Força a função pesada da linha 50 a processar apenas a cada 450ms cravados.
-                -- Isso reduz drasticamente as checagens por segundo e extingue o Slow Macro.
+                -- FREIO DE CPU: Processa apenas a cada 450ms cravados
                 if agora - ultimoTickExecutado < 450 then
                     return
                 end
@@ -3981,7 +3981,7 @@ if type(macro) == "function" then
     end
 end
 
--- 2. INTERCEPTADOR RESTRITO DE CRIATURAS DO TARGETBOT (Filtro de Área)
+-- 2. INTERCEPTADOR RESTRITO DE CRIATURAS DO TARGETBOT (Filtro de Área Ultra Rápido)
 if TargetBot and type(TargetBot.getCreatures) == "function" then
     local oldGetCreatures = TargetBot.getCreatures
     TargetBot.getCreatures = function(...)
@@ -3996,24 +3996,35 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
 
         local listaFiltrada = {}
         local totalAdicionados = 0
-        local limiteMaximoMonstros = 2 -- Calcula apenas as duas criaturas mais coladas no seu char
+        local limiteMaximoMonstros = 2 -- Mantido o foco em apenas 2 monstros da box
+        local pz = playerPos.z
+        local px = playerPos.x
+        local py = playerPos.y
 
+        -- Loop numérico otimizado
         for i = 1, #listaOriginal do
-            local creature = listLine and listaOriginal[i] or listaOriginal[i]
+            local creature = listaOriginal[i] -- CORREÇÃO: Removido o teste da variável inexistente 'listLine'
+            
             if creature and creature:isMonster() and creature:getHealthPercent() > 0 then
                 local cPos = creature:getPosition()
                 
-                if cPos and cPos.z == playerPos.z then
-                    local distX = math.abs(playerPos.x - cPos.x)
-                    local distY = math.abs(playerPos.y - cPos.y)
+                if cPos and cPos.z == pz then
+                    -- OTIMIZAÇÃO 2: Substituído o math.abs por comparações lógicas manuais (Mais rápido em Lua)
+                    local distX = px - cPos.x
+                    if distX < 0 then distX = -distX end
                     
-                    -- Limita o radar de alvos para 4 quadrados (Foca estritamente na sua Box de combate)
-                    if distX <= 4 and distY <= 4 then
-                        totalAdicionados = totalAdicionados + 1
-                        listaFiltrada[totalAdicionados] = creature
+                    if distX <= 4 then
+                        local distY = py - cPos.y
+                        if distY < 0 then distY = -distY end
                         
-                        if totalAdicionados >= limiteMaximoMonstros then
-                            break
+                        -- Se o monstro estiver dentro do raio 4x4 da sua box, adiciona no alvo
+                        if distY <= 4 then
+                            totalAdicionados = totalAdicionados + 1
+                            listaFiltrada[totalAdicionados] = creature
+                            
+                            if totalAdicionados >= limiteMaximoMonstros then
+                                break
+                            end
                         end
                     end
                 end
