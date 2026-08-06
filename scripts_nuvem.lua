@@ -1,42 +1,38 @@
 -- ============================================================================
--- GOVERNOR DE EVENTOS GLOBAL (Versão Imunidade Total ao Player)
+-- GOVERNOR GLOBAL PARA ONREMOVETHING (Zerar Slow no smkmain.lua:3712)
 -- ============================================================================
-local temposPassosIndividuais = {}
+local ultimoFiltroRemoverGlobal = 0
 
-if type(onCreaturePositionChange) == "function" then
-    local oldOnCreaturePositionChange = onCreaturePositionChange
+if type(onRemoveThing) == "function" then
+    local oldOnRemoveThing = onRemoveThing
     
-    onCreaturePositionChange = function(callback, ...)
+    onRemoveThing = function(callback, ...)
         if type(callback) == "function" then
-            return oldOnCreaturePositionChange(function(creature, newPos, oldPos, ...)
-                if not g_game.isOnline() or not creature or not newPos then return end
+            return oldOnRemoveThing(function(tile, thing, index, ...)
+                if not g_game.isOnline() or not thing then return end
                 
+                -- Se o objeto removido for o seu próprio personagem (deslogando/morrendo), passa direto
                 local localPlayer = g_game.getLocalPlayer()
-                local myId = localPlayer and localPlayer:getId() or 0
-                local cid = creature:getId()
-
-                -- IMUNIDADE CRÍTICA: Se for o SEU personagem andando, ignora o filtro!
-                -- Isso garante que a "Position" e o gravador funcionem nativamente instantâneo.
-                if cid == myId then
-                    return callback(creature, newPos, oldPos, ...)
+                if localPlayer and thing:getId() == localPlayer:getId() then
+                    return callback(tile, thing, index, ...)
                 end
                 
-                -- FILTRO DE FLUÍDEZ PARA MONSTROS E OUTROS PLAYERS (Alivia o actions.lua)
-                local agoraPassoGlobal = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-                local ultimoPassoDaCriatura = temposPassosIndividuais[cid] or 0
-                
-                if agoraPassoGlobal - ultimoPassoDaCriatura < 40 then 
+                -- FILTRO DE REFRESH: Se o client tentar remover dezenas de coisas (corpos, itens, magias)
+                -- em menos de 30ms, segura a rajada para dar fôlego para a CPU não engasgar as macros!
+                local agoraRemover = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+                if agoraRemover - ultimoFiltroRemoverGlobal < 30 then 
                     return 
                 end
+                ultimoFiltroRemoverGlobal = agoraRemover
                 
-                temposPassosIndividuais[cid] = agoraPassoGlobal
-                return callback(creature, newPos, oldPos, ...)
+                return callback(tile, thing, index, ...)
             end, ...)
         end
-        return oldOnCreaturePositionChange(callback, ...)
+        return oldOnRemoveThing(callback, ...)
     end
 end
-print("[Loader] Governor de eventos globais ativado contra picos de CaveBot.")
+print("[Loader] Governor de remocao de slows ativado com sucesso.")
+
 
 
 -- 1. HIGIENIZAÇÃO DE STORAGE AUTOMÁTICA VIA REPOSITÓRIO ONLINE (HTTP)
@@ -4012,9 +4008,6 @@ if CaveBot and type(CaveBot.delay) == "function" then
 end
 
 -- TargetBot
--- ============================================================================
--- REESCRITURA DO TARGETBOT (Supressor de Inicialização + Escudo de Inventário)
--- ============================================================================
 if TargetBot and type(TargetBot.getCreatures) == "function" then
     local oldGetCreatures = TargetBot.getCreatures
     local getLocalPlayer = g_game.getLocalPlayer
