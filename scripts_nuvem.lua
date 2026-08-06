@@ -1158,51 +1158,13 @@ function getDash(dir)
     end
 end
 -- Click Rift Otimizado
-local ultimoScanRift = 0
-
-macro(500, "Click Rift", function()
-  local player = g_game.getLocalPlayer()
-  if not player then return end
-
-  local myPos = player:getPosition()
-  if not myPos then return end
-
-  local targetId = 11843
-  local agora = os.time() * 1000
-  if type(g_clock) == "table" and type(g_clock.millis) == "function" then agora = g_clock.millis() end
-
-  -- Trava de segurança para não floodar cliques repetidos no mesmo segundo
-  if agora - ultimoScanRift < 1500 then return end
-
-  local raioVisivel = 13 -- Escaneia estritamente os quadrados visíveis ao redor do seu char
-
-  for x = -raioVisivel, raioVisivel do
-    for y = -raioVisivel, raioVisivel do
-      local tilePos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
-      local tile = g_map.getTile(tilePos)
-      
-      if tile then
-        local things = tile:getThings()
-        if things then
-            for i = 1, #things do
-              local thing = things[i]
-              if thing and thing.getId and type(thing.getId) == "function" then
-                if thing:getId() == targetId then
-                  
-                  -- Clica no portal interativo do topo de forma nativa e segura
-                  local topThing = tile:getTopUseThing()
-                  if topThing then g_game.use(topThing) else g_game.use(thing) end
-                  
-                  if CaveBot and type(CaveBot.gotoLabel) == "function" then
-                    CaveBot.gotoLabel("Rift")
-                  end
-                  
-                  ultimoScanRift = agora + 3000 -- Faz a macro esperar 3s após o clique com sucesso
-                  return
-                end
-              end
-            end
-        end
+macro(500, "Click Rift",  function()
+  for i, tile in ipairs(g_map.getTiles(posz())) do
+    for u,item in ipairs(tile:getItems()) do
+      if (item and item:getId() == 11843) then
+        g_game.use(item)
+        CaveBot.gotoLabel("Rift")
+        return
       end
     end
   end
