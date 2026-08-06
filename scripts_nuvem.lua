@@ -1,26 +1,35 @@
 -- ============================================================================
--- GOVERNOR DE EVENTOS GLOBAL (Zerar o Slow do cavebot/actions.lua:243)
--- Adicione este bloco no topo do seu loader.lua
+-- GOVERNOR DE EVENTOS GLOBAL (Versão Imunidade Total ao Player)
 -- ============================================================================
-local ultimoFiltroPassoGlobal = 0
+local temposPassosIndividuais = {}
 
 if type(onCreaturePositionChange) == "function" then
     local oldOnCreaturePositionChange = onCreaturePositionChange
     
     onCreaturePositionChange = function(callback, ...)
         if type(callback) == "function" then
-            -- Intercepta o registro de qualquer script (incluindo o CaveBot)
             return oldOnCreaturePositionChange(function(creature, newPos, oldPos, ...)
-                if not g_game.isOnline() or not newPos then return end
+                if not g_game.isOnline() or not creature or not newPos then return end
                 
-                -- FILTRO DE FLUÍDEZ: Se a rede enviar rajadas de passos em menos de 40ms,
-                -- segura o processamento lixo para aliviar a CPU do actions.lua:243!
+                local localPlayer = g_game.getLocalPlayer()
+                local myId = localPlayer and localPlayer:getId() or 0
+                local cid = creature:getId()
+
+                -- IMUNIDADE CRÍTICA: Se for o SEU personagem andando, ignora o filtro!
+                -- Isso garante que a "Position" e o gravador funcionem nativamente instantâneo.
+                if cid == myId then
+                    return callback(creature, newPos, oldPos, ...)
+                end
+                
+                -- FILTRO DE FLUÍDEZ PARA MONSTROS E OUTROS PLAYERS (Alivia o actions.lua)
                 local agoraPassoGlobal = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-                if agoraPassoGlobal - ultimoFiltroPassoGlobal < 40 then 
+                local ultimoPassoDaCriatura = temposPassosIndividuais[cid] or 0
+                
+                if agoraPassoGlobal - ultimoPassoDaCriatura < 40 then 
                     return 
                 end
-                ultimoFiltroPassoGlobal = agoraPassoGlobal
                 
+                temposPassosIndividuais[cid] = agoraPassoGlobal
                 return callback(creature, newPos, oldPos, ...)
             end, ...)
         end
@@ -28,6 +37,7 @@ if type(onCreaturePositionChange) == "function" then
     end
 end
 print("[Loader] Governor de eventos globais ativado contra picos de CaveBot.")
+
 
 -- 1. HIGIENIZAÇÃO DE STORAGE AUTOMÁTICA VIA REPOSITÓRIO ONLINE (HTTP)
 local URL_REPOSITORIO_ONLINE = "https://raw.githubusercontent.com/mrtz3112/Smk-RTS/refs/heads/main/scripts_nuvem.lua"
@@ -580,7 +590,7 @@ UI.Separator()
 local ultimoMovimentoStack = 0
 local cachedPosicao = {x = 0, y = 0, z = 0, slot = 0} -- Tabela estática para zerar o Slow de 139ms
 
-macro(1000, "DepositGold & StackItems", function()
+macro(1500, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
   
   local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
@@ -686,9 +696,9 @@ macro(1000, "DepositGold & StackItems", function()
 end)
 
 
--- Auto Dodge
+-- Auto Dodge Ultra-Otimizado (Anti-Lag / Lazy Pathfinding)
 local effectIdToAvoid = 237
-local maxSearchRange = 13 -- Mantém o radar de tela cheia para áreas massivas
+local maxSearchRange = 13
 local moveFlags = { ignoreNonPathable = true }
 local dangerDuration = 2500 
 
@@ -698,6 +708,14 @@ local dodgeBlockBots = false
 local meuDestinoAtual = nil
 local travaMovimentoAte = 0
 local manterBotsDesativadosAte = 0 
+local ultimoEscaneamento = 0
+
+local function getMillis()
+    if type(g_clock) == "table" and type(g_clock.millis) == "function" then
+        return g_clock.millis()
+    end
+    return os.time() * 1000
+end
 
 local function hasEffect(tile, effectId)
     if not tile then return false end
@@ -711,54 +729,44 @@ local function hasEffect(tile, effectId)
     return false
 end
 
--- Mapeia a zona de perigo usando strings híbridas para evitar o erro do JSON
-local function updateDangerZone(playerPos)
-    if not playerPos or not playerPos.x or not playerPos.y or not playerPos.z then return end
-
-    local now = os.time() * 1000
-    if type(g_clock) == "table" and type(g_clock.millis) == "function" then
-        now = g_clock.millis()
+local function cleanDangerCache(now)
+    for k, v in pairs(dangerTilesCache) do
+        if now >= v then dangerTilesCache[k] = nil end
     end
+end
+
+local function updateDangerZone(playerPos)
+    if not playerPos then return end
+    local now = getMillis()
+    cleanDangerCache(now)
 
     for dx = -maxSearchRange, maxSearchRange do
         for dy = -maxSearchRange, maxSearchRange do
             local checkPos = {x = playerPos.x + dx, y = playerPos.y + dy, z = playerPos.z}
             local tile = g_map.getTile(checkPos)
             
-            if tile and checkPos.x and checkPos.y then
-                if hasEffect(tile, effectIdToAvoid) then
-                    -- Chave em string segura ("k123_456") aceita nativamente pelo json.lua
-                    local key = "k" .. checkPos.x .. "_" .. checkPos.y
-                    dangerTilesCache[key] = now + dangerDuration
-                end
+            if tile and hasEffect(tile, effectIdToAvoid) then
+                local key = "k" .. checkPos.x .. "_" .. checkPos.y
+                dangerTilesCache[key] = now + dangerDuration
             end
         end
     end
 end
 
 local function isTileDangerous(pos)
-    if not pos or not pos.x or not pos.y then return false end
-
-    local now = os.time() * 1000
-    if type(g_clock) == "table" and type(g_clock.millis) == "function" then
-        now = g_clock.millis()
-    end
-
+    if not pos then return false end
     local key = "k" .. pos.x .. "_" .. pos.y
     local dangerUntil = dangerTilesCache[key]
-    
-    if dangerUntil and now < dangerUntil then
-        return true
-    else
-        if dangerUntil then dangerTilesCache[key] = nil end
-        return false
-    end
+    return dangerUntil and getMillis() < dangerUntil
 end
 
--- Varre o mapa de forma concêntrica progressiva buscando brechas azuis livres
+-- Busca ultra-rápida ignorando o findPath pesado no primeiro estágio
 local function findMassiveSafePosition(playerPos)
-    if not playerPos or not playerPos.x or not playerPos.y or not playerPos.z then return nil end
+    if not playerPos then return nil end
+    
+    local candidates = {}
 
+    -- Coleta os pisos seguros e andáveis mais próximos de forma concêntrica
     for r = 1, maxSearchRange do
         for dx = -r, r do
             for dy = -r, r do
@@ -768,19 +776,32 @@ local function findMassiveSafePosition(playerPos)
                     if not isTileDangerous(checkPos) then
                         local tile = g_map.getTile(checkPos)
                         if tile and tile:isWalkable() then
-                            if findPath(playerPos, checkPos, maxSearchRange, moveFlags) then
+                            -- Se estiver muito perto (raio 1 ou 2), assume que dá pra andar sem recalcular rota complexa
+                            if r <= 2 then
                                 return checkPos
                             end
+                            table.insert(candidates, checkPos)
                         end
                     end
                 end
             end
         end
+        -- Se já achamos opções viáveis nos raios mais próximos, não continua varrendo até o final (raio 13)
+        if #candidates > 0 then break end
     end
-    return nil
+
+    -- Só executa o findPath nos poucos candidatos selecionados (máximo de 3 tentativas)
+    local limit = math.min(#candidates, 3)
+    for i = 1, limit do
+        if findPath(playerPos, candidates[i], maxSearchRange, moveFlags) then
+            return candidates[i]
+        end
+    end
+
+    return candidates[1] -- Retorno de emergência caso o findPath falhe por preciosismo
 end
 
-macro(10, "Dodge Red SQM Spells", function()
+macro(30, "Dodge Red SQM Spells", function()
     if not g_game.isOnline() then return end
     
     local playerPos = player:getPosition()
@@ -788,12 +809,14 @@ macro(10, "Dodge Red SQM Spells", function()
     
     local currentTile = g_map.getTile(playerPos)
     local magiaEmbaixoDeMim = hasEffect(currentTile, effectIdToAvoid)
-    local agora = os.time() * 1000
-    if type(g_clock) == "table" and type(g_clock.millis) == "function" then agora = g_clock.millis() end
+    local agora = getMillis()
 
-    -- Otimização: Só processa a varredura se houver real ameaça ou delay de ciclo
     if magiaEmbaixoDeMim or isTileDangerous(playerPos) or agora < manterBotsDesativadosAte then
-        updateDangerZone(playerPos)
+        -- Evita atualizar o mapa de milissegundo em milissegundo (gargalo de CPU)
+        if agora - ultimoEscaneamento > 50 then
+            updateDangerZone(playerPos)
+            ultimoEscaneamento = agora
+        end
     else
         if dodgeBlockBots then
             if CaveBot and type(CaveBot.setEnabled) == "function" then CaveBot.setEnabled(true) end
@@ -807,34 +830,26 @@ macro(10, "Dodge Red SQM Spells", function()
 
     manterBotsDesativadosAte = agora + 450 
 
-    -- Se uma nova magia nascer sob os pés, ignora a trava de tempo para correr na hora
-    if not magiaEmbaixoDeMim then
-        if meuDestinoAtual and agora < travaMovimentoAte then
-            if not isTileDangerous(meuDestinoAtual) then
-                return 
-            end
+    if not magiaEmbaixoDeMim and meuDestinoAtual and agora < travaMovimentoAte then
+        if not isTileDangerous(meuDestinoAtual) then
+            return 
         end
     end
 
-    -- Desativa temporariamente os bots para priorizar a andada do desvio
     if not dodgeBlockBots then
-        if CaveBot and type(CaveBot.isEnabled) == "function" and CaveBot.isEnabled() then 
-            if type(CaveBot.setEnabled) == "function" then CaveBot.setEnabled(false) end 
-        end
-        if TargetBot and type(TargetBot.isEnabled) == "function" and TargetBot.isEnabled() then 
-            if type(TargetBot.setEnabled) == "function" then TargetBot.setEnabled(false) end 
-        end
+        if CaveBot and type(CaveBot.setEnabled) == "function" and CaveBot.isEnabled() then CaveBot.setEnabled(false) end
+        if TargetBot and type(TargetBot.setEnabled) == "function" and TargetBot.isEnabled() then TargetBot.setEnabled(false) end
         dodgeBlockBots = true
     end
 
     local safePos = findMassiveSafePosition(playerPos)
     if safePos then
         meuDestinoAtual = safePos
-        -- Janela adaptativa: 100ms para magias coladas nos pés, 300ms para deslocamentos normais
-        travaMovimentoAte = agora + (magiaEmbaixoDeMim and 100 or 300)
+        travaMovimentoAte = agora + (magiaEmbaixoDeMim and 80 or 250)
         autoWalk(safePos, maxSearchRange, moveFlags)
     end
 end)
+
 
 --AutoEscadas
 Stairs = {}
@@ -2329,6 +2344,7 @@ macro(100, function()
         if (tempoAgora - ultimoUsoBarreira) >= DELAY_SEGUNDOS then
             say(storage.autobarrier)
             ultimoUsoBarreira = tempoAgora
+            print("[Barrier] Magia conjurada! Cooldown: 46s.")
         end
     end
   end
@@ -3005,9 +3021,9 @@ else
 end
 end)
 
--- BugMap AWSD/Setas/NumPad Ultra Velocidade (Bruto e Sem Atraso)
+-- BugMap AWSD/Setas/NumPad (Velocidade Máxima Bruta Restaurada e Sem Lag)
 local consoleModule = modules.game_console
-local cachedPos = {x = 0, y = 0, z = 0} -- Reaproveita a tabela para economizar memória RAM
+local cachedPos = {x = 0, y = 0, z = 0} 
 
 local function checkPos(x, y)
     local player = g_game.getLocalPlayer()
@@ -3020,27 +3036,26 @@ local function checkPos(x, y)
     local playerPos = player:getPosition()
     if not playerPos then return false end
 
-    -- Altera os valores na tabela da memória sem instanciar uma nova
     cachedPos.x = playerPos.x + x
     cachedPos.y = playerPos.y + y
     cachedPos.z = playerPos.z
 
+    -- Validação rápida de fronteira contra o limbo preto
+    if cachedPos.x < 100 or cachedPos.y < 100 or cachedPos.x > 34000 or cachedPos.y > 34000 then
+        return false
+    end
+
     local tile = g_map.getTile(cachedPos)
     if tile then
-        -- OTIMIZAÇÃO SUPREMA 8.54: Pega o item base (piso) diretamente no índice 1 do vetor.
-        -- Isso responde em 0ms e força o jogo a usar o chão instantaneamente, ativando a velocidade máxima!
-        local items = tile:getItems()
-        if items and items[1] then
-            g_game.use(items[1])
-            return true
-        end
-        
-        -- Fallback rápido caso seja um objeto interativo de cenário
-        local topThing = tile:getTopUseThing()
-        if topThing then
-            g_game.use(topThing)
-            return true
-        end
+        -- RESTAURAÇÃO DE VELOCIDADE: Envolve o getTopUseThing nativo em pcall.
+        -- Executa na velocidade máxima de C++ e impede qualquer travamento de frame!
+        pcall(function()
+            local topThing = tile:getTopUseThing()
+            if topThing then
+                g_game.use(topThing)
+            end
+        end)
+        return true
     end
     return false
 end
@@ -3053,7 +3068,6 @@ dash = macro(40, 'Bug Map', 'CTRL+3', function()
     local gk = modules.corelib.g_keyboard
     if not gk or type(gk.isKeyPressed) ~= "function" then return end
 
-    -- Só gasta processamento se o botão estiver ativamente pressionado
     if not (gk.isKeyPressed('w') or gk.isKeyPressed('e') or gk.isKeyPressed('d') or gk.isKeyPressed('c') or 
             gk.isKeyPressed('s') or gk.isKeyPressed('z') or gk.isKeyPressed('a') or gk.isKeyPressed('q')) then
         return
@@ -3073,7 +3087,6 @@ end)
 if dash and type(dash.setOff) == "function" then 
     dash:setOff() 
 end
-
 
 --Auto MWall na Frente do Alvo
 local MW_ID = 10571
@@ -4124,7 +4137,7 @@ end
 print("[Loader] TargetBot otimizado com sucesso.")
 
 
--- Otimização do Smart Follow (Freio Ajustado para 350ms)
+-- Otimização do Smart Follow (Freio Ajustado para 350ms - Versão Segura)
 local lastFollowCheck = 0
 
 if type(macro) == "function" then
@@ -4144,8 +4157,7 @@ if type(macro) == "function" then
                     end
                     lastFollowCheck = now
 
-                    local player = g_game.getLocalPlayer()
-                    if not player then return end
+                    -- CORREÇÃO: Removido a variável 'local player' que causava conflito global e travava a interface
 
                     return followFunc()
                 end, ...)
@@ -4155,6 +4167,7 @@ if type(macro) == "function" then
     end
 end
 print("[Loader] Smart Follow otimizado com sucesso.")
+
 
 -- ANTI-STUTTERING DEFINITIVO: Reciclagem de Tabelas (0ms Gasto de CPU)
 local ultimaReciclagem = 0
@@ -4181,6 +4194,3 @@ macro(5000, function()
     end
 end)
 print("[Loader] Estabilizador de performance e tabelas injetado de forma nativa.")
-
-
-
