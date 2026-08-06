@@ -396,7 +396,7 @@ macro(100, function()
   end
 end)
 UI.Separator()
--- Smart Follow por Nome - Versão Movimento Instantâneo (0ms Delay)
+-- Smart Follow por Nome - Versão Movimento Instantâneo (Original e com Auto-Desligamento Inteligente)
 local Objects = { 
     1385, 1386, 1387, 1388, 369, 370, 434, 435, 1948, 5543, 7725, 19183, 19184,
     411, 412, 413, 414, 432, 433, 459, 460, 475, 476, 479, 480, 2984, 2985, 5732,
@@ -437,10 +437,35 @@ local function stableWalk(targetPos)
     end
 end
 
--- A macro principal agora roda super leve apenas para checar portas e escadas de tempo em tempo
-followMacro = macro(450, "Smart Follow", function() 
+followMacro = macro(400, "Smart Follow", function() 
     if not g_game.isOnline() then return end
     
+    -- ============================================================================
+    -- SENSOR ANTI-MANCADA: O próprio follow se desliga se houver uma Rift na tela!
+    -- Isso previne 100% das falhas de concorrência com o DepositGold
+    -- ============================================================================
+    local player = g_game.getLocalPlayer()
+    if player then
+        local pPos = player:getPosition()
+        if pPos then
+            -- Varredura ultra-rápida de 5 SQMs ao redor apenas no topo dos blocos
+            for x = -5, 5 do
+                for y = -5, 5 do
+                    local t = g_map.getTile({x = pPos.x + x, y = pPos.y + y, z = pPos.z})
+                    if t then
+                        local top = t:getTopUseThing()
+                        if top and top:getId() == 11843 then
+                            followMacro:setOff()
+                            modules.game_textmessage.displayStatusMessage("[Rift Detectada] Smart Follow desligado por segurança!")
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end
+    -- ============================================================================
+
     local targetName = tostring(storage.followTargetName or "")
     targetName = targetName:gsub("^%s*(.-)%s*$", "%1"):lower()
     if targetName == "" or targetName == "nome do player" then return end
@@ -449,7 +474,6 @@ followMacro = macro(450, "Smart Follow", function()
     if not myPlayer then return end
     local myPos = myPlayer:getPosition()
 
-    -- Procura o líder na tela para manter o rastro atualizado
     for _, spec in ipairs(getSpectators(myPos)) do
         if spec:isPlayer() and spec:getName():lower() == targetName then
             toFollowPos[myPos.z] = spec:getPosition()
@@ -462,7 +486,6 @@ followMacro = macro(450, "Smart Follow", function()
 
     local dist = getDistanceBetween(myPos, lastLeaderPosInMyFloor)
 
-    -- CHECAGEM DE PORTAS E ESCADAS (Gasto de CPU controlado)
     if dist > 1 then
         for x = -1, 1 do
             for y = -1, 1 do
@@ -488,12 +511,10 @@ followMacro = macro(450, "Smart Follow", function()
     end
 end)
 
--- INTERFACE DO BOTÃO
 addTextEdit("followTargetName", storage.followTargetName or "Nome do Player", function(widget, text)
     storage.followTargetName = text
 end)
 
--- O SEGREDO DA VELOCIDADE: Reage instantaneamente ao passo do líder (Sem loops, Sem lag)
 onCreaturePositionChange(function(creature, newPos, oldPos)
     if not g_game.isOnline() or not newPos or (followMacro and followMacro:isOff()) then return end
     
@@ -501,7 +522,6 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
     targetName = targetName:gsub("^%s*(.-)%s*$", "%1"):lower()
     if targetName == "" then return end
     
-    -- Se quem se moveu foi o líder que você está seguindo
     if creature:getName():lower() == targetName then
         toFollowPos[newPos.z] = newPos
         
@@ -512,7 +532,7 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
         if newPos.z == myPos.z then
             local dist = getDistanceBetween(myPos, newPos)
             if dist > 1 then
-                stableWalk(newPos) -- Dá o passo grudado no líder imediatamente
+                stableWalk(newPos) 
             end
         end
     end
@@ -2950,44 +2970,60 @@ else
 end
 end)
 
--- BugMap AWSD/Setas/NumPad Otimizado (Sem Slow e Totalmente Funcional)
+-- BugMap AWSD/Setas/NumPad Ultra Velocidade (Bruto e Sem Atraso)
 local consoleModule = modules.game_console
-local cachedPos = {x = 0, y = 0, z = 0} -- Reaproveita a tabela para economizar memória
+local cachedPos = {x = 0, y = 0, z = 0} -- Reaproveita a tabela para economizar memória RAM
+
 local function checkPos(x, y)
     local player = g_game.getLocalPlayer()
-    if not player then return end
+    if not player then return false end
     
     if consoleModule and type(consoleModule.isChatEnabled) == "function" and consoleModule:isChatEnabled() then 
-        return 
+        return false 
     end
-    local playerPos = player:getPosition()
-    if not playerPos then return end
 
-    -- Modifica a tabela na memória sem recriar uma nova
+    local playerPos = player:getPosition()
+    if not playerPos then return false end
+
+    -- Altera os valores na tabela da memória sem instanciar uma nova
     cachedPos.x = playerPos.x + x
     cachedPos.y = playerPos.y + y
     cachedPos.z = playerPos.z
+
     local tile = g_map.getTile(cachedPos)
     if tile then
+        -- OTIMIZAÇÃO SUPREMA 8.54: Pega o item base (piso) diretamente no índice 1 do vetor.
+        -- Isso responde em 0ms e força o jogo a usar o chão instantaneamente, ativando a velocidade máxima!
+        local items = tile:getItems()
+        if items and items[1] then
+            g_game.use(items[1])
+            return true
+        end
+        
+        -- Fallback rápido caso seja um objeto interativo de cenário
         local topThing = tile:getTopUseThing()
         if topThing then
             g_game.use(topThing)
+            return true
         end
     end
+    return false
 end
+
 dash = macro(40, 'Bug Map', 'CTRL+3', function()
-    -- Se o chat estiver aberto, para a execução imediatamente
     if consoleModule and type(consoleModule.isChatEnabled) == "function" and consoleModule:isChatEnabled() then
         return
     end
+
     local gk = modules.corelib.g_keyboard
     if not gk or type(gk.isKeyPressed) ~= "function" then return end
-    -- GASTO DE CPU ZERO: Se nenhuma tecla estiver sendo pressionada, o código morre aqui
+
+    -- Só gasta processamento se o botão estiver ativamente pressionado
     if not (gk.isKeyPressed('w') or gk.isKeyPressed('e') or gk.isKeyPressed('d') or gk.isKeyPressed('c') or 
             gk.isKeyPressed('s') or gk.isKeyPressed('z') or gk.isKeyPressed('a') or gk.isKeyPressed('q')) then
         return
     end
-    -- Processa o movimento somente após confirmar que a tecla está realmente pressionada
+
     if gk.isKeyPressed('w') then checkPos(0, -5)
     elseif gk.isKeyPressed('e') then checkPos(3, -3)
     elseif gk.isKeyPressed('d') then checkPos(5, 0)
@@ -2998,9 +3034,11 @@ dash = macro(40, 'Bug Map', 'CTRL+3', function()
     elseif gk.isKeyPressed('q') then checkPos(-3, -3)
     end
 end)
+
 if dash and type(dash.setOff) == "function" then 
     dash:setOff() 
 end
+
 
 --Auto MWall na Frente do Alvo
 local MW_ID = 10571
@@ -3616,44 +3654,50 @@ local magicWallTime = 20000
 local wildGrowthId = 2130
 local wildGrowthTime = 45000
 local activeTimers = {}
+
 local function tempoAtual()
   return now or (os.time() * 1000)
 end
+
 local function obterChaveTile(tile)
   if not tile then return 0 end
   local pos = tile:getPosition()
   if not pos then return 0 end
   return (pos.x * 100000) + pos.y
 end
+
 -- EVENTO DE ADICIONAR: Mostra o tempo imediatamente na tela
 onAddThing(function(tile, thing)
-  -- FILTRO DE PERFORMANCE ABSOLUTO: Se não for um objeto válido ou não for um ITEM, aborta na hora.
-  -- Isso impede o bot de tentar ler propriedades de Criaturas, Efeitos e Tiros, eliminando os 103ms de lag.
-  if not thing or type(thing) ~= "userdata" or not thing.isItem or not thing:isItem() then return end
-  if not tile then return end
-  local itemId = thing:getId()
-  if itemId ~= magicWallId and itemId ~= wildGrowthId then return end
+  if not thing or not tile then return end
+  
+  -- OTIMIZAÇÃO CRÍTICA: Se não for um item ou for uma criatura, ignora na hora!
+  -- No 8.54, usar getId() direto em criatura/efeito quebra a CPU. Protegemos isso com pcall.
+  local status, itemId = pcall(function() return thing:getId() end)
+  if not status or not itemId or itemId > 20000 or (itemId ~= magicWallId and itemId ~= wildGrowthId) then 
+      return 
+  end
 
   local timer = (itemId == magicWallId) and magicWallTime or wildGrowthTime
   local tileKey = obterChaveTile(tile)
   if tileKey == 0 then return end
   local tempoAgora = tempoAtual()
-  -- Impede o reset visual se o timer já estiver rodando perfeitamente neste piso
+  
   if activeTimers[tileKey] and activeTimers[tileKey] > tempoAgora then
     return
   end
   activeTimers[tileKey] = tempoAgora + timer
-  -- Injeta o tempo regressivo de forma estável na tela
   tile:setTimer(timer)
 end)
+
 -- EVENTO DE REMOVER: Apaga o tempo se a barreira sumir antes da hora
 onRemoveThing(function(tile, thing)
-  -- Aplica o mesmo filtro rápido de tipo na remoção
-  if not thing or type(thing) ~= "userdata" or not thing.isItem or not thing:isItem() then return end
-  if not tile then return end
+  if not thing or not tile then return end
 
-  local itemId = thing:getId()
-  if itemId ~= magicWallId and itemId ~= wildGrowthId then return end
+  -- OTIMIZAÇÃO CRÍTICA 2: Evita chamadas de métodos inválidos em criaturas mortas
+  local status, itemId = pcall(function() return thing:getId() end)
+  if not status or not itemId or itemId > 20000 or (itemId ~= magicWallId and itemId ~= wildGrowthId) then 
+      return 
+  end
 
   local tileKey = obterChaveTile(tile)
   if tileKey ~= 0 then
@@ -3661,6 +3705,7 @@ onRemoveThing(function(tile, thing)
     tile:setTimer(0) -- Reseta o visor do piso
   end
 end)
+
 
 --SafeFightSync
 local ultimoEstadoSeguro = nil
@@ -3937,7 +3982,7 @@ if TargetBot and TargetBot.Creature then
     end
 end
 
--- CaveBot Walker Otimizado (Andada Fluida Sem Lag)
+-- CaveBot Walker Otimizado
 if CaveBot and type(CaveBot.delay) == "function" then
     -- Proteção de Reload para não duplicar ponteiros na memória RAM
     if not CaveBot.oldDelayOriginalPointer then
@@ -3961,9 +4006,22 @@ if CaveBot and type(CaveBot.delay) == "function" then
     end
 end
 
--- ============================================================================
--- REESCRITURA COMPACTA DO TARGETBOT (Controle de FPS e Frequência Estática)
--- ============================================================================
+-- TargetBot
+-- Função auxiliar para varrer e domar a macro original do target.lua
+local function domarMacroOriginalTarget()
+    -- Procura o botão do target na lista nativa de macros do bot
+    local macroOriginal = getMacro and getMacro("Target") or macroList and macroList["Target"]
+    if macroOriginal and type(macroOriginal.setOff) == "function" then
+        -- Se ela estiver ativa na frequência errada de 100ms, desliga e força 500ms saudáveis!
+        if macroOriginal:isOn() and macroOriginal.delay < 300 then
+            macroOriginal:setOff()
+            macroOriginal.delay = 500
+            macroOriginal:setOn(true)
+        end
+    end
+end
+
+-- Injeta a verificação na nossa estrutura estática de criaturas
 if TargetBot and type(TargetBot.getCreatures) == "function" then
     local oldGetCreatures = TargetBot.getCreatures
     local getLocalPlayer = g_game.getLocalPlayer
@@ -3974,11 +4032,13 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
     local listaFiltradaCache = {}
 
     TargetBot.getCreatures = function(...)
+        -- OTIMIZAÇÃO DE OURO: Domina a macro original assim que ela tenta acordar
+        pcall(domarMacroOriginalTarget)
+
         local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
         
-        -- FREIO SUPREMO: Força o motor original a respirar por 450ms.
-        -- Bloqueia os picos de 176ms esporádicos e de inicialização de forma direta!
-        if agora - ultimoTempoProcessado < 450 then
+        -- FREIO DE CPU: Força o processamento de monstros a rodar estritamente a cada 500ms
+        if agora - ultimoTempoProcessado < 500 then
             return listaFiltradaCache
         end
         ultimoTempoProcessado = agora
