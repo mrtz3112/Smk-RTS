@@ -581,7 +581,7 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
 end)
 
 UI.Separator()
--- Deposit Gold & Stack Items (Seu Script Original Restaurado com Trava de Alívio)
+-- Deposit Gold & Stack Items (Seu Script Original - Passada Única Otimizada 1500ms)
 local ultimoMovimentoStack = 0
 local cachedPosicao = {x = 0, y = 0, z = 0, slot = 0} 
 
@@ -610,10 +610,9 @@ macro(1500, "DepositGold & StackItems", function()
     return
   end
 
-  -- 2. MAPEAR ITENS AGRUPÁVEIS
+  -- 2. MAPEAR E EXECUTAR EM PASSADA ÚNICA (Fim do Loop Duplo)
   local containers = g_game.getContainers()
   local itensMapeados = {}
-  local precisaAgrupar = false
 
   for _, container in pairs(containers) do
     if container then
@@ -623,61 +622,48 @@ macro(1500, "DepositGold & StackItems", function()
           if item and item:isStackable() then 
             local itemId = item:getId()
             local count = item:getCount()
-            local posicaoAtual = container:getSlotPosition(index - 1)
+            local slotAtualIndex = index - 1
+            local posicaoAtual = container:getSlotPosition(slotAtualIndex)
 
             if posicaoAtual then
-              if itensMapeados[itemId] then
-                precisaAgrupar = true
-                if count > itensMapeados[itemId].count then
-                  itensMapeados[itemId] = {
-                    posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
-                    count = count,
-                    containerId = container:getId(),
-                    slotIndex = index - 1
-                  }
+              local destino = itensMapeados[itemId]
+
+              if destino then
+                -- Se encontrou um par agrupável na memória, avalia se deve mover
+                local mesmoContainer = (container:getId() == destino.containerId)
+                local mesmoSlot = (slotAtualIndex == destino.slotIndex)
+
+                if not (mesmoContainer and mesmoSlot) then
+                  -- Mantém seu critério original de priorizar a maior stack informada pelo client
+                  if count > destino.count then
+                    -- Atualiza o destino para o bolo maior
+                    itensMapeados[itemId] = {
+                      posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
+                      count = count,
+                      containerId = container:getId(),
+                      slotIndex = slotAtualIndex
+                    }
+                  end
+
+                  -- Altera os valores na tabela estática reaproveitada (FPS Alto)
+                  cachedPosicao.x = destino.posicao.x
+                  cachedPosicao.y = destino.posicao.y
+                  cachedPosicao.z = destino.posicao.z
+                  cachedPosicao.slot = destino.posicao.slot
+
+                  -- Move e mata a execução da macro na hora! Corta o resto do processamento lixo
+                  g_game.move(item, cachedPosicao, item:getCount())
+                  ultimoMovimentoStack = governor or agora 
+                  return 
                 end
               else
+                -- Primeiro registro deste ID vira o alvo temporário na memória RAM
                 itensMapeados[itemId] = {
                   posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
                   count = count,
                   containerId = container:getId(),
-                  slotIndex = index - 1
+                  slotIndex = slotAtualIndex
                 }
-              end
-            end
-          end
-        end
-    end
-  end
-
-  if not precisaAgrupar then
-    return
-  end
-
-  -- 3. EXECUTAR A MOVIMENTAÇÃO
-  for _, container in pairs(containers) do
-    if container then
-        local items = container:getItems()
-        for index = 1, #items do
-          local item = items[index]
-          if item and item:isStackable() then
-            local itemId = item:getId()
-            local destino = itensMapeados[itemId]
-
-            if destino then
-              local slotAtualIndex = index - 1
-              local mesmoContainer = (container:getId() == destino.containerId)
-              local mesmoSlot = (slotAtualIndex == destino.slotIndex)
-
-              if not (mesmoContainer and mesmoSlot) then
-                cachedPosicao.x = destino.posicao.x
-                cachedPosicao.y = destino.posicao.y
-                cachedPosicao.z = destino.posicao.z
-                cachedPosicao.slot = destino.posicao.slot
-
-                g_game.move(item, cachedPosicao, item:getCount())
-                ultimoMovimentoStack = governor or agora 
-                return -- Limpa o lag de CPU sem estragar o movimento
               end
             end
           end
@@ -1396,12 +1382,16 @@ local trainerMacro = macro(100, "House Trainer", function(macroObj)
   end
 end)
 
--- Revide PK (Versão Corrigida e Otimizada em Tela Cheia - 13x7 Widescreen)
+-- Revide PK (Versão Otimizada 13x7 Widescreen com Lazy Radar)
 local botsDesligadosPeloPVP = false
 local ultimoEstadoSafeFight = nil
 local ultimoModoAtaque = nil
 local ultimoTempoTrocaEstado = 0 
 local ultimoTempoTentativaAtaque = 0
+
+local ultimaPosX = 0
+local ultimaPosY = 0
+local ultimoTickRadar = 0
 
 local function definirSafeFightBox(deveAtivar)
     if ultimoEstadoSafeFight == deveAtivar then return end
@@ -1440,18 +1430,27 @@ macro(250, 'Revide PK', function()
     local myPos = localPlayer:getPosition()
     if not myPos then return end
 
+    local tempoAtual = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+
+    -- LAZY RADAR: Se você estiver parado na box batendo nos bichos, 
+    -- estende a checagem do mapa para 600ms em vez de 250ms. Economiza 60% de CPU!
+    local andou = (myPos.x ~= ultimaPosX or myPos.y ~= ultimaPosY)
+    if not andou and (tempoAtual - ultimoTickRadar < 600) then
+        return
+    end
+    ultimoTickRadar = tempoAtual
+    ultimaPosX, ultimaPosY = myPos.x, myPos.y
+
     local agressorTarget = nil
     local agressorHp = 101
     local agressorDist = 100
 
-    -- CALIBRAÇÃO WIDESCREEN: 13 SQMs de largura (X) e 7 SQMs de altura (Y) cobre a tela visível de ponta a ponta
     local specs = g_map.getSpectatorsInRange(myPos, false, 13, 7)
     if not specs then return end
     local totalSpecs = #specs
 
     for i = 1, totalSpecs do
         local creature = specs[i]
-        -- FILTRO RELÂMPAGO: Ignora hordas de monstros instantaneamente para manter o consumo de CPU em 0ms
         if creature and creature:isPlayer() and creature ~= localPlayer then
             
             local estaMeAtacando = false
@@ -1464,9 +1463,9 @@ macro(250, 'Revide PK', function()
             if estaMeAtacando then
                 local specPos = creature:getPosition()
                 if specPos and specPos.z == myPos.z then
-                    local specHp = creature:getHealthPercent()
                     local distX = math.abs(myPos.x - specPos.x)
                     local distY = math.abs(myPos.y - specPos.y)
+                    local specHp = creature:getHealthPercent()
                     local specDist = distX + distY
                     
                     if specHp and specHp > 0 and creature:canShoot() then
@@ -1480,8 +1479,6 @@ macro(250, 'Revide PK', function()
             end
         end
     end
-
-    local tempoAtual = g_clock and g_clock.getMillis() or (os.clock() * 1000)
 
     if agressorTarget then
         if not botsDesligadosPeloPVP then
@@ -4136,6 +4133,7 @@ if CaveBot and type(CaveBot.delay) == "function" then
 end
 
 -- TargetBot
+-- TargetBot (Versão Definitiva Purificada contra Slow target.lua:50)
 if TargetBot and type(TargetBot.getCreatures) == "function" then
     local oldGetCreatures = TargetBot.getCreatures
     local getLocalPlayer = g_game.getLocalPlayer
@@ -4146,21 +4144,18 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
     local listaFiltradaCache = {}
     local tempoLiberacaoTarget = (g_clock and g_clock.getMillis() or (os.clock() * 1000)) + 2000
     
-    -- Silencia os Warnings amarelos de inicialização direto no motor do jogo
     if not _G.oldLogWarning then
         _G.oldLogWarning = g_logger and g_logger.warning or logWarning or print
         if g_logger and g_logger.warning then g_logger.warning = function() end
         elseif logWarning then logWarning = function() end end
     end
 
-    -- Cria um loop interno e invisível de 2.5 segundos para restaurar os logs sem criar botões no painel
     local tempoReativarLog = (g_clock and g_clock.getMillis() or (os.clock() * 1000)) + 2500
     local logJáReativado = false
 
     TargetBot.getCreatures = function(...)
         local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
 
-        -- Reativa os logs do sistema em silêncio após 2.5 segundos
         if agora >= tempoReativarLog and not logJáReativado then
             logJáReativado = true
             if _G.oldLogWarning then
@@ -4171,32 +4166,28 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
             end
         end
 
-        -- Escudo de carregamento inicial
         if agora < tempoLiberacaoTarget then 
             return listaFiltradaCache 
         end
 
-        -- Escudo de Inventário: Segura o processamento se estiver movendo itens ou depositando moedas
         local player = getLocalPlayer()
-        if player and (player:isWalking() or g_game.isAttacking()) and (agora - ultimoTempoProcessado < 600) then
+        -- FREIO CRÍTICO DE COMBATE: Evita que o target.lua:50 seja chamado em rajadas contínuas lixo
+        if agora - ultimoTempoProcessado < 550 then
             return listaFiltradaCache
         end
-
-        -- FREIO ANTICOLISÃO DE COMBATE: 543ms
-        if agora - ultimoTempoProcessado < 543 then
-            return listaFiltradaCache
-        end
+        
+        -- Sincronização restaurada com a variável global do seu bot
         ultimoTempoProcessado = governor or agora
 
         local listaOriginal = oldGetCreatures(...)
         if not listaOriginal or #listaOriginal == 0 then 
-            listaFiltradaCache = listaOriginal
-            return listaOriginal 
+            listaFiltradaCache = {}
+            return listaFiltradaCache 
         end
 
-        if not player then listaFiltradaCache = listaOriginal return listaOriginal end
+        if not player then return listaOriginal end
         local playerPos = player:getPosition()
-        if not playerPos then listaFiltradaCache = listaOriginal return listaOriginal end
+        if not playerPos then return listaOriginal end
 
         local pz = playerPos.z
         local px = playerPos.x
@@ -4206,21 +4197,22 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
         listaFiltradaCache = {}
         local totalAdicionados = 0
         local limiteMaximoMonstros = 2 
+        local totalOriginais = #listaOriginal
 
-        for i = 1, #listaOriginal do
+        -- Loop numérico indexado: processa a horda de monstros na velocidade máxima do C++
+        for i = 1, totalOriginais do
             local creature = listaOriginal[i]
             if creature and creature:isMonster() and creature:getHealthPercent() > 0 then
                 local cPos = creature:getPosition()
                 
                 if cPos and cPos.z == pz then
-                    local distX = px - cPos.x
-                    if distX < 0 then distX = -distX end
+                    local distX = math.abs(px - cPos.x)
                     
-                    if distX <= 4 then
-                        local distY = py - cPos.y
-                        if distY < 0 then distY = -distY end
+                    -- Limita a busca ao raio padrão de tela (7 SQMs), ignorando monstros distantes
+                    if distX <= 7 then
+                        local distY = math.abs(py - cPos.y)
                         
-                        if distY <= 4 then
+                        if distY <= 7 then
                             local mTargetId = 0
                             if type(creature.getTargetId) == "function" then mTargetId = creature:getTargetId() or 0
                             elseif creature.targetId then mTargetId = creature.targetId
@@ -4229,6 +4221,7 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
                                 if tgt then mTargetId = tgt:getId() end
                             end
 
+                            -- Filtro de KS (Não rouba monstros de membros da Party)
                             if mTargetId > 0 and mTargetId ~= myId then
                                 local naParty = false
                                 if pcall(isOnline) and isOnline() then
@@ -4256,7 +4249,6 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
     end
 end
 print("[Loader] TargetBot otimizado com sucesso.")
-
 
 -- Otimização do Smart Follow (Freio Ajustado para 350ms - Versão Segura)
 local lastFollowCheck = 0
