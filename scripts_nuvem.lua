@@ -2329,8 +2329,6 @@ macro(100, function()
         if (tempoAgora - ultimoUsoBarreira) >= DELAY_SEGUNDOS then
             say(storage.autobarrier)
             ultimoUsoBarreira = tempoAgora
-            
-            print("[Barrier] Magia conjurada! Aguardando " .. DELAY_SEGUNDOS .. " segundos de recarga.")
         end
     end
   end
@@ -3717,7 +3715,6 @@ macro(200, function()
                 pcall(function() g_game.setSafeFight(false) end) 
             end
             ultimoEstadoSeguro = true
-            print("[Loader] PvP ativado.")
         end
     else
         if ultimoEstadoSeguro ~= false then
@@ -3725,7 +3722,6 @@ macro(200, function()
                 pcall(function() g_game.setSafeFight(true) end) 
             end
             ultimoEstadoSeguro = false
-            print("[Loader] PvP desativado.")
         end
     end
 end)
