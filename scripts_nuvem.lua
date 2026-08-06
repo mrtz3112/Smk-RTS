@@ -1352,14 +1352,14 @@ local trainerMacro = macro(100, "House Trainer", function(macroObj)
     g_game.attack(closestTrainer)
   end
 end)
--- Revide PK (Otimizado com Trava de UI, Varredura por Raio e Cooldown de Estado)
+-- Revide PK (Versão Ultra-Otimizada com Ataque Nativo C++ - Lag Zero)
 local botsDesligadosPeloPVP = false
 local ultimoEstadoSafeFight = nil
 local ultimoModoAtaque = nil
-local ultimoTempoTrocaEstado = 0 -- Armazena o timestamp da última alteração de botões
+local ultimoTempoTrocaEstado = 0 
+local ultimoTempoTentativaAtaque = 0
 
 local function definirSafeFightBox(deveAtivar)
-    -- OTIMIZAÇÃO CRÍTICA: Se a interface já está no estado correto, não clica para economizar CPU
     if ultimoEstadoSafeFight == deveAtivar then return end
     
     local mapPanel = modules.game_interface and modules.game_interface.gameMapPanel
@@ -1377,7 +1377,6 @@ local function definirSafeFightBox(deveAtivar)
 end
 
 local function definirModoAtaque(modo)
-    -- OTIMIZAÇÃO CRÍTICA: Impede cliques fantasmas repetitivos se já estiver no modo desejado
     if ultimoModoAtaque == modo then return end
     
     local rootWidget = g_ui.getRootWidget()
@@ -1398,6 +1397,8 @@ local function definirModoAtaque(modo)
 end
 
 macro(250, 'Revide PK', function()
+    if not g_game.isOnline() then return end
+    
     local localPlayer = g_game.getLocalPlayer()
     if not localPlayer then return end
 
@@ -1408,11 +1409,10 @@ macro(250, 'Revide PK', function()
     local agressorHp = 101
     local agressorDist = 100
 
-    -- OTIMIZAÇÃO: Busca espectadores limitados ao raio visível de tela (8 SQMs)
     local specs = g_map.getSpectatorsInRange(myPos, false, 8, 8)
+    if not specs then return end
     local totalSpecs = #specs
 
-    -- Loop numérico puro (Muito mais rápido que ipairs no OTClient)
     for i = 1, totalSpecs do
         local creature = specs[i]
         if creature and creature:isPlayer() and creature ~= localPlayer then
@@ -1432,7 +1432,6 @@ macro(250, 'Revide PK', function()
                     
                     if specHp and specHp > 0 then
                         if creature:canShoot() then
-                            -- Seleção inteligente de alvo PK (Foca no mais fraco ou mais próximo)
                             if not agressorTarget or specHp < agressorHp or (specHp == agressorHp and specDist < agressorDist) then
                                 agressorTarget = creature
                                 agressorHp = specHp
@@ -1445,11 +1444,12 @@ macro(250, 'Revide PK', function()
         end
     end
 
-    local tempoAtual = os.time() * 1000 -- Obtém o tempo atual em milissegundos
+    -- Relógio interno de alta precisão do cliente
+    local tempoAtual = g_clock and g_clock.getMillis() or (os.clock() * 1000)
 
     if agressorTarget then
         if not botsDesligadosPeloPVP then
-            -- Verifica se já se passaram 6000ms desde a última alteração de botões na interface
+            -- Trava de interface de 6 segundos corrigida para milissegundos reais (6000ms)
             if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
                 if CaveBot and CaveBot.setOff then CaveBot.setOff() end
                 if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
@@ -1458,20 +1458,20 @@ macro(250, 'Revide PK', function()
                 definirSafeFightBox(true)       
 
                 botsDesligadosPeloPVP = true
-                ultimoTempoTrocaEstado = tempoAtual -- Atualiza o tempo do último clique
+                ultimoTempoTrocaEstado = tempoAtual 
             end
         end
-        if g_game.getAttackingCreature() ~= agressorTarget then
-            pcall(function()
-                modules.game_interface.processMouseAction(nil, 2, myPos, nil, agressorTarget, agressorTarget)
-            end)
+        
+        -- OTIMIZAÇÃO CRÍTICA: Só envia o pacote de ataque se você já não estiver batendo nele,
+        -- e aplica um freio de 1000ms entre tentativas para não flodar a rede e dar Slow!
+        if g_game.getAttackingCreature() ~= agressorTarget and (tempoAtual - ultimoTempoTentativaAtaque >= 1000) then
+            g_game.attack(agressorTarget) -- Comando nativo em C++ direto ao servidor (0ms CPU)
+            ultimoTempoTentativaAtaque = tempoAtual
         end
     else
-        -- Só executa a limpeza se o modo PVP tiver sido ativado anteriormente
         if botsDesligadosPeloPVP then
             local alvoAtualJogo = g_game.getAttackingCreature()
             if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
-                -- Verifica se já se passaram 6000ms desde a última alteração para poder resetar o modo
                 if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
                     definirSafeFightBox(false)           
                     definirModoAtaque("offensive")
@@ -1480,12 +1480,13 @@ macro(250, 'Revide PK', function()
                     if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
                     
                     botsDesligadosPeloPVP = false
-                    ultimoTempoTrocaEstado = tempoAtual -- Atualiza o tempo do último clique
+                    ultimoTempoTrocaEstado = tempoAtual 
                 end
             end
         end
     end
 end)
+
 UI.Separator()
 --Eat Food
 local panelName = "AutoFood"
@@ -2268,7 +2269,7 @@ setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Survival ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
--- Fast Regen (Versão Otimizada com Proteção de Cooldown e Cache)
+-- Fast Regen (Versão Otimizada - Apenas Botão Healing Visível)
 local panelName = "selfregen"
 local ui = setupUI([[
 Panel
@@ -2295,7 +2296,6 @@ Panel
 ]], parent)
 ui:setId(panelName)
 
--- CORREÇÃO: Removido a variável inexistente 'enabled' que quebrava o salvamento do painel
 if not storage[panelName] then
   storage[panelName] = {
       enabled = false,
@@ -2323,7 +2323,6 @@ ui.HP.onValueChange = function(scroll, value)
 end
 ui.HP:setValue(storage[panelName].hp)
 
--- Cache local na memória RAM para poupar processamento contínuo da CPU
 local cacheHealSpell = storage.autohealspell1 or "regeneration"
 
 UI.TextEdit(storage.autohealspell1 or "regeneration", function(widget, text)    
@@ -2333,28 +2332,27 @@ UI.TextEdit(storage.autohealspell1 or "regeneration", function(widget, text)
 end)
 
 local ultimoTempoRegen = 0
--- COOLDOWN: Intervalo de 1 segundo (1000ms) para não floodar pacotes e bugar o TargetBot
 local COOLDOWN_REGEN = 1000 
 
-macro(500, "Fast Regen Loop", function()
+-- CORREÇÃO: Removido o nome de identificação para a macro rodar em background (Sem criar botões extras)
+macro(500, function()
   if not g_game.isOnline() or not storage[panelName].enabled then return end
 
   if storage[panelName].setting and cacheHealSpell ~= "" then
     if hppercent() <= storage[panelName].hp then
         local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
         
-        -- FREIO DE RAJADA: Só envia o pacote de fala se o tempo mínimo já passou
         if agora - ultimoTempoRegen < COOLDOWN_REGEN then
             return
         end
         
         say(cacheHealSpell)
-        ultimoTempoRegen = agora -- Grava o milissegundo do uso atual
+        ultimoTempoRegen = agora 
     end
   end
 end)
 UI.Separator()
--- Mana Shield (Versão Otimizada com Precisão de Cooldown e Cache de Memória)
+-- Mana Shield (Versão Otimizada - Apenas Botão Mana Shield Visível)
 local panelName = "manabarrier"
 local ui = setupUI([[
 Panel
@@ -2381,7 +2379,6 @@ Panel
 ]], parent)
 ui:setId(panelName)
 
--- CORREÇÃO: Removido a variável inexistente 'enabled' que quebrava o salvamento do painel
 if not storage[panelName] then
   storage[panelName] = {
       enabled = false,
@@ -2409,7 +2406,6 @@ ui.HP.onValueChange = function(scroll, value)
 end
 ui.HP:setValue(storage[panelName].hp)
 
--- Cache local para poupar processamento contínuo da CPU
 local cacheBarrierSpell = storage.autobarrier or "reiatsu barrier"
 
 UI.TextEdit(storage.autobarrier or "reiatsu barrier", function(widget, text)    
@@ -2419,17 +2415,16 @@ UI.TextEdit(storage.autobarrier or "reiatsu barrier", function(widget, text)
 end)
 
 local ultimoUsoBarreira = 0
--- Convertido para milissegundos para usar o relógio do motor gráfico (Ultra Precisão)
 local COOLDOWN_BARREIRA = 46000 
 
-macro(100, "Mana Shield Loop", function()
+-- CORREÇÃO: Removido o nome de identificação para a macro rodar em background (Sem botões fantasmas)
+macro(100, function()
   if not g_game.isOnline() or not storage[panelName].enabled then return end
   
   if storage[panelName].setting and cacheBarrierSpell ~= "" then
     if hppercent() <= storage[panelName].hp then
         local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
         
-        -- Executa puramente com base no relógio de alta precisão do cliente do jogo
         if (agora - ultimoUsoBarreira) >= COOLDOWN_BARREIRA then
             say(cacheBarrierSpell)
             ultimoUsoBarreira = agora
@@ -3777,33 +3772,50 @@ macro(1000, function()
     end
 end)
 
--- Magic wall Timer (Versão Definitiva Ultra-Otimizada - Anti-Lag Hunt)
+-- Magic wall Timer (Versão Avançada Anti-Lag com Pulverização de CPU)
 local magicWallId = 10980
+local ultimoProcessoAdd = 0
+local ultimoProcessoRemove = 0
 
 onAddThing(function(tile, thing)
-  -- FILTRO RELÂMPAGO: Se não for um ITEM (ignora monstros/players/efeitos) ou não for a Mwall, aborta em 0ms
+  -- FILTRO ULTRA RÁPIDO: Isola criaturas/efeitos visuais em 0ms
   if not thing or not thing:isItem() or thing:getId() ~= magicWallId or not tile then 
     return 
   end
 
-  -- Se o visor de tempo nativo do C++ já estiver ativo, pula para economizar RAM
+  local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+  -- FREIO DE RAJADA: Se o client tentar adicionar dezenas de Mwalls no exato mesmo milissegundo,
+  -- cria um micro-espaçamento de 10ms para a thread do jogo não engasgar a tela!
+  if agora - ultimoProcessoAdd < 10 then
+    return
+  end
+  ultimoProcessoAdd = agora
+
   if type(tile.getTimer) == "function" and tile:getTimer() > 0 then return end
   
   if type(tile.setTimer) == "function" then
-    tile:setTimer(20000) -- Grava os 20 segundos direto na memória do jogo
+    tile:setTimer(20000) 
   end
 end)
 
 onRemoveThing(function(tile, thing)
-  -- FILTRO RELÂMPAGO: Aplica a mesma regra rápida na remoção
+  -- FILTRO ULTRA RÁPIDO: Isola criaturas/efeitos visuais em 0ms
   if not thing or not thing:isItem() or thing:getId() ~= magicWallId or not tile then 
     return 
   end
+
+  local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+  -- FREIO DE RAJADA: Aplica o mesmo micro-espaçamento de 10ms para pulverizar o pico de 331ms
+  if agora - ultimoProcessoRemove < 10 then
+    return
+  end
+  ultimoProcessoRemove = agora
   
   if type(tile.setTimer) == "function" then
-    tile:setTimer(0) -- Reseta o visor do quadrado imediatamente
+    tile:setTimer(0) 
   end
 end)
+
 
 
 --SafeFightSync
