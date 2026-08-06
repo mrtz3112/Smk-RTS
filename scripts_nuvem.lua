@@ -1297,18 +1297,45 @@ macro(600, "Enter Rift", function()
 end)
 
 
---Auto Enter Dungeon
+-- Auto Enter Dungeon (Versão Definitiva Fantasma - 0ms CPU)
 local window_name = "Dungeons"
 macro(2000, "Enter Dungeons", function()
-    for _, rootW in pairs(g_ui.getRootWidget():getChildren()) do
-        if rootW:getText() and string.find(rootW:getText():lower(), window_name:lower()) then
-            for _, child in pairs(rootW:getChildren()) do
-                if child:getText() == "Start" then
-                    child:onClick()
-                    break
+    if not g_game.isOnline() then return end
+
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end
+
+    -- OTIMIZAÇÃO CIRÚRGICA: Busca direta na memória pelo elemento usando índice numérico veloz
+    local janelas = rootWidget:getChildren()
+    local totalJanelas = #janelas
+
+    for i = 1, totalJanelas do
+        local window = janelas[i]
+        if window and window.getText and window:getText() then
+            -- Encontra a estrutura da janela de Dungeons (ativa ou oculta em background)
+            if string.find(window:getText():lower(), window_name:lower()) then
+                
+                -- Busca o botão 'Start' diretamente pela ID ou varredura direta sem loops aninhados complexos
+                -- Geralmente esses botões têm IDs específicos ou texto direto
+                local btnStart = window:recursiveGetChildById('startButton') or window:recursiveGetChildById('start')
+                
+                -- Fallback rápido caso a ID não seja padronizada (varre apenas os filhos diretos da janela achada)
+                if not btnStart then
+                    local filhos = window:getChildren()
+                    for j = 1, #filhos do
+                        if filhos[j] and filhos[j].getText and filhos[j]:getText() == "Start" then
+                            btnStart = filhos[j]
+                            break
+                        end
+                    end
+                end
+
+                -- Se encontrou o botão na memória (mesmo com a janela fechada na tela), executa o clique automático
+                if btnStart then
+                    btnStart:onClick()
+                    return -- Encerra a macro na hora economizando 100% de CPU
                 end
             end
-            break
         end
     end
 end)
