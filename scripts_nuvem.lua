@@ -4187,3 +4187,32 @@ macro(5000, function()
     end
 end)
 print("[Loader] Estabilizador de performance e tabelas injetado de forma nativa.")
+
+
+-- GOVERNOR DE INVENTÁRIO (Zerar o Slow do DepositGold & StackItems:589)
+if g_game and type(g_game.move) == "function" then
+    if not g_game.oldMoveOriginalPointer then
+        g_game.oldMoveOriginalPointer = g_game.move
+    end
+
+    local originalMove = g_game.oldMoveOriginalPointer
+    local ultimoItemMovidoTempo = 0
+
+    g_game.move = function(item, toPos, count, ...)
+        local agoraMove = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+
+        -- FREIO DE RAJADA DE ITENS: Se o bot tentar arrastar moedas/itens 
+        -- em uma velocidade menor que 45ms, força um mini-espaçamento.
+        -- Isso evita que o DepositGold entupa a thread do jogo de uma vez só!
+        if agoraMove - ultimoItemMovidoTempo < 45 then
+            -- Adiciona um atraso artificial pequeno no agendador nativo para pulverizar o lag
+            if CaveBot and type(CaveBot.delay) == "function" then
+                CaveBot.delay(30)
+            end
+        end
+        
+        ultimoItemMovidoTempo = agoraMove
+        return originalMove(item, toPos, count, ...)
+    end
+end
+print("[Loader] Governor de movimentacao de itens injetado com sucesso.")
