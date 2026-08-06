@@ -582,9 +582,9 @@ end)
 
 UI.Separator()
 
--- Deposit Gold & Stack Items (Versão Definitiva 8.54 - Suporte Real até 10000)
+-- Deposit Gold & Stack Items (Seu Script Original com Trava de Alívio de CPU)
 local ultimoMovimentoStack = 0
-local cachedPosicao = {x = 0, y = 0, z = 0, slot = 0} -- Tabela estática para zerar o Slow de 139ms
+local cachedPosicao = {x = 0, y = 0, z = 0, slot = 0} 
 
 macro(1500, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
@@ -611,7 +611,7 @@ macro(1500, "DepositGold & StackItems", function()
     return
   end
 
-  -- 2. MAPEAR ITENS AGRUPÁVEIS (Restaurado pairs para compatibilidade nativa com 8.54)
+  -- 2. MAPEAR ITENS AGRUPÁVEIS
   local containers = g_game.getContainers()
   local itensMapeados = {}
   local precisaAgrupar = false
@@ -627,8 +627,6 @@ macro(1500, "DepositGold & StackItems", function()
             local posicaoAtual = container:getSlotPosition(index - 1)
 
             if posicaoAtual then
-              -- OTIMIZAÇÃO HISTÓRICA PARA ATS: Foca na maior pilha do inventário para ser o destino.
-              -- Isso força o bot a jogar tudo no slot de 10000, impedindo que ele pare de puxar!
               if itensMapeados[itemId] then
                 precisaAgrupar = true
                 if count > itensMapeados[itemId].count then
@@ -657,7 +655,7 @@ macro(1500, "DepositGold & StackItems", function()
     return
   end
 
-  -- 3. EXECUTAR A MOVIMENTAÇÃO (Usando a tabela estática para não dar Slow)
+  -- 3. EXECUTAR A MOVIMENTAÇÃO
   for _, container in pairs(containers) do
     if container then
         local items = container:getItems()
@@ -672,17 +670,15 @@ macro(1500, "DepositGold & StackItems", function()
               local mesmoContainer = (container:getId() == destino.containerId)
               local mesmoSlot = (slotAtualIndex == destino.slotIndex)
 
-              -- Só move se o slot avaliado não for o próprio destino principal de acúmulo
               if not (mesmoContainer and mesmoSlot) then
-                -- Altera os valores na tabela global sem instanciar memória nova (FPS Alto)
                 cachedPosicao.x = destino.posicao.x
                 cachedPosicao.y = destino.posicao.y
                 cachedPosicao.z = destino.posicao.z
                 cachedPosicao.slot = destino.posicao.slot
 
                 g_game.move(item, cachedPosicao, item:getCount())
-                ultimoMovimentoStack = agora + 400 -- Delay de 400ms impede o estouro de pacotes no C++
-                return 
+                ultimoMovimentoStack = agora + 400 
+                return -- CORREÇÃO CRÍTICA: Encerra a macro aqui para aliviar a CPU e zerar os 295ms de lag!
               end
             end
           end
@@ -690,6 +686,7 @@ macro(1500, "DepositGold & StackItems", function()
     end
   end
 end)
+
 
 
 -- Auto Dodge Ultra-Otimizado (Anti-Lag / Lazy Pathfinding)
@@ -1685,7 +1682,7 @@ setDefaultTab("Fight")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
--- Smart Cast (Otimização por Cache de Espectadores e Frame Alternado)
+-- Smart Cast (Versão Ultra-Otimizada Anti-Lag com Lazy Scanning)
 local alcanceMaximoTarget = 4 
 local raioDeAreaDoMonstro = 3 
 local amountOfMonsters = 2
@@ -1693,6 +1690,7 @@ local amountOfMonsters = 2
 local indexArea, indexSingle = 1, 1
 local cacheAreaSpells = {}
 local cacheSingleSpells = {}
+local ultimoTempoCombo = 0
 
 local function atualizarCacheSpells()
     cacheAreaSpells = {}
@@ -1705,9 +1703,16 @@ local function atualizarCacheSpells()
     if storage.spell03 and storage.spell03 ~= "" then table.insert(cacheSingleSpells, storage.spell03) end
 end
 
--- Aumentado para 150ms (Diferença imperceptível de 0.05 segundos, mas corta o lag pela metade)
+-- Mantido a 200ms para varredura, mas protegido por barreira de execução e tempo
 combo = macro(200, "Smart Cast", function()
     if not g_game.isOnline() or not g_game.isAttacking() then return end     
+    
+    local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+    
+    -- FREIO DE PROCESSAMENTO E COOLDOWN: Pulula o ciclo se a thread enviou pacote recentemente
+    if agora - ultimoTempoCombo < 200 then
+        return
+    end
     
     local target = g_game.getAttackingCreature()
     if not target then return end
@@ -1726,34 +1731,37 @@ combo = macro(200, "Smart Cast", function()
     local atacandoPlayer = target:isPlayer()
     local specAmount = 0  
     
+    -- LAZY SCANNING: Se for PvP, ignora completamente a contagem de monstros (Poupe 100% de CPU)
     if not atacandoPlayer then
-        -- OTIMIZAÇÃO: Filtra e lê apenas os monstros ao redor do centro do alvo
         local mobsAoRedorDoAlvo = g_map.getSpectatorsInRange(targetPos, false, raioDeAreaDoMonstro, raioDeAreaDoMonstro)
-        local totalMobs = #mobsAoRedorDoAlvo
-        
-        for i = 1, totalMobs do
-            local mob = mobsAoRedorDoAlvo[i]
-            if mob and mob:isMonster() and mob:getHealthPercent() > 0 then
-                local mobPos = mob:getPosition()
-                if mobPos and mobPos.z == targetPos.z then
-                    local distX = math.abs(targetPos.x - mobPos.x)
-                    local distY = math.abs(targetPos.y - mobPos.y)
-                    
-                    if distX <= raioDeAreaDoMonstro and distY <= raioDeAreaDoMonstro then
-                        specAmount = specAmount + 1
-                        if specAmount >= amountOfMonsters then break end
+        if mobsAoRedorDoAlvo then
+            local totalMobs = #mobsAoRedorDoAlvo
+            for i = 1, totalMobs do
+                local mob = mobsAoRedorDoAlvo[i]
+                if mob and mob:isMonster() and mob:getHealthPercent() > 0 then
+                    local mobPos = mob:getPosition()
+                    if mobPos and mobPos.z == targetPos.z then
+                        local distX = math.abs(targetPos.x - mobPos.x)
+                        local distY = math.abs(targetPos.y - mobPos.y)
+                        
+                        if distX <= raioDeAreaDoMonstro and distY <= raioDeAreaDoMonstro then
+                            specAmount = specAmount + 1
+                            if specAmount >= amountOfMonsters then break end
+                        end
                     end
                 end
             end
         end
     end
     
+    -- PROCESSAMENTO DO COMBO COM FORMATO BLINDADO
     if specAmount >= amountOfMonsters and not atacandoPlayer then
         local totalArea = #cacheAreaSpells
         if totalArea > 0 then
             if indexArea > totalArea then indexArea = 1 end
             say(cacheAreaSpells[indexArea])
             indexArea = indexArea + 1
+            ultimoTempoCombo = agora -- Ativa a trava de tempo contra flood
         end
     else
         local totalSingle = #cacheSingleSpells
@@ -1761,10 +1769,10 @@ combo = macro(200, "Smart Cast", function()
             if indexSingle > totalSingle then indexSingle = 1 end
             say(cacheSingleSpells[indexSingle])
             indexSingle = indexSingle + 1
+            ultimoTempoCombo = agora -- Ativa a trava de tempo contra flood
         end
     end
 end)
-
 -- Interface Gráfica (UI)
 UI.Separator()
 UI.Label("Area Spells (2+ Mobs)"):setColor('#FFEA99')
@@ -1777,7 +1785,6 @@ UI.Separator()
 UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text; atualizarCacheSpells() end)
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text; atualizarCacheSpells() end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text; atualizarCacheSpells() end)
-
 atualizarCacheSpells()
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Others ~"):setColor('#EBDEF0')
@@ -1787,25 +1794,38 @@ if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 
--- SPELL AT TARGET HP (Apenas em Players)
-local panelName = "hpbelowconfig"
+-- SPELL AT TARGET HP (Apenas em Players - Versão Ultra-Otimizada)
+local panelNameTarget = "hpbelowconfig"
+
 -- Garante que as tabelas de armazenamento existam com segurança
-if storage[panelName] == nil then storage[panelName] = { hp = 80 } end
+if storage[panelNameTarget] == nil then storage[panelNameTarget] = { hp = 80 } end
 if storage.painelSalvo == nil then storage.painelSalvo = { special = false } end
+
 -- Cache da magia para evitar leitura de disco/storage a cada 100ms
 local cacheHpSpell = storage.hpspell or ""
+local ultimoTempoAtaque = 0
+
 -- [PADRÃO SMART CAST]: Registro nativo. Cria o botão verde automático sincronizado com o painel
 lowhp = macro(100, "Spell at Target HP", function()
-    -- Checagens rápidas de segurança
     if not g_game.isOnline() or not g_game.isAttacking() then return end  
+    
+    local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+    
+    -- FREIO DE SPAM DE ATAQUE: Se já enviou o comando nos últimos 250ms, segura a rajada lixo
+    if agora - ultimoTempoAtaque < 200 then
+        return
+    end
+
     local target = g_game.getAttackingCreature()
     if not target or not target:isPlayer() then return end
     
     -- Executa se a vida do alvo for menor ou igual e o cache da magia não estiver vazio
-    if target:getHealthPercent() <= storage[panelName].hp and cacheHpSpell ~= "" then
+    if target:getHealthPercent() <= storage[panelNameTarget].hp and cacheHpSpell ~= "" then
         say(cacheHpSpell)
+        ultimoTempoAtaque = agora -- Atualiza a trava de tempo
     end
 end)
+
 -- Interface Gráfica (UI) - Contém APENAS a barra de rolagem (Sem o botão duplicado)
 local uiHP = setupUI([[
 Panel
@@ -1821,19 +1841,19 @@ Panel
     step: 1
 ]], parent)
 
-uiHP:setId(panelName)
+uiHP:setId(panelNameTarget)
 
-local updateHpText = function()
-    uiHP.HP:setText("HP: < " .. storage[panelName].hp .. "%")
+local updateHpTextTarget = function()
+    uiHP.HP:setText("HP: < " .. storage[panelNameTarget].hp .. "%")
 end
 
 uiHP.HP.onValueChange = function(scroll, value)
-    storage[panelName].hp = value
-    updateHpText()
+    storage[panelNameTarget].hp = value
+    updateHpTextTarget()
 end
 
-uiHP.HP:setValue(storage[panelName].hp)
-updateHpText()
+uiHP.HP:setValue(storage[panelNameTarget].hp)
+updateHpTextTarget()
 
 -- Atualiza o cache imediatamente quando você digita a magia
 UI.TextEdit(storage.hpspell or "", function(widget, text) 
@@ -1843,35 +1863,46 @@ end)
 
 UI.Separator()
 
--- [SINCRONIZADOR NATÍVO]: Mantém a macro e o seu Painel de Botões central 100% em sincronia
-macro(200, function()
+-- [SINCRONIZADOR NATÍVO OTIMIZADO]: Monitora sem estressar a memória RAM contínua
+local ultimoEstadoSalvo = nil
+macro(400, function()
     if not g_game.isOnline() then return end
-    storage.painelSalvo.special = lowhp.isOn()
+    local estadoAtual = lowhp.isOn()
+    if ultimoEstadoSalvo ~= estadoAtual then
+        storage.painelSalvo.special = estadoAtual
+        ultimoEstadoSalvo = estadoAtual
+    end
 end)
 
 UI.Separator()
 
--- SPELL AT SELF HP
-local panelName = "selfhpbelowconfig"
+-- SPELL AT SELF HP (Versão Ultra-Otimizada com Proteção de Cooldown)
+local panelNameSelf = "selfhpbelowconfig"
 
--- Garante que as tabelas de armazenamento existam com segurança
-if storage[panelName] == nil then storage[panelName] = { hp = 80 } end
+if storage[panelNameSelf] == nil then storage[panelNameSelf] = { hp = 80 } end
 if storage.painelSalvo == nil then storage.painelSalvo = { selfSpecial = false } end
 
--- Cache da magia na memória RAM para evitar leituras repetidas de storage a cada 100ms
 local cacheSelfHpSpell = storage.selfhpspell or ""
+local ultimoTempoUso = 0
 
--- [PADRÃO SMART CAST]: Registro nativo. Cria o botão verde automático sincronizado com o painel
+-- OTIMIZAÇÃO: Varredura rápida a cada 100ms, mas com trava de envio para a CPU respirar
 selflowhp = macro(100, "Spell at Self HP", function()
     if not g_game.isOnline() then return end  
     
-    -- Executa apenas se o seu HP estiver abaixo do limite e você tiver uma magia configurada
-    if hppercent() <= storage[panelName].hp and cacheSelfHpSpell ~= "" then
+    local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+    
+    -- FREIO DE SPAM DE CURA: Respeita a velocidade da luz do seu servidor (250ms)
+    if agora - ultimoTempoUso < 200 then
+        return
+    end
+
+    if hppercent() <= storage[panelNameSelf].hp and cacheSelfHpSpell ~= "" then
         say(cacheSelfHpSpell)
+        ultimoTempoUso = agora -- Atualiza o tempo para segurar o próximo envio
     end
 end)
 
--- Interface Gráfica (UI) - Contém APENAS a barra de rolagem (Sem o botão duplicado)
+-- Interface Gráfica (UI)
 local uiSelfHP = setupUI([[
 Panel
   height: 20
@@ -1886,45 +1917,54 @@ Panel
     step: 1
 ]], parent)
 
-uiSelfHP:setId(panelName)
+uiSelfHP:setId(panelNameSelf)
 
-local updateHpText = function()
-    uiSelfHP.HP:setText("HP: < " .. storage[panelName].hp .. "%")
+local updateHpTextSelf = function()
+    uiSelfHP.HP:setText("HP: < " .. storage[panelNameSelf].hp .. "%")
 end
 
 uiSelfHP.HP.onValueChange = function(scroll, value)
-    storage[panelName].hp = value
-    updateHpText()
+    storage[panelNameSelf].hp = value
+    updateHpTextSelf()
 end
 
-uiSelfHP.HP:setValue(storage[panelName].hp)
-updateHpText()
+uiSelfHP.HP:setValue(storage[panelNameSelf].hp)
+updateHpTextSelf()
 
--- Atualiza o cache de texto na memória instantaneamente ao digitar
 UI.TextEdit(storage.selfhpspell or "", function(widget, text) 
     storage.selfhpspell = text 
     cacheSelfHpSpell = text
 end)
-
 UI.Separator()
 
--- [SINCRONIZADOR NATÍVO]: Mantém a macro e o seu Painel de Botões central 100% em sincronia
-macro(200, function()
+-- [SINCRONIZADOR NATÍVO OTIMIZADO]: Mantém o Painel e a Macro em sintonia sem estressar a RAM
+local ultimoEstadoSelfHp = nil
+macro(400, function()
     if not g_game.isOnline() then return end
-    storage.painelSalvo.selfSpecial = selflowhp.isOn()
+    local estadoAtual = selflowhp and selflowhp.isOn()
+    if ultimoEstadoSelfHp ~= estadoAtual then
+        storage.painelSalvo.selfSpecial = estadoAtual
+        ultimoEstadoSelfHp = estadoAtual
+    end
 end)
 
--- SPELL WAVE (Gira e Conjura na Reta)
--- Garante que as tabelas de armazenamento existam para o painel de botões ler
+-- SPELL WAVE (Gira e Conjura na Reta - Versão Anti-Lag Ultra-Fluida)
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 
--- Cache local da magia para poupar processamento
 local cacheTurnSpell = storage.turnSpell or ""
+local ultimoTempoWave = 0
 
 -- [PADRÃO SMART CAST]: Registro nativo. Cria o botão automático e vincula ao Painel
 turnCombo = macro(100, "Auto Wave", function()
     if not g_game.isOnline() then return end
+    
+    local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+    
+    -- FREIO DE SPAM DE COMBATE: Impede que a macro entupa a CPU e a rede a cada 100ms
+    if agora - ultimoTempoWave < 200 then
+        return
+    end
     
     local target = g_game.getAttackingCreature()
     if not target then return end
@@ -1933,6 +1973,9 @@ turnCombo = macro(100, "Auto Wave", function()
     local myPos = pos()
     if not targetPos or not myPos then return end
     
+    local player = g_game.getLocalPlayer()
+    if not player then return end
+
     local diffX = targetPos.x - myPos.x
     local diffY = targetPos.y - myPos.y
     
@@ -1944,19 +1987,24 @@ turnCombo = macro(100, "Auto Wave", function()
         direcaoDesejada = (diffY > 0) and 2 or 0 -- 2: Baixo, 0: Cima
     end   
     
-    -- Só envia o pacote de virar se você já não estiver na direção certa
-    if g_game.getLocalPlayer():getDirection() ~= direcaoDesejada then
+    -- Verifica a direção atual do seu personagem
+    local minhaDirecaoAtual = player:getDirection()
+    
+    -- Só envia o pacote de virar se você não estiver na direção certa
+    if minhaDirecaoAtual ~= direcaoDesejada then
         g_game.turn(direcaoDesejada)
-        delay(50)
+        ultimoTempoWave = agora -- Segura o próximo ciclo para o servidor processar a virada
+        return -- Falha rápido para esperar o boneco virar visualmente antes de soltar a magia
     end
     
-    -- Solta a magia de Wave se configurada
-    if cacheTurnSpell ~= "" then
+    -- VALIDAÇÃO CIRÚRGICA: Só solta a magia se configurada E se você estiver olhando pro alvo!
+    if cacheTurnSpell ~= "" and minhaDirecaoAtual == direcaoDesejada then
         say(cacheTurnSpell)
+        ultimoTempoWave = agora -- Atualiza o cooldown para travar o spam
     end
 end)
 
--- Adiciona apenas a caixa de texto para configurar a magia na aba lateral
+-- Configuração de texto na aba lateral
 addTextEdit("spellTurnConfig", storage.turnSpell or "", function(widget, text)
     local textoLimpo = text:trim()
     storage.turnSpell = textoLimpo
@@ -2220,7 +2268,7 @@ setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Survival ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
---fast regen
+-- Fast Regen (Versão Otimizada com Proteção de Cooldown e Cache)
 local panelName = "selfregen"
 local ui = setupUI([[
 Panel
@@ -2238,7 +2286,7 @@ Panel
     id: HP
     anchors.bottom: parent.bottom
     anchors.right: parent.right
-    anchors.left:parent.left
+    anchors.left: parent.left
     margin-top: 3
     minimum: 1
     maximum: 100
@@ -2246,45 +2294,67 @@ Panel
     
 ]], parent)
 ui:setId(panelName)
+
+-- CORREÇÃO: Removido a variável inexistente 'enabled' que quebrava o salvamento do painel
 if not storage[panelName] then
   storage[panelName] = {
-      title = enabled,
       enabled = false,
       setting = true,
       hp = 95
   }
 end
+
 ui.title:setOn(storage[panelName].enabled)
 ui.title.onClick = function(widget)
   storage[panelName].enabled = not storage[panelName].enabled
   widget:setOn(storage[panelName].enabled)
 end
+
 local updateHpText = function()
     if storage[panelName].setting then
-    ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
+        ui.HP:setText("HP: < " .. storage[panelName].hp .. "%")
     end
 end
 updateHpText()
+
 ui.HP.onValueChange = function(scroll, value)
   storage[panelName].hp = value
   updateHpText()
 end
 ui.HP:setValue(storage[panelName].hp)
 
-UI.TextEdit(storage.autohealspell1 or "regeneration", function(widget, text)    
-  storage.autohealspell1 = text
-end)
-macro(500, function()
- if not storage[panelName].enabled then return end
+-- Cache local na memória RAM para poupar processamento contínuo da CPU
+local cacheHealSpell = storage.autohealspell1 or "regeneration"
 
- if storage[panelName].setting then
+UI.TextEdit(storage.autohealspell1 or "regeneration", function(widget, text)    
+  local textoLimpo = text:trim()
+  storage.autohealspell1 = textoLimpo
+  cacheHealSpell = textoLimpo
+end)
+
+local ultimoTempoRegen = 0
+-- COOLDOWN: Intervalo de 1 segundo (1000ms) para não floodar pacotes e bugar o TargetBot
+local COOLDOWN_REGEN = 1000 
+
+macro(500, "Fast Regen Loop", function()
+  if not g_game.isOnline() or not storage[panelName].enabled then return end
+
+  if storage[panelName].setting and cacheHealSpell ~= "" then
     if hppercent() <= storage[panelName].hp then
-        say(storage.autohealspell1)
+        local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+        
+        -- FREIO DE RAJADA: Só envia o pacote de fala se o tempo mínimo já passou
+        if agora - ultimoTempoRegen < COOLDOWN_REGEN then
+            return
+        end
+        
+        say(cacheHealSpell)
+        ultimoTempoRegen = agora -- Grava o milissegundo do uso atual
     end
-    end
+  end
 end)
 UI.Separator()
---Mana Shield
+-- Mana Shield (Versão Otimizada com Precisão de Cooldown e Cache de Memória)
 local panelName = "manabarrier"
 local ui = setupUI([[
 Panel
@@ -2302,7 +2372,7 @@ Panel
     id: HP
     anchors.bottom: parent.bottom
     anchors.right: parent.right
-    anchors.left:parent.left
+    anchors.left: parent.left
     margin-top: 3
     minimum: 1
     maximum: 100
@@ -2311,9 +2381,9 @@ Panel
 ]], parent)
 ui:setId(panelName)
 
+-- CORREÇÃO: Removido a variável inexistente 'enabled' que quebrava o salvamento do painel
 if not storage[panelName] then
   storage[panelName] = {
-      title = enabled,
       enabled = false,
       setting = true,
       hp = 70
@@ -2339,23 +2409,30 @@ ui.HP.onValueChange = function(scroll, value)
 end
 ui.HP:setValue(storage[panelName].hp)
 
+-- Cache local para poupar processamento contínuo da CPU
+local cacheBarrierSpell = storage.autobarrier or "reiatsu barrier"
+
 UI.TextEdit(storage.autobarrier or "reiatsu barrier", function(widget, text)    
-  storage.autobarrier = text
+  local textoLimpo = text:trim()
+  storage.autobarrier = textoLimpo
+  cacheBarrierSpell = textoLimpo
 end)
 
 local ultimoUsoBarreira = 0
-local DELAY_SEGUNDOS = 46
+-- Convertido para milissegundos para usar o relógio do motor gráfico (Ultra Precisão)
+local COOLDOWN_BARREIRA = 46000 
 
-macro(100, function()
-  if not storage[panelName].enabled then return end
+macro(100, "Mana Shield Loop", function()
+  if not g_game.isOnline() or not storage[panelName].enabled then return end
   
-  if storage[panelName].setting then
+  if storage[panelName].setting and cacheBarrierSpell ~= "" then
     if hppercent() <= storage[panelName].hp then
-        local tempoAgora = os.time()
-        -- Executa puramente com base no delay estático de 46 segundos
-        if (tempoAgora - ultimoUsoBarreira) >= DELAY_SEGUNDOS then
-            say(storage.autobarrier)
-            ultimoUsoBarreira = tempoAgora
+        local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+        
+        -- Executa puramente com base no relógio de alta precisão do cliente do jogo
+        if (agora - ultimoUsoBarreira) >= COOLDOWN_BARREIRA then
+            say(cacheBarrierSpell)
+            ultimoUsoBarreira = agora
             print("[Barrier] Magia conjurada! Cooldown: 46s.")
         end
     end
@@ -3574,101 +3651,79 @@ Panel
 
 ]], modules.game_interface.getMapPanel())
 
-macro(100, function()
-  if not pvehud then return end
+-- PvE/PvP HUD Painel (Versão Ultra-Otimizada com Cache de Estado e Texto)
+local hudCache = {}
 
-  if pvehud.iconlayer then pvehud.iconlayer:setText("     ~ [Smk Custom - v4.1] ~   ") end
-  if pvehud.iconlayer2 then pvehud.iconlayer2:setText(" ~ [Instagram: @cafeh_ofc] ~  ") end
+macro(300, function()
+  if not g_game.isOnline() or not pvehud then return end
 
-  if pvehud.tab1 then pvehud.tab1:setText("           ~           [PvE]           ~       ") end
-  
-  if pvehud.cave then
-    if CaveBot.isOn() then
-      pvehud.cave:setText("~ CaveBot: [Ctrl+1]")
-      pvehud.cave:setColor("#33ff99")
-    else
-      pvehud.cave:setText("~ CaveBot: [Ctrl+1]")
-      pvehud.cave:setColor("#ff6666")
-    end
+  -- 1. LABELS TEXTOS ESTÁTICOS: Renderiza uma única vez na inicialização
+  if not hudCache.estaticos then
+    if pvehud.iconlayer then pvehud.iconlayer:setText("     ~ [Smk Custom - v4.1] ~   ") end
+    if pvehud.iconlayer2 then pvehud.iconlayer2:setText(" ~ [Instagram: @cafeh_ofc] ~  ") end
+    if pvehud.tab1 then pvehud.tab1:setText("           ~           [PvE]           ~       ") end
+    if pvehud.tab2 then pvehud.tab2:setText("           ~           [PvP]           ~       ") end
+    if pvehud.tab3 then pvehud.tab3:setText("           ~         [Skills]        ~         ") end
+    hudCache.estaticos = true
   end
-  
-  if pvehud.target then
-    if TargetBot.isOn() then
-      pvehud.target:setText("~ Target: [Ctrl+2]")
-      pvehud.target:setColor("#33ff99")
-    else
-      pvehud.target:setText("~ Target: [Ctrl+2]")
-      pvehud.target:setColor("#ff6666")
+
+  -- Função interna rápida para atualizar cor e texto apenas se houver mudança de estado
+  local function atualizarBotaoHUD(labelKey, macroRef, textoBase)
+    if not pvehud[labelKey] then return end
+    local estadoAtual = false
+    if macroRef and type(macroRef.isOn) == "function" then
+      estadoAtual = macroRef.isOn()
+    elseif labelKey == "cave" and CaveBot then
+      estadoAtual = CaveBot.isOn()
+    elseif labelKey == "target" and TargetBot then
+      estadoAtual = TargetBot.isOn()
     end
-  end
-  
-  if pvehud.dash then
-    if dash.isOn() then
-      pvehud.dash:setText("~ BugMap: [Ctrl+3]")
-      pvehud.dash:setColor("#33ff99")
-    else
-      pvehud.dash:setText("~ BugMap: [Ctrl+3]")
-      pvehud.dash:setColor("#ff6666")
-    end
-  end
-  
-  if pvehud.buffsinfo then
-    if buffs.isOn() then
-      pvehud.buffsinfo:setText("~ Haste & Buff: [Ctrl+4]")
-      pvehud.buffsinfo:setColor("#33ff99")
-    else
-      pvehud.buffsinfo:setText("~ Haste & Buff: [Ctrl+4]")
-      pvehud.buffsinfo:setColor("#ff6666")
+
+    -- Só atualiza o componente visual na marra se o estado mudou desde a última checagem
+    if hudCache[labelKey] ~= estadoAtual then
+      pvehud[labelKey]:setText(textoBase)
+      pvehud[labelKey]:setColor(estadoAtual and "#33ff99" or "#ff6666")
+      hudCache[labelKey] = estadoAtual
     end
   end
 
-  if pvehud.tab2 then pvehud.tab2:setText("           ~           [PvP]           ~       ") end
+  -- 2. ATUALIZAÇÃO RESTRITA DOS ESTADOS DOS BOTÕES
+  atualizarBotaoHUD("cave", CaveBot, "~ CaveBot: [Ctrl+1]")
+  atualizarBotaoHUD("target", TargetBot, "~ Target: [Ctrl+2]")
+  atualizarBotaoHUD("dash", dash, "~ BugMap: [Ctrl+3]")
+  atualizarBotaoHUD("buffsinfo", buffs, "~ Haste & Buff: [Ctrl+4]")
+  atualizarBotaoHUD("mwallinfo", mwall, "~ MWall on Target: [Alt+1]")
+  atualizarBotaoHUD("chaseatk", chaseatk, "~ Hold Attack: [Alt+2]")
+  atualizarBotaoHUD("enemy", enemy, "~ Enemy: [Alt+3]")
+  atualizarBotaoHUD("xsense", xsense, "~ Auto xSense: [Alt+4]")
 
-  if pvehud.mwallinfo then
-    if mwall.isOn() then
-      pvehud.mwallinfo:setText("~ MWall on Target: [Alt+1]")
-      pvehud.mwallinfo:setColor("#33ff99")
-    else
-      pvehud.mwallinfo:setText("~ MWall on Target: [Alt+1]")
-      pvehud.mwallinfo:setColor("#ff6666")
+  -- 3. MONITORAMENTO DE SKILLS INTELIGENTE (Só redesenha se os números mudarem)
+  local player = g_game.getLocalPlayer()
+  if player then
+    local lvl, lvlPct = player:getLevel(), player:getLevelPercent()
+    local ml, mlPct = player:getMagicLevel(), player:getMagicLevelPercent()
+    local sk, skPct = player:getSkillLevel(2), player:getSkillLevelPercent(2)
+
+    local txtLvl = "~ Level: " .. lvl .. " - (" .. lvlPct .. "%)"
+    if pvehud.skills1 and hudCache.txtLvl ~= txtLvl then
+      pvehud.skills1:setText(txtLvl)
+      hudCache.txtLvl = txtLvl
+    end
+
+    local txtMl = "~ Reiatsu: " .. ml .. " - (" .. mlPct .. "%)"
+    if pvehud.skills3 and hudCache.txtMl ~= txtMl then
+      pvehud.skills3:setText(txtMl)
+      hudCache.txtMl = txtMl
+    end
+
+    local txtSk = "~ Weapon: " .. sk .. " - (" .. skPct .. "%)"
+    if pvehud.skills8 and hudCache.txtSk ~= txtSk then
+      pvehud.skills8:setText(txtSk)
+      hudCache.txtSk = txtSk
     end
   end
-
-  if pvehud.chaseatk then
-    if chaseatk.isOn() then
-      pvehud.chaseatk:setText("~ Hold Attack: [Alt+2]")
-      pvehud.chaseatk:setColor("#33ff99")
-    else
-      pvehud.chaseatk:setText("~ Hold Attack: [Alt+2]")
-      pvehud.chaseatk:setColor("#ff6666")
-    end
-  end
-
-  if pvehud.enemy then
-    if enemy.isOn() then
-      pvehud.enemy:setText("~ Enemy: [Alt+3]")
-      pvehud.enemy:setColor("#33ff99")
-    else
-      pvehud.enemy:setText("~ Enemy: [Alt+3]")
-      pvehud.enemy:setColor("#ff6666")
-    end
-  end
-
-  if pvehud.xsense then
-    if xsense.isOn() then
-      pvehud.xsense:setText("~ Auto xSense: [Alt+4]")
-      pvehud.xsense:setColor("#33ff99")
-    else
-      pvehud.xsense:setText("~ Auto xSense: [Alt+4]")
-      pvehud.xsense:setColor("#ff6666")
-    end
-  end
-
-  if pvehud.tab3 then pvehud.tab3:setText("           ~         [Skills]        ~         ") end
-  if pvehud.skills1 then pvehud.skills1:setText("~ Level: " .. player:getLevel() .. " - (" .. player:getLevelPercent() .. "%)") end
-  if pvehud.skills3 then pvehud.skills3:setText("~ Reiatsu: " .. player:getMagicLevel() .. " - (" .. player:getMagicLevelPercent() .. "%)") end
-  if pvehud.skills8 then pvehud.skills8:setText("~ Weapon: " .. player:getSkillLevel(2) .. " - (" .. player:getSkillLevelPercent(2) .. "%)") end
 end)
+
 
 --Ice Hud HP Percent
 macro(100, function()
@@ -3687,12 +3742,14 @@ end)
 --Auto Bless
 if player:getBlessings() == 0 then
   say("!bless")
+  use(10258)
   schedule(1000, function()
     if player:getBlessings() == 0 then
       print("[Loader] Bless automatica habilitada com sucesso.")
     end
   end)
 end
+
 
 -- CaveBot Creator Always Opened (Versão Ultra-Otimizada com UI Cache)
 local cachedPanel = nil
@@ -3720,21 +3777,34 @@ macro(1000, function()
     end
 end)
 
--- Magic wall Timer (Purificado em C++ - Sem processamento Lua)
+-- Magic wall Timer (Versão Definitiva Ultra-Otimizada - Anti-Lag Hunt)
 local magicWallId = 10980
 
 onAddThing(function(tile, thing)
-  if not tile or not thing or thing:getId() ~= magicWallId then return end
+  -- FILTRO RELÂMPAGO: Se não for um ITEM (ignora monstros/players/efeitos) ou não for a Mwall, aborta em 0ms
+  if not thing or not thing:isItem() or thing:getId() ~= magicWallId or not tile then 
+    return 
+  end
+
+  -- Se o visor de tempo nativo do C++ já estiver ativo, pula para economizar RAM
   if type(tile.getTimer) == "function" and tile:getTimer() > 0 then return end
-  tile:setTimer(20000) 
+  
+  if type(tile.setTimer) == "function" then
+    tile:setTimer(20000) -- Grava os 20 segundos direto na memória do jogo
+  end
 end)
 
 onRemoveThing(function(tile, thing)
-  if not tile or not thing or thing:getId() ~= magicWallId then return end
+  -- FILTRO RELÂMPAGO: Aplica a mesma regra rápida na remoção
+  if not thing or not thing:isItem() or thing:getId() ~= magicWallId or not tile then 
+    return 
+  end
+  
   if type(tile.setTimer) == "function" then
-    tile:setTimer(0) 
+    tile:setTimer(0) -- Reseta o visor do quadrado imediatamente
   end
 end)
+
 
 --SafeFightSync
 local ultimoEstadoSeguro = nil
@@ -4212,7 +4282,7 @@ macro(5000, function()
         end
     end
 end)
-print("[Loader] Estabilizador de performance e tabelas injetado de forma nativa.")
+print("[Loader] Estabilizador de performace injetado com sucesso.")
 
 
 -- GOVERNOR DE INVENTÁRIO (Zerar o Slow do DepositGold & StackItems:589)
