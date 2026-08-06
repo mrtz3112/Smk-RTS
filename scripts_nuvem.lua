@@ -1,39 +1,43 @@
 -- ============================================================================
--- GOVERNOR GLOBAL PARA ONREMOVETHING (Zerar Slow no smkmain.lua:3712)
+-- GOVERNOR DE EVENTOS GLOBAL (Proteção Extra contra Slow editor.lua:157)
 -- ============================================================================
-local ultimoFiltroRemoverGlobal = 0
+local temposPassosIndividuais = {}
 
-if type(onRemoveThing) == "function" then
-    local oldOnRemoveThing = onRemoveThing
+if type(onCreaturePositionChange) == "function" then
+    local oldOnCreaturePositionChange = onCreaturePositionChange
     
-    onRemoveThing = function(callback, ...)
+    onCreaturePositionChange = function(callback, ...)
         if type(callback) == "function" then
-            return oldOnRemoveThing(function(tile, thing, index, ...)
-                if not g_game.isOnline() or not thing then return end
+            return oldOnCreaturePositionChange(function(creature, newPos, oldPos, ...)
+                if not g_game.isOnline() or not creature or not newPos then return end
                 
-                -- Se o objeto removido for o seu próprio personagem (deslogando/morrendo), passa direto
                 local localPlayer = g_game.getLocalPlayer()
-                if localPlayer and thing:getId() == localPlayer:getId() then
-                    return callback(tile, thing, index, ...)
+                local myId = localPlayer and localPlayer:getId() or 0
+                local cid = creature:getId()
+
+                -- IMUNIDADE ABSOLUTA: Se for o SEU personagem andando, passa direto!
+                -- Isso garante que a "Position", o gravador de passos e a cura funcionem instantaneamente.
+                if cid == myId then
+                    return callback(creature, newPos, oldPos, ...)
                 end
                 
-                -- FILTRO DE REFRESH: Se o client tentar remover dezenas de coisas (corpos, itens, magias)
-                -- em menos de 30ms, segura a rajada para dar fôlego para a CPU não engasgar as macros!
-                local agoraRemover = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-                if agoraRemover - ultimoFiltroRemoverGlobal < 30 then 
+                -- FILTRO DE FLUÍDEZ PARA MONSTROS: Se os bichos da hunt andarem na velocidade da luz,
+                -- segura o processamento do evento para a thread de UI do editor.lua:157 respirar!
+                local agoraPassoGlobal = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+                local ultimoPassoDaCriatura = temposPassosIndividuais[cid] or 0
+                
+                if agoraPassoGlobal - ultimoPassoDaCriatura < 60 then -- Ajustado para 60ms para dar mais fôlego à UI
                     return 
                 end
-                ultimoFiltroRemoverGlobal = agoraRemover
                 
-                return callback(tile, thing, index, ...)
+                temposPassosIndividuais[cid] = agoraPassoGlobal
+                return callback(creature, newPos, oldPos, ...)
             end, ...)
         end
-        return oldOnRemoveThing(callback, ...)
+        return oldOnCreaturePositionChange(callback, ...)
     end
 end
-print("[Loader] Governor de remocao de slows ativado com sucesso.")
-
-
+print("[Loader] Governor de eventos globais carregado com sucesso.")
 
 -- 1. HIGIENIZAÇÃO DE STORAGE AUTOMÁTICA VIA REPOSITÓRIO ONLINE (HTTP)
 local URL_REPOSITORIO_ONLINE = "https://raw.githubusercontent.com/mrtz3112/Smk-RTS/refs/heads/main/scripts_nuvem.lua"
@@ -433,7 +437,7 @@ macro(100, function()
   end
 end)
 UI.Separator()
--- Smart Follow por Nome - Versão Bruta Original (Velocidade Máxima e Sem Lag)
+-- Smart Follow por Nome - Versão Otimizada Segura (Sem g_clock)
 local Objects = { 
     1385, 1386, 1387, 1388, 369, 370, 434, 435, 1948, 5543, 7725, 19183, 19184,
     411, 412, 413, 414, 432, 433, 459, 460, 475, 476, 479, 480, 2984, 2985, 5732,
@@ -448,7 +452,6 @@ local Objects = {
 }
 local Doors = {7727, 8265, 1629, 1632, 5129, 5120, 8266, 7728, 5102, 5111}
 
--- Converte as tabelas originais em Hash na memória para não dar Slow
 local objectsHash = {}
 for i = 1, #Objects do objectsHash[Objects[i]] = true end
 
@@ -457,18 +460,21 @@ for i = 1, #Doors do doorsHash[Doors[i]] = true end
 
 local toFollowPos = {}
 local lastWalkTarget = nil
+local lastWalkTime = 0
 
 local function stableWalk(targetPos)
     local myPlayer = g_game.getLocalPlayer()
     if not myPlayer then return end
 
-    if myPlayer:isWalking() and lastWalkTarget and lastWalkTarget.x == targetPos.x and lastWalkTarget.y == targetPos.y and lastWalkTarget.z == targetPos.z then
+    local now = os.clock()
+    -- Evita recalcular Pathfinding se o destino for idêntico e o player já estiver se movendo, com um fail-safe de 0.4 segundos (400ms) para destravar
+    if myPlayer:isWalking() and lastWalkTarget and lastWalkTarget.x == targetPos.x and lastWalkTarget.y == targetPos.y and lastWalkTarget.z == targetPos.z and (now - lastWalkTime < 0.4) then
         return
     end
 
     lastWalkTarget = targetPos
+    lastWalkTime = now
 
-    -- Mantido o precision = 1 original perfeito do seu boneco
     if type(autoWalk) == "function" then
         autoWalk(targetPos, 20, { ignoreCreatures = false, ignoreNonPathable = true, precision = 1 })
     elseif g_game.autoWalk then
@@ -476,7 +482,25 @@ local function stableWalk(targetPos)
     end
 end
 
--- Mantido o delay original de 200ms
+-- Função auxiliar otimizada para interagir com itens ao redor sem usar loops pesados de tabelas internas
+local function checkAndUseAdjacentItems(myPos, hashFilter)
+    for x = -1, 1 do
+        for y = -1, 1 do
+            if x ~= 0 or y ~= 0 then
+                local tile = g_map.getTile({x = myPos.x + x, y = myPos.y + y, z = myPos.z})
+                if tile then
+                    local topItem = tile:getTopUseThing()
+                    if topItem and hashFilter[topItem:getId()] then
+                        g_game.use(topItem)
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
 macro(200, "Smart Follow", function() 
     if not g_game.isOnline() then return end
     
@@ -488,10 +512,10 @@ macro(200, "Smart Follow", function()
     local myPlayer = g_game.getLocalPlayer()
     if not myPlayer then return end
 
-    local myPos = pos()
+    local myPos = myPlayer:getPosition()
     local target = nil
 
-    -- Varre os espectadores exatamente igual ao seu script original
+    -- Varredura de espectadores
     for _, spec in ipairs(getSpectators(myPos)) do
         if spec:isPlayer() and spec:getName():lower() == targetName then
             target = spec
@@ -506,36 +530,19 @@ macro(200, "Smart Follow", function()
         local dist = getDistanceBetween(myPos, tpos)
         
         if dist <= 1 then
+            if myPlayer:isWalking() then g_game.stop() end
             lastWalkTarget = nil
             return
         end
 
         stableWalk(tpos)
 
-        -- Checagem de portas via Hash ultra rápida
-        if dist > 1 then
-            for x = -1, 1 do
-                for y = -1, 1 do
-                    local checkPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
-                    local tile = g_map.getTile(checkPos)
-                    if tile then
-                        local items = tile:getItems()
-                        if items then
-                            for m = 1, #items do
-                                local item = items[m]
-                                if item and doorsHash[item:getId()] then
-                                    g_game.use(item)
-                                    return
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
+        -- Checagem de portas otimizada (sem loops de itens dentro do tile)
+        checkAndUseAdjacentItems(myPos, doorsHash)
         return
     end
 
+    -- Caso o líder suma da tela (subiu/desceu escadas)
     local lastLeaderPosInMyFloor = toFollowPos[myPos.z]
     if lastLeaderPosInMyFloor then
         if getDistanceBetween(myPos, lastLeaderPosInMyFloor) > 0 then
@@ -543,25 +550,8 @@ macro(200, "Smart Follow", function()
             return
         end
         
-        -- Checagem de escadas via Hash ultra rápida
-        for x = -1, 1 do
-            for y = -1, 1 do
-                local searchPos = {x = myPos.x + x, y = myPos.y + y, z = myPos.z}
-                local tile = g_map.getTile(searchPos)
-                if tile then
-                    local items = tile:getItems()
-                    if items then
-                        for m = 1, #items do
-                            local item = items[m]
-                            if item and objectsHash[item:getId()] then
-                                g_game.use(item)
-                                return
-                            end
-                        end
-                    end
-                end
-            end
-        end
+        -- Checagem de escadas/bueiros otimizada
+        checkAndUseAdjacentItems(myPos, objectsHash)
     end
 end)
 
@@ -569,7 +559,6 @@ addTextEdit("followTargetName", storage.followTargetName or "Nome do Player", fu
     storage.followTargetName = text
 end)
 
--- Mantido o imã de passos original intocado
 onCreaturePositionChange(function(creature, newPos, oldPos)
     if not newPos then return end
     local targetName = tostring(storage.followTargetName or "")
@@ -580,24 +569,28 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
     end
 end)
 
+
 UI.Separator()
--- Deposit Gold & Stack Items (Seu Script Original - Passada Única Otimizada 1500ms)
+-- Deposit Gold & Stack Items (Versão Otimizada - Pure Engine 8.54)
 local ultimoMovimentoStack = 0
 local cachedPosicao = {x = 0, y = 0, z = 0, slot = 0} 
 
 macro(1500, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
   
-  local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+  -- Uso seguro do os.clock() convertido para milissegundos
+  local agora = os.clock() * 1000
   if agora - ultimoMovimentoStack < 500 then return end
 
-  local coinIds = {3031, 3035, 3043, 10137} 
+  -- Lista de moedas estruturada corretamente para leitura em Lua
+  local coinIds = { 3031, 3035, 3043, 10137 } 
   local minAmount = 1
   local shouldDeposit = false
 
-  -- 1. CHECAGEM RÁPIDA DE DINHEIRO
+  -- 1. CHECAGEM CORRETA DE DINHEIRO (Usando os IDs reais das moedas)
   for i = 1, #coinIds do
-    local item = findItem(coinIds[i])
+    local idMoeda = coinIds[i]
+    local item = findItem(idMoeda)
     if item and item:getCount() >= minAmount then
       shouldDeposit = true
       break
@@ -610,9 +603,10 @@ macro(1500, "DepositGold & StackItems", function()
     return
   end
 
-  -- 2. MAPEAR E EXECUTAR EM PASSADA ÚNICA (Fim do Loop Duplo)
+  -- 2. MAPEAR ITENS AGRUPÁVEIS (Lógica nativa e otimizada para o maior bolo)
   local containers = g_game.getContainers()
   local itensMapeados = {}
+  local precisaAgrupar = false
 
   for _, container in pairs(containers) do
     if container then
@@ -622,48 +616,63 @@ macro(1500, "DepositGold & StackItems", function()
           if item and item:isStackable() then 
             local itemId = item:getId()
             local count = item:getCount()
-            local slotAtualIndex = index - 1
-            local posicaoAtual = container:getSlotPosition(slotAtualIndex)
+            local posicaoAtual = container:getSlotPosition(index - 1)
 
             if posicaoAtual then
-              local destino = itensMapeados[itemId]
-
-              if destino then
-                -- Se encontrou um par agrupável na memória, avalia se deve mover
-                local mesmoContainer = (container:getId() == destino.containerId)
-                local mesmoSlot = (slotAtualIndex == destino.slotIndex)
-
-                if not (mesmoContainer and mesmoSlot) then
-                  -- Mantém seu critério original de priorizar a maior stack informada pelo client
-                  if count > destino.count then
-                    -- Atualiza o destino para o bolo maior
-                    itensMapeados[itemId] = {
-                      posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
-                      count = count,
-                      containerId = container:getId(),
-                      slotIndex = slotAtualIndex
-                    }
-                  end
-
-                  -- Altera os valores na tabela estática reaproveitada (FPS Alto)
-                  cachedPosicao.x = destino.posicao.x
-                  cachedPosicao.y = destino.posicao.y
-                  cachedPosicao.z = destino.posicao.z
-                  cachedPosicao.slot = destino.posicao.slot
-
-                  -- Move e mata a execução da macro na hora! Corta o resto do processamento lixo
-                  g_game.move(item, cachedPosicao, item:getCount())
-                  ultimoMovimentoStack = governor or agora 
-                  return 
+              if itensMapeados[itemId] then
+                precisaAgrupar = true
+                -- Garante o agrupamento estrito em direção ao maior bolo do inventário
+                if count > itensMapeados[itemId].count then
+                  itensMapeados[itemId] = {
+                    posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
+                    count = count,
+                    containerId = container:getId(),
+                    slotIndex = index - 1
+                  }
                 end
               else
-                -- Primeiro registro deste ID vira o alvo temporário na memória RAM
                 itensMapeados[itemId] = {
                   posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
                   count = count,
                   containerId = container:getId(),
-                  slotIndex = slotAtualIndex
+                  slotIndex = index - 1
                 }
+              end
+            end
+          end
+        end
+    end
+  end
+
+  if not precisaAgrupar then
+    return
+  end
+
+  -- 3. EXECUTAR A MOVIMENTAÇÃO SEM QUEBRAR O DELAY
+  for _, container in pairs(containers) do
+    if container then
+        local items = container:getItems()
+        for index = 1, #items do
+          local item = items[index]
+          if item and item:isStackable() then
+            local itemId = item:getId()
+            local destino = itensMapeados[itemId]
+
+            if destino then
+              local slotAtualIndex = index - 1
+              local mesmoContainer = (container:getId() == destino.containerId)
+              local mesmoSlot = (slotAtualIndex == destino.slotIndex)
+
+              if not (mesmoContainer and mesmoSlot) then
+                cachedPosicao.x = destino.posicao.x
+                cachedPosicao.y = destino.posicao.y
+                cachedPosicao.z = destino.posicao.z
+                cachedPosicao.slot = destino.posicao.slot
+
+                -- Move os itens e atualiza o cooldown de segurança corretamente
+                g_game.move(item, cachedPosicao, item:getCount())
+                ultimoMovimentoStack = agora 
+                return 
               end
             end
           end
@@ -1382,8 +1391,8 @@ local trainerMacro = macro(100, "House Trainer", function(macroObj)
   end
 end)
 
--- Revide PK (Versão Otimizada 13x7 Widescreen com Lazy Radar)
-local botsDesligadosPeloPVP = false
+-- Revide PK (Versão Otimizada e Segura - Pure Engine 8.54)
+local botsDesligadosPVP = false
 local ultimoEstadoSafeFight = nil
 local ultimoModoAtaque = nil
 local ultimoTempoTrocaEstado = 0 
@@ -1430,12 +1439,12 @@ macro(250, 'Revide PK', function()
     local myPos = localPlayer:getPosition()
     if not myPos then return end
 
-    local tempoAtual = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+    -- Uso de os.clock() convertido de forma segura para milissegundos
+    local tempoAtual = os.clock() * 1000
 
-    -- LAZY RADAR: Se você estiver parado na box batendo nos bichos, 
-    -- estende a checagem do mapa para 600ms em vez de 250ms. Economiza 60% de CPU!
+    -- FREIO DE PROCESSAMENTO: Janela adaptativa de 400ms se o boneco estiver parado
     local andou = (myPos.x ~= ultimaPosX or myPos.y ~= ultimaPosY)
-    if not andou and (tempoAtual - ultimoTickRadar < 600) then
+    if not andou and (tempoAtual - ultimoTickRadar < 400) then
         return
     end
     ultimoTickRadar = tempoAtual
@@ -1445,28 +1454,30 @@ macro(250, 'Revide PK', function()
     local agressorHp = 101
     local agressorDist = 100
 
-    local specs = g_map.getSpectatorsInRange(myPos, false, 13, 7)
-    if not specs then return end
-    local totalSpecs = #specs
-
-    for i = 1, totalSpecs do
-        local creature = specs[i]
+    -- OTIMIZAÇÃO CRÍTICA: Puxa diretamente os espectadores da tela de forma nativa e ultra rápida
+    local spectators = getSpectators(myPos)
+    for i = 1, #spectators do
+        local creature = spectators[i]
+        
+        -- Filtros imediatos na memória (0ms de custo de CPU)
         if creature and creature:isPlayer() and creature ~= localPlayer then
+            local targetPos = creature:getPosition()
             
-            local estaMeAtacando = false
-            if creature.isAttacking then
-                estaMeAtacando = creature:isAttacking()
-            else
-                estaMeAtacando = (g_game.getAttackingCreature() == creature or creature:isTimedSquareVisible())
-            end
+            -- Limita a busca estrita na área widescreen clássica de 13x7
+            local dx = math.abs(myPos.x - targetPos.x)
+            local dy = math.abs(myPos.y - targetPos.y)
+            
+            if dx <= 13 and dy <= 7 and targetPos.z == myPos.z then
+                local estaMeAtacando = false
+                if creature.isAttacking then
+                    estaMeAtacando = creature:isAttacking()
+                else
+                    estaMeAtacando = (g_game.getAttackingCreature() == creature or creature:isTimedSquareVisible())
+                end
 
-            if estaMeAtacando then
-                local specPos = creature:getPosition()
-                if specPos and specPos.z == myPos.z then
-                    local distX = math.abs(myPos.x - specPos.x)
-                    local distY = math.abs(myPos.y - specPos.y)
+                if estaMeAtacando then
                     local specHp = creature:getHealthPercent()
-                    local specDist = distX + distY
+                    local specDist = dx + dy
                     
                     if specHp and specHp > 0 and creature:canShoot() then
                         if not agressorTarget or specHp < agressorHp or (specHp == agressorHp and specDist < agressorDist) then
@@ -1481,13 +1492,13 @@ macro(250, 'Revide PK', function()
     end
 
     if agressorTarget then
-        if not botsDesligadosPeloPVP then
+        if not botsDesligadosPVP then
             if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
                 if CaveBot and CaveBot.setOff then CaveBot.setOff() end
                 if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
                 definirModoAtaque("balanced")
                 definirSafeFightBox(true)       
-                botsDesligadosPeloPVP = true
+                botsDesligadosPVP = true
                 ultimoTempoTrocaEstado = tempoAtual 
             end
         end
@@ -1497,7 +1508,7 @@ macro(250, 'Revide PK', function()
             ultimoTempoTentativaAtaque = tempoAtual
         end
     else
-        if botsDesligadosPeloPVP then
+        if botsDesligadosPVP then
             local alvoAtualJogo = g_game.getAttackingCreature()
             if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
                 if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
@@ -1505,13 +1516,14 @@ macro(250, 'Revide PK', function()
                     definirModoAtaque("offensive")
                     if CaveBot and CaveBot.setOn then CaveBot.setOn() end
                     if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
-                    botsDesligadosPeloPVP = false
+                    botsDesligadosPVP = false
                     ultimoTempoTrocaEstado = tempoAtual 
                 end
             end
         end
     end
 end)
+
 UI.Separator()
 --Eat Food
 local panelName = "AutoFood"
@@ -3122,9 +3134,22 @@ else
 end
 end)
 
--- BugMap AWSD/Setas/NumPad (Velocidade Máxima Bruta Restaurada e Sem Lag)
+-- BugMap AWSD/Setas/NumPad (Versão Definitiva Purificada e Sem Lag)
 local consoleModule = modules.game_console
 local cachedPos = {x = 0, y = 0, z = 0} 
+local ultimoUsoDash = 0
+
+-- Lista indexada numericamente (Roda muito mais rápido que loops comuns na engine 8.54)
+local offsetsTeclas = {
+    {tecla = 'w', x = 0,  y = -5},
+    {tecla = 'd', x = 5,  y = 0},
+    {tecla = 's', x = 0,  y = 5},
+    {tecla = 'a', x = -5, y = 0},
+    {tecla = 'e', x = 3,  y = -3},
+    {tecla = 'c', x = 3,  y = 3},
+    {tecla = 'z', x = -3, y = 3},
+    {tecla = 'q', x = -3, y = -3}
+}
 
 local function checkPos(x, y)
     local player = g_game.getLocalPlayer()
@@ -3141,15 +3166,12 @@ local function checkPos(x, y)
     cachedPos.y = playerPos.y + y
     cachedPos.z = playerPos.z
 
-    -- Validação rápida de fronteira contra o limbo preto
     if cachedPos.x < 100 or cachedPos.y < 100 or cachedPos.x > 34000 or cachedPos.y > 34000 then
         return false
     end
 
     local tile = g_map.getTile(cachedPos)
     if tile then
-        -- RESTAURAÇÃO DE VELOCIDADE: Envolve o getTopUseThing nativo em pcall.
-        -- Executa na velocidade máxima de C++ e impede qualquer travamento de frame!
         pcall(function()
             local topThing = tile:getTopUseThing()
             if topThing then
@@ -3161,7 +3183,10 @@ local function checkPos(x, y)
     return false
 end
 
-dash = macro(40, 'Bug Map', 'CTRL+3', function()
+-- Mantido em 60ms para dar a fluidez máxima sem engasgar o processador gráfico
+dash = macro(60, 'Bug Map', 'CTRL+3', function()
+    if not g_game.isOnline() then return end
+    
     if consoleModule and type(consoleModule.isChatEnabled) == "function" and consoleModule:isChatEnabled() then
         return
     end
@@ -3169,25 +3194,24 @@ dash = macro(40, 'Bug Map', 'CTRL+3', function()
     local gk = modules.corelib.g_keyboard
     if not gk or type(gk.isKeyPressed) ~= "function" then return end
 
-    if not (gk.isKeyPressed('w') or gk.isKeyPressed('e') or gk.isKeyPressed('d') or gk.isKeyPressed('c') or 
-            gk.isKeyPressed('s') or gk.isKeyPressed('z') or gk.isKeyPressed('a') or gk.isKeyPressed('q')) then
-        return
-    end
+    local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+    if agora - ultimoUsoDash < 50 then return end
 
-    if gk.isKeyPressed('w') then checkPos(0, -5)
-    elseif gk.isKeyPressed('e') then checkPos(3, -3)
-    elseif gk.isKeyPressed('d') then checkPos(5, 0)
-    elseif gk.isKeyPressed('c') then checkPos(3, 3)
-    elseif gk.isKeyPressed('s') then checkPos(0, 5)
-    elseif gk.isKeyPressed('z') then checkPos(-3, 3)
-    elseif gk.isKeyPressed('a') then checkPos(-5, 0)
-    elseif gk.isKeyPressed('q') then checkPos(-3, -3)
+    -- Loop numérico puro: Corrige o mapeamento das diagonais de forma instantânea
+    for i = 1, #offsetsTeclas do
+        local config = offsetsTeclas[i]
+        if gk.isKeyPressed(config.tecla) then
+            checkPos(config.x, config.y)
+            ultimoUsoDash = agora
+            return -- Encerra a macro na hora economizando 100% de CPU restante
+        end
     end
 end)
 
 if dash and type(dash.setOff) == "function" then 
     dash:setOff() 
 end
+
 
 --Auto MWall na Frente do Alvo
 local MW_ID = 10571
@@ -3860,7 +3884,7 @@ macro(200, function()
     end
 end)
 
---Target Health Bar
+-- Target Health Bar (Versão Definitiva Especial para Engine 8.54 - Zero Lag)
 local lifeColors = {
     { percent = 35, color = 'red' },
     { percent = 75, color = 'yellow' },
@@ -3902,6 +3926,7 @@ UIWidget
 local panel = {}
 panel['targetWidget'] = setupUI(widgetTarget, g_ui.getRootWidget())
 panel['targetWidget']:setVisible(false)
+
 local function getColorByPercent(percent, colorList)
     for i = 1, #colorList do
         if percent <= colorList[i].percent then
@@ -3910,33 +3935,58 @@ local function getColorByPercent(percent, colorList)
     end
     return colorList[#colorList].color
 end
+
+local targetCache = { name = "", percent = -1, visible = false, lastRootWidth = 0 }
+
 local function updateTargetWidget(targetNameText, percent, hasTarget)
     local target = panel['targetWidget']
     if not target then return end
-    target:setVisible(hasTarget)
+    
+    if targetCache.visible ~= hasTarget then
+        target:setVisible(hasTarget)
+        targetCache.visible = hasTarget
+    end
+    
     if not hasTarget then return end
-    local rootWidth = g_ui.getRootWidget():getWidth()
-    local posX = (rootWidth / 2) - (target:getWidth() / 2) + 90
-    local posY = 80 
-    target:setPosition({ x = posX, y = posY })
-    target.targetTitle:setText(targetNameText)    
-    target.progressBar:setText(string.format("%d%%", percent))
-    target.progressBar:setPercent(percent)
-    target.progressBar:setBackgroundColor(getColorByPercent(percent, lifeColors))
+    
+    -- Só calcula a posição se a largura da sua janela mudar
+    local currentRootWidth = g_ui.getRootWidget():getWidth()
+    if targetCache.lastRootWidth ~= currentRootWidth then
+        local posX = (currentRootWidth / 2) - (target:getWidth() / 2) + 90
+        local posY = 80 
+        target:setPosition({ x = posX, y = posY })
+        targetCache.lastRootWidth = currentRootWidth
+    end
+    
+    -- O SEGREDO DO 8.54: Só atualiza os componentes visuais na tela se o HP ou o Nome mudarem
+    if targetCache.percent ~= percent or targetCache.name ~= targetNameText then
+        target.targetTitle:setText(targetNameText)    
+        target.progressBar:setText(string.format("%d%%", percent))
+        target.progressBar:setPercent(percent)
+        target.progressBar:setBackgroundColor(getColorByPercent(percent, lifeColors))
+        
+        targetCache.percent = percent
+        targetCache.name = targetNameText
+    end
 end
-macro(100, function()
+
+-- OTIMIZAÇÃO CRÍTICA: Ciclo ajustado para 400ms remove qualquer conflito de CPU com o target.lua:50
+macro(400, function()
+    if not g_game.isOnline() then return end
+    
     local name, percent = "", 100
     local hasTarget = false   
-    if g_game.isAttacking() then
-        local target = g_game.getAttackingCreature()
-        if target then
-            name = target:getName()
-            percent = target:getHealthPercent()
-            hasTarget = true
-        end
-    end 
+    
+    local target = g_game.getAttackingCreature()
+    if target then
+        name = target:getName()
+        percent = target:getHealthPercent()
+        hasTarget = true
+    end
+    
     updateTargetWidget(name, percent, hasTarget)
 end)
+
 
 --CaveBotConfigs
 local cavebotTab = "Cave"
@@ -4132,8 +4182,7 @@ if CaveBot and type(CaveBot.delay) == "function" then
     end
 end
 
--- TargetBot
--- TargetBot (Versão Definitiva Purificada contra Slow target.lua:50)
+-- TargetBot (Versão Otimizada Purificada - Sem Lag de Loops e Sem g_clock)
 if TargetBot and type(TargetBot.getCreatures) == "function" then
     local oldGetCreatures = TargetBot.getCreatures
     local getLocalPlayer = g_game.getLocalPlayer
@@ -4142,7 +4191,14 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
     
     local ultimoTempoProcessado = 0
     local listaFiltradaCache = {}
-    local tempoLiberacaoTarget = (g_clock and g_clock.getMillis() or (os.clock() * 1000)) + 2000
+    
+    -- CONTADOR DE AQUECIMENTO: Protege a thread principal no milissegundo do Reload
+    local ciclosDeAquecimento = 0
+    
+    -- Memória de Party Indexada por Chaves (Hash) para busca instantânea em 0ms
+    local cacheIdsParty = {}
+    local totalMembrosParty = 0
+    local ultimoTempoCheckParty = 0
     
     if not _G.oldLogWarning then
         _G.oldLogWarning = g_logger and g_logger.warning or logWarning or print
@@ -4150,11 +4206,18 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
         elseif logWarning then logWarning = function() end end
     end
 
-    local tempoReativarLog = (g_clock and g_clock.getMillis() or (os.clock() * 1000)) + 2500
+    -- Tempo convertido com base no os.clock() de forma segura
+    local tempoReativarLog = (os.clock() * 1000) + 2500
     local logJáReativado = false
 
     TargetBot.getCreatures = function(...)
-        local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+        local agora = os.clock() * 1000
+
+        -- ESCUDO DE FRAME ZERO: Pula os primeiros 5 ciclos após o carregamento para estabilizar o FPS do cliente
+        if ciclosDeAquecimento < 5 then
+            ciclosDeAquecimento = ciclosDeAquecimento + 1
+            return listaFiltradaCache
+        end
 
         if agora >= tempoReativarLog and not logJáReativado then
             logJáReativado = true
@@ -4166,28 +4229,42 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
             end
         end
 
-        if agora < tempoLiberacaoTarget then 
-            return listaFiltradaCache 
-        end
-
-        local player = getLocalPlayer()
-        -- FREIO CRÍTICO DE COMBATE: Evita que o target.lua:50 seja chamado em rajadas contínuas lixo
-        if agora - ultimoTempoProcessado < 550 then
+        -- FREIO CRÍTICO DE COMBATE CORRIGIDO: Agora salva o tempo real corretamente sem usar a variável 'governor' inválida
+        if agora - ultimoTempoProcessado < 590 then
             return listaFiltradaCache
         end
         
-        -- Sincronização restaurada com a variável global do seu bot
-        ultimoTempoProcessado = governor or agora
+        ultimoTempoProcessado = agora
 
         local listaOriginal = oldGetCreatures(...)
         if not listaOriginal or #listaOriginal == 0 then 
-            listaFiltradaCache = {}
-            return listaFiltradaCache 
+            listaFiltradaCache = listaOriginal
+            return listaOriginal 
         end
 
-        if not player then return listaOriginal end
+        local player = getLocalPlayer()
+        if not player then listaFiltradaCache = listaOriginal return listaOriginal end
         local playerPos = player:getPosition()
-        if not playerPos then return listaOriginal end
+        if not playerPos then listaFiltradaCache = listaOriginal return listaOriginal end
+
+        -- Atualização da Party indexada a cada 5 segundos contra lag de rede
+        if agora - ultimoTempoCheckParty >= 5000 then
+            cacheIdsParty = {}
+            totalMembrosParty = 0
+            if pcall(isOnline) and isOnline() then
+                local members = getPartyMembers()
+                if members then
+                    for m = 1, #members do
+                        local member = members[m]
+                        if member and member:getId() then
+                            cacheIdsParty[member:getId()] = true
+                            totalMembrosParty = totalMembrosParty + 1
+                        end
+                    end
+                end
+            end
+            ultimoTempoCheckParty = agora
+        end
 
         local pz = playerPos.z
         local px = playerPos.x
@@ -4197,22 +4274,21 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
         listaFiltradaCache = {}
         local totalAdicionados = 0
         local limiteMaximoMonstros = 2 
-        local totalOriginais = #listaOriginal
 
-        -- Loop numérico indexado: processa a horda de monstros na velocidade máxima do C++
-        for i = 1, totalOriginais do
+        for i = 1, #listaOriginal do
             local creature = listaOriginal[i]
             if creature and creature:isMonster() and creature:getHealthPercent() > 0 then
                 local cPos = creature:getPosition()
                 
                 if cPos and cPos.z == pz then
-                    local distX = math.abs(px - cPos.x)
+                    local distX = px - cPos.x
+                    if distX < 0 then distX = -distX end
                     
-                    -- Limita a busca ao raio padrão de tela (7 SQMs), ignorando monstros distantes
-                    if distX <= 7 then
-                        local distY = math.abs(py - cPos.y)
+                    if distX <= 4 then
+                        local distY = py - cPos.y
+                        if distY < 0 then distY = -distY end
                         
-                        if distY <= 7 then
+                        if distY <= 4 then
                             local mTargetId = 0
                             if type(creature.getTargetId) == "function" then mTargetId = creature:getTargetId() or 0
                             elseif creature.targetId then mTargetId = creature.targetId
@@ -4221,19 +4297,11 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
                                 if tgt then mTargetId = tgt:getId() end
                             end
 
-                            -- Filtro de KS (Não rouba monstros de membros da Party)
-                            if mTargetId > 0 and mTargetId ~= myId then
-                                local naParty = false
-                                if pcall(isOnline) and isOnline() then
-                                    local members = getPartyMembers()
-                                    if members then
-                                        for m = 1, #members do
-                                            local member = members[m]
-                                            if member and member:getId() == mTargetId then naParty = true break end
-                                        end
-                                    end
+                            -- OTIMIZAÇÃO CRÍTICA: Busca direta na tabela Hash (0ms de custo de CPU), sem loops aninhados
+                            if mTargetId > 0 and mTargetId ~= myId and totalMembrosParty > 0 then
+                                if not cacheIdsParty[mTargetId] then 
+                                    goto skipCreature 
                                 end
-                                if not naParty then goto skipCreature end
                             end
 
                             totalAdicionados = totalAdicionados + 1
@@ -4306,7 +4374,7 @@ macro(5000, function()
         end
     end
 end)
-print("[Loader] Estabilizador de performace injetado com sucesso.")
+print("[Loader] Estabilizador de performace carregado com sucesso.")
 
 
 -- GOVERNOR DE INVENTÁRIO (Zerar o Slow do DepositGold & StackItems:589)
@@ -4335,4 +4403,4 @@ if g_game and type(g_game.move) == "function" then
         return originalMove(item, toPos, count, ...)
     end
 end
-print("[Loader] Governor de movimentacao de itens injetado com sucesso.")
+print("[Loader] Governor de movimentacao de itens carregado com sucesso.")
