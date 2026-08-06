@@ -1,6 +1,4 @@
--- ============================================================================
 -- GOVERNOR DE EVENTOS GLOBAL (Proteção Extra contra Slow editor.lua:157)
--- ============================================================================
 local temposPassosIndividuais = {}
 
 if type(onCreaturePositionChange) == "function" then
@@ -4120,7 +4118,7 @@ if TargetBot and TargetBot.Creature then
     end
 end
 
--- CaveBot Walker Otimizado
+-- CaveBot
 if CaveBot and type(CaveBot.delay) == "function" then
     -- Proteção de Reload para não duplicar ponteiros na memória RAM
     if not CaveBot.oldDelayOriginalPointer then
@@ -4145,67 +4143,118 @@ if CaveBot and type(CaveBot.delay) == "function" then
 end
 
 -- TargetBot
+-- 1. INTERCEPTADOR SEGURO DE PATHFINDING (Mata o lag da linha 50 do target.lua)
+local oldFindPath = findPath
+if type(oldFindPath) == "function" then
+    findPath = function(startPos, endPos, maxDist, options, ...)
+        if not startPos or not endPos or startPos.z ~= endPos.z then
+            return nil
+        end
+
+        -- Filtro geométrico simples em memória (0ms de custo de CPU)
+        local distX = startPos.x - endPos.x
+        if distX < 0 then distX = -distX end
+        
+        local distY = startPos.y - endPos.y
+        if distY < 0 then distY = -distY end
+
+        -- Se o monstro estiver a mais de 7 SQMs, rejeita o cálculo na hora.
+        -- Isso impede que o algoritmo A* rode para monstros travados fora da tela.
+        if distX > 7 or distY > 7 then
+            return nil
+        end
+
+        return oldFindPath(startPos, endPos, maxDist, options, ...)
+    end
+end
+
+-- 2. GANCHO AUXILIAR DE COMPORTAMENTO E FILTRO DE PARTY
 if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams) == "function" then
     local oldCalculateParams = TargetBot.Creature.calculateParams
     local getLocalPlayer = g_game.getLocalPlayer
+    local isOnline = g_game.isOnline
 
-    -- Intercepta o cálculo exato que precede a linha 50
+    local monstrosProcessadosNoCiclo = 0
+    local ultimoTickCiclo = 0
+
+    local cacheIdsParty = {}
+    local totalMembrosParty = 0
+    local ultimoTempoCheckParty = 0
+
     TargetBot.Creature.calculateParams = function(creature, path, ...)
         local player = getLocalPlayer()
         if not player or not creature then return { danger = 0, priority = 0 } end
 
+        local agora = os.clock() * 1000
+        if agora - ultimoTickCiclo > 50 then
+            monstrosProcessadosNoCiclo = 0
+            ultimoTickCiclo = agora
+        end
+
         local pPos = player:getPosition()
         local cPos = creature:getPosition()
+        local myId = player:getId()
 
-        -- FILTRO DE FRAME ZERO: Se o monstro mudou de andar ou está longe, mata a execução antes do path
         if not pPos or not cPos or pPos.z ~= cPos.z then
             return { danger = 0, priority = 0 }
+        end
+
+        -- Sincronização do cache da Party
+        if agora - ultimoTempoCheckParty >= 5000 then
+            cacheIdsParty = {}
+            totalMembrosParty = 0
+            if pcall(isOnline) and isOnline() then
+                local members = type(g_game.getPartyList) == "function" and g_game.getPartyList()
+                if members then
+                    for m = 1, #members do
+                        local member = members[m]
+                        if member and member:getId() then
+                            cacheIdsParty[member:getId()] = true
+                            totalMembrosParty = totalMembrosParty + 1
+                        end
+                    end
+                end
+            end
+            ultimoTempoCheckParty = agora
+        end
+
+        -- Filtro inteligente de alvos alheios (Ignora se for de fora da PT)
+        if type(creature.getTarget) == "function" then
+            local monsterTarget = creature:getTarget()
+            if monsterTarget and monsterTarget:isPlayer() then
+                local targetId = monsterTarget:getId()
+                if targetId and targetId ~= myId then
+                    if not cacheIdsParty[targetId] then
+                        return { danger = 0, priority = 0 }
+                    end
+                end
+            end
         end
 
         local distX = math.abs(pPos.x - cPos.x)
         local distY = math.abs(pPos.y - cPos.y)
 
-        -- Se estiver fora do raio de combate real (5 SQMs), remove a prioridade dele imediatamente
-        if distX > 5 or distY > 5 then
+        -- Se o monstro estiver longe, reduz prioridade para proteger processamento
+        if distX > 3 or distY > 3 then
+            if distX <= 7 and distY <= 7 then
+                local res = oldCalculateParams(creature, path, ...)
+                if res then res.priority = 1 return res end
+            end
             return { danger = 0, priority = 0 }
         end
 
-        -- Se passou nos filtros de performance, deixa calcular normalmente
+        -- Limitador de amostragem na Box cheia
+        if monstrosProcessadosNoCiclo >= 3 then
+            local res = oldCalculateParams(creature, path, ...)
+            if res then res.priority = 1 return res end
+            return { danger = 0, priority = 0 }
+        end
+
+        monstrosProcessadosNoCiclo = monstrosProcessadosNoCiclo + 1
         return oldCalculateParams(creature, path, ...)
     end
 end
 print("[Loader] TargetBot otimizado com sucesso.")
-
--- Otimização do Smart Follow (Freio Ajustado para 350ms - Versão Segura)
-local lastFollowCheck = 0
-
-if type(macro) == "function" then
-    local oldMacro = macro
-    macro = function(delayTime, name, callback, ...)
-        if type(name) == "string" and string.find(name:lower(), "follow") then
-            local followFunc = callback or name
-            if type(followFunc) == "function" then
-                
-                -- Aumentamos o delay base da macro para 350ms
-                return oldMacro(350, name, function()
-                    local now = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-                    
-                    -- FREIO DO FOLLOW: Só recalcula rota a cada 350ms
-                    if now - lastFollowCheck < 350 then 
-                        return 
-                    end
-                    lastFollowCheck = now
-
-                    -- CORREÇÃO: Removido a variável 'local player' que causava conflito global e travava a interface
-
-                    return followFunc()
-                end, ...)
-            end
-        end
-        return oldMacro(delayTime, name, callback, ...)
-    end
-end
-print("[Loader] Smart Follow otimizado com sucesso.")
 
 
 -- ANTI-STUTTERING DEFINITIVO: Reciclagem de Tabelas (0ms Gasto de CPU)
