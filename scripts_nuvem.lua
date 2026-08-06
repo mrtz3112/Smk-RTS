@@ -3722,14 +3722,14 @@ end)
 
 
 --Ice Hud HP Percent
-macro(100, function()
+macro(200, function()
 local hp = g_ui.getRootWidget():recursiveGetChildById("healthCircleFront")
 hp:setText("   ".. hppercent().. "             ") 
 hp:setColor("white")
 end)
 
 --Ice Hud MP Percent
-macro(100, function()
+macro(200, function()
 local hp = g_ui.getRootWidget():recursiveGetChildById("manaCircleFront")
 hp:setText("                   ".. manapercent().. "          ") 
 hp:setColor("white")
