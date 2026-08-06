@@ -571,7 +571,7 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
 end)
 
 UI.Separator()
--- Deposit Gold & Stack Items (Versão Definitiva Unificada - Sem Duplo Loop)
+-- Deposit Gold & Stack Items (Versão Definitiva Sem Custo de CPU - smkmain.lua)
 local ultimoMovimentoStack = 0
 local cachedPosicao = {x = 0, y = 0, z = 0, slot = 0} 
 
@@ -592,13 +592,15 @@ macro(1500, "DepositGold & StackItems", function()
     end
   end
 
-  -- 2. MAPEAMENTO DOS MAIORES BOLOS (LOOP ÚNICO)
+  -- 2. MAPEAMENTO DOS MAIORES BOLOS (LOOP ÚNICO HISTÓRICO)
   local containers = g_game.getContainers()
   local itensMapeados = {}
+  local itensParaMover = {}
+  local totalParaMover = 0
 
   for _, container in pairs(containers) do
     if container then
-      local items = container:getItems()
+      local items = container:getItems() -- Roda apenas UMA vez por ciclo
       for index = 1, #items do
         local item = items[index]
         if item and item:isStackable() then 
@@ -607,7 +609,17 @@ macro(1500, "DepositGold & StackItems", function()
           local posicaoAtual = container:getSlotPosition(index - 1)
 
           if posicaoAtual then
-            -- Lógica matemática estrita: Prioriza sempre a pilha com maior quantidade
+            -- Armazena a referência de todos os agrupáveis mapeados
+            totalParaMover = totalParaMover + 1
+            itensParaMover[totalParaMover] = {
+              itemObj = item,
+              itemId = itemId,
+              count = count,
+              containerId = container:getId(),
+              slotIndex = index - 1
+            }
+
+            -- Lógica matemática estrita: Elege a maior pilha como o destino final absoluto
             if not itensMapeados[itemId] or count > itensMapeados[itemId].count then
               itensMapeados[itemId] = {
                 posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
@@ -622,34 +634,25 @@ macro(1500, "DepositGold & StackItems", function()
     end
   end
 
-  -- 3. MOVIMENTAÇÃO INTERNA COM PARADA IMEDIATA (0ms CPU)
-  for _, container in pairs(containers) do
-    if container then
-      local items = container:getItems()
-      for index = 1, #items do
-        local item = items[index]
-        if item and item:isStackable() then
-          local itemId = item:getId()
-          local destino = itensMapeados[itemId]
+  -- 3. MOVIMENTAÇÃO DIRETA EM MEMÓRIA (0ms CPU - Sem reler mochilas)
+  for i = 1, totalParaMover do
+    local itemDados = itensParaMover[i]
+    local destino = itensMapeados[itemDados.itemId]
 
-          if destino then
-            local slotAtualIndex = index - 1
-            local mesmoContainer = (container:getId() == destino.containerId)
-            local mesmoSlot = (slotAtualIndex == destino.slotIndex)
+    if destino then
+      local mesmoContainer = (itemDados.containerId == destino.containerId)
+      local mesmoSlot = (itemDados.slotIndex == destino.slotIndex)
 
-            -- Se achou uma parte separada da pilha principal, junta elas imediatamente
-            if not (mesmoContainer and mesmoSlot) then
-              cachedPosicao.x = destino.posicao.x
-              cachedPosicao.y = destino.posicao.y
-              cachedPosicao.z = destino.posicao.z
-              cachedPosicao.slot = destino.posicao.slot
+      -- Se for uma parte separada fora do maior bolo, arrasta e mata o macro na hora
+      if not (mesmoContainer and mesmoSlot) then
+        cachedPosicao.x = destino.posicao.x
+        cachedPosicao.y = destino.posicao.y
+        cachedPosicao.z = destino.posicao.z
+        cachedPosicao.slot = destino.posicao.slot
 
-              g_game.move(item, cachedPosicao, item:getCount())
-              ultimoMovimentoStack = agora 
-              return -- Quebra o macro aqui: Evita recalcular o restante e zera o lag
-            end
-          end
-        end
+        g_game.move(itemDados.itemObj, cachedPosicao, itemDados.count)
+        ultimoMovimentoStack = agora 
+        return -- Alívio total de CPU: Evita qualquer repetição ou gargalo no frame
       end
     end
   end
@@ -2179,8 +2182,26 @@ local function atualizarCoresPainelCompleto()
     pintarBotaoSeguro(container, "botaoWave", isMacroActive(turnCombo))
 end
 
+-- OTIMIZAÇÃO: Função de alternar movida para cima para evitar erro de leitura (nil value)
+local conectarComponentesPainel -- Declaração antecipada para o botão Girar usar
+
+local function alternarEstadoMacro(macroRef, storageKey)
+    if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
+        if macroRef.isOn() then
+            macroRef.setOff()
+            storage.painelSalvo[storageKey] = false
+        else
+            macroRef.setOn()
+            storage.painelSalvo[storageKey] = true
+        end
+    else
+        storage.painelSalvo[storageKey] = not storage.painelSalvo[storageKey]
+    end
+    atualizarCoresPainelCompleto()
+end
+
 -- Função de vinculação nativa de cliques e cores
-local function conectarComponentesPainel()
+conectarComponentesPainel = function()
     if not painelIconesUI then return end
     
     painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
@@ -2204,37 +2225,20 @@ local function conectarComponentesPainel()
         btnGirar.onClick = function()
             storage.painelSalvo.horizontal = not storage.painelSalvo.horizontal
             painelIconesUI:destroy()
-            coresCache = {} -- Limpa cache para forçar repintura no novo layout
+            coresCache = {} 
             local layout = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
             painelIconesUI = setupUI(layout, modules.game_interface.getMapPanel())
             conectarComponentesPainel()
         end
     end
-    -- Força cor correta ao abrir/iniciar
     atualizarCoresPainelCompleto()
 end
 
--- Inicialização base
+-- INICIALIZAÇÃO CORRETA E SEGURA DO LAYOUT
 local layoutInicial = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
 painelIconesUI = setupUI(layoutInicial, modules.game_interface.getMapPanel())
 
-function alternarEstadoMacro(macroRef, storageKey)
-    if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
-        if macroRef.isOn() then
-            macroRef.setOff()
-            storage.painelSalvo[storageKey] = false
-        else
-            macroRef.setOn()
-            storage.painelSalvo[storageKey] = true
-        end
-    else
-        storage.painelSalvo[storageKey] = not storage.painelSalvo[storageKey]
-    end
-    -- OTIMIZAÇÃO: Atualiza a cor instantaneamente no exato momento do clique!
-    atualizarCoresPainelCompleto()
-end
-
--- Inicializa as conexões
+-- Ativa as conexões após o painel e as funções estarem totalmente criados na memória
 conectarComponentesPainel()
 
 -- Loop estendido para 600ms (Sincronia secundária passiva com cache de CPU)
@@ -2258,7 +2262,6 @@ macro(600, function()
         jaSincronizou = true
     end
     
-    -- Executa atualização secundária protegida por cache de cor
     atualizarCoresPainelCompleto()
 end)
 
