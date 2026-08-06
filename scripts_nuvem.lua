@@ -1157,32 +1157,43 @@ function getDash(dir)
         return true
     end
 end
--- Enter Rift
-local PORTAL_ID = 11843 -- ID do seu portal
-local RANGE_X = 12       -- 7 SQMs para os lados
-local RANGE_Y = 7       -- 7 SQMs para cima/baixo
-local DELAY_MACRO = 500 -- Executa a cada meio segundo
+
+-- Enter Rift (Otimizado - Gasto de CPU reduzido)
+local PORTAL_ID = 11843 
+local RANGE_X = 12       -- Mantido o seu alcance de 12 para as laterais
+local RANGE_Y = 7        -- Mantido o seu alcance de 7 para cima/baixo
+local DELAY_MACRO = 500  
+
+-- Cache local de APIs do OTClient para execução ultra rápida na memória
+local getLocalPlayer = g_game.getLocalPlayer
+local getTile = g_map.getTile
+local g_game_use = g_game.use
 
 macro(DELAY_MACRO, "Enter Rift", function()
-    local player = g_game.getLocalPlayer()
+    local player = getLocalPlayer()
     if not player then return end
 
     local playerPos = player:getPosition()
+    if not playerPos then return end
 
-    -- Varre a área de 7x7 ao redor do jogador
+    -- OTIMIZAÇÃO CRÍTICA: Cria apenas uma tabela na memória e altera os valores por ciclo
+    local searchPos = {x = 0, y = 0, z = playerPos.z}
+
+    -- Varre a área ao redor do jogador
     for x = -RANGE_X, RANGE_X do
         for y = -RANGE_Y, RANGE_Y do
-            local searchPos = {x = playerPos.x + x, y = playerPos.y + y, z = playerPos.z}
-            local tile = g_map.getTile(searchPos)
+            searchPos.x = playerPos.x + x
+            searchPos.y = playerPos.y + y
 
+            local tile = getTile(searchPos)
             if tile then
-                -- Obtém todos os itens presentes neste SQM
                 local items = tile:getItems()
                 if items then
-                    for _, item in pairs(items) do
-                        -- Compara o ID de cada item do SQM com o ID do portal
-                        if item:getId() == PORTAL_ID then
-                            g_game.use(item)
+                    -- OTIMIZAÇÃO: Loop numérico direto muito mais leve que pairs()
+                    for i = 1, #items do
+                        local item = items[i]
+                        if item and item:getId() == PORTAL_ID then
+                            g_game_use(item)
                             return -- Encontrou o portal, clica e encerra o ciclo na hora
                         end
                     end
@@ -3919,7 +3930,7 @@ local math_abs = math.abs
 local type = type
 local pcall = pcall
 
--- 1. SEQUESTRO RESTRITO DO ADAPTADOR DE MACROS NATIVAS
+-- 1. SEQUESTRO RESTRITO DO ADAPTADOR DE MACROS NATIVAS (Freio Ajustado para 500ms)
 if type(macro) == "function" then
     local oldMacro = macro
     macro = function(delayTime, name, callback, ...)
@@ -3936,11 +3947,12 @@ if type(macro) == "function" then
         end
 
         if targetFunc then
-            local ultimoTickExecutado = 0
+            -- AJUSTE: O primeiro tick já começa no futuro para evitar o pico de lag do carregamento
+            local ultimoTickExecutado = (g_clock and g_clock.getMillis() or (os.clock() * 1000)) + 500
             local ultimoAndarX = 0
 
-            -- Forçamos a macro a iniciar de forma leve
-            local minhaMacroTarget = oldMacro(200, macroName, function()
+            -- Forçamos a macro nativa a rodar com delay de 250ms para diminuir a frequência de checagem do motor
+            local minhaMacroTarget = oldMacro(250, macroName, function()
                 local player = g_game.getLocalPlayer()
                 if not player then return end
                 
@@ -3950,7 +3962,6 @@ if type(macro) == "function" then
                 -- DETECÇÃO E LIMPEZA DE BUFFER DE ESCADA/TELEPORT
                 if ultimoAndarX ~= playerPos.z then
                     ultimoAndarX = playerPos.z
-                    -- Usa o relógio nativo do jogo em vez de gerar cálculos com os.clock()
                     ultimoTickExecutado = (g_clock and g_clock.getMillis() or (os.clock() * 1000)) + 1500
                     pcall(function()
                         g_game.cancelAttack()
@@ -3962,8 +3973,8 @@ if type(macro) == "function" then
 
                 local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
                 
-                -- FREIO DE CPU: Processa apenas a cada 450ms cravados
-                if agora - ultimoTickExecutado < 450 then
+                -- OTIMIZAÇÃO RIGIDA: Força o processamento pesado a acontecer apenas a cada 500ms cravados
+                if agora - ultimoTickExecutado < 500 then
                     return
                 end
                 
@@ -3972,7 +3983,7 @@ if type(macro) == "function" then
             end, callback, ...)
 
             if minhaMacroTarget and type(minhaMacroTarget) == "table" then
-                minhaMacroTarget.delay = 450
+                minhaMacroTarget.delay = 500
             end
 
             return minhaMacroTarget
@@ -3981,7 +3992,7 @@ if type(macro) == "function" then
     end
 end
 
--- 2. INTERCEPTADOR RESTRITO DE CRIATURAS DO TARGETBOT (Filtro de Área Ultra Rápido)
+-- 2. INTERCEPTADOR RESTRITO DE CRIATURAS DO TARGETBOT (Filtro de Área + Proteção de Party)
 if TargetBot and type(TargetBot.getCreatures) == "function" then
     local oldGetCreatures = TargetBot.getCreatures
     TargetBot.getCreatures = function(...)
@@ -3994,22 +4005,56 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
         local playerPos = player:getPosition()
         if not playerPos then return listaOriginal end
 
+        local myId = player:getId()
         local listaFiltrada = {}
         local totalAdicionados = 0
-        local limiteMaximoMonstros = 2 -- Mantido o foco em apenas 2 monstros da box
+        local limiteMaximoMonstros = 2 -- Foco em 2 monstros da box
         local pz = playerPos.z
         local px = playerPos.x
         local py = playerPos.y
 
-        -- Loop numérico otimizado
+        -- Cria uma tabela hash rápida com os IDs dos membros da Party para checagem em 0ms
+        local partyIds = {}
+        if g_game.isOnline() then
+            local members = g_game.getPartyMembers()
+            if members then
+                for m = 1, #members do
+                    local member = members[m]
+                    if member then
+                        partyIds[member:getId()] = true
+                    end
+                end
+            end
+        end
+
+        -- Loop numérico de alta performance
         for i = 1, #listaOriginal do
-            local creature = listaOriginal[i] -- CORREÇÃO: Removido o teste da variável inexistente 'listLine'
+            local creature = listaOriginal[i]
             
             if creature and creature:isMonster() and creature:getHealthPercent() > 0 then
-                local cPos = creature:getPosition()
                 
+                -- Captura quem o monstro está atacando
+                local mTargetId = 0
+                if type(creature.getTargetId) == "function" then 
+                    mTargetId = creature:getTargetId() or 0
+                elseif creature.targetId then 
+                    mTargetId = creature.targetId
+                elseif type(creature.getTarget) == "function" then
+                    local tgt = creature:getTarget()
+                    if tgt then mTargetId = tgt:getId() end
+                end
+
+                -- SE O MONSTRO TEM UM ALVO:
+                if mTargetId > 0 then
+                    -- Só ignora se o alvo NÃO for você E TAMBÉM NÃO estiver na sua party
+                    if mTargetId ~= myId and not partyIds[mTargetId] then
+                        goto skipCreature
+                    end
+                end
+
+                local cPos = creature:getPosition()
                 if cPos and cPos.z == pz then
-                    -- OTIMIZAÇÃO 2: Substituído o math.abs por comparações lógicas manuais (Mais rápido em Lua)
+                    -- Cálculo de distância ultra rápido sem math.abs
                     local distX = px - cPos.x
                     if distX < 0 then distX = -distX end
                     
@@ -4017,7 +4062,7 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
                         local distY = py - cPos.y
                         if distY < 0 then distY = -distY end
                         
-                        -- Se o monstro estiver dentro do raio 4x4 da sua box, adiciona no alvo
+                        -- Se passar em todos os testes, entra na lista de alvos
                         if distY <= 4 then
                             totalAdicionados = totalAdicionados + 1
                             listaFiltrada[totalAdicionados] = creature
@@ -4029,8 +4074,45 @@ if TargetBot and type(TargetBot.getCreatures) == "function" then
                     end
                 end
             end
+            
+            ::skipCreature::
         end
         return listaFiltrada
     end
 end
 print("[Loader] TargetBot otimizado com sucesso.")
+
+-- Otimização do Smart Follow
+local lastFollowCheck = 0
+local cachedLeaderPos = {x = 0, y = 0, z = 0}
+
+if type(macro) == "function" then
+    local oldMacro = macro
+    macro = function(delayTime, name, callback, ...)
+        -- Detecta se é a macro do Smart Follow (geralmente roda em delays baixos como 100ms a 250ms)
+        if type(name) == "string" and string.find(name:lower(), "follow") then
+            local followFunc = callback or name
+            if type(followFunc) == "function" then
+                
+                -- Recria a macro injetando um controle inteligente de processamento
+                return oldMacro(250, name, function()
+                    local now = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+                    
+                    -- Se o líder não se moveu ou o intervalo for muito curto, pula o cálculo pesado de pathfinding
+                    if now - lastFollowCheck < 200 then 
+                        return 
+                    end
+                    lastFollowCheck = now
+
+                    local player = g_game.getLocalPlayer()
+                    if not player then return end
+
+                    -- Executa a função original do follow de forma segura
+                    return followFunc()
+                end, ...)
+            end
+        end
+        return oldMacro(delayTime, name, callback, ...)
+    end
+end
+print("[Loader] Smart Follow otimizado com sucesso.")
