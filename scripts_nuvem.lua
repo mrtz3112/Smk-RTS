@@ -1158,19 +1158,28 @@ function getDash(dir)
     end
 end
 
--- Enter Rift (Tela Cheia 13x7 - Alta Velocidade 8.54)
-local PORTAL_ID = 11843 
-local RANGE_X = 13       -- 13 para a esquerda e 13 para a direita (Tela cheia)
-local RANGE_Y = 7        -- 7 para cima e 7 para baixo (Tela cheia)
-local DELAY_MACRO = 100  -- Delay baixo para resposta imediata ao correr
+-- Enter Rift
+local PORTAL_ID = 11843
+local RANGE_X = 13       
+local RANGE_Y = 7        
+local DELAY_MACRO = 100  
 
 local getLocalPlayer = g_game.getLocalPlayer
 local getTile = g_map.getTile
 local g_game_use = g_game.use
 
--- Variáveis de controle para rastrear o movimento do personagem
 local ultimaPosicaoX = 0
 local ultimaPosicaoY = 0
+
+-- Função interna para desligar o Smart Follow com segurança
+local function cancelarSmartFollow()
+    -- Busca a macro do Follow na lista global do jogo
+    local macroFollow = getMacro and getMacro("Smart Follow") or macroList and macroList["Smart Follow"]
+    if macroFollow and type(macroFollow.setOff) == "function" and macroFollow:isOn() then
+        macroFollow:setOff()
+        modules.game_textmessage.displayStatusMessage("[Rift] Smart Follow desligado para entrar no portal!")
+    end
+end
 
 macro(DELAY_MACRO, "Enter Rift", function()
     local player = getLocalPlayer()
@@ -1179,19 +1188,15 @@ macro(DELAY_MACRO, "Enter Rift", function()
     local playerPos = player:getPosition()
     if not playerPos then return end
 
-    -- OTIMIZAÇÃO DE OURO: Só gasta CPU se o boneco tiver mudado de SQM (andado)
     if playerPos.x == ultimaPosicaoX and playerPos.y == ultimaPosicaoY then
         return
     end
     
-    -- Atualiza a última posição registrada
     ultimaPosicaoX = playerPos.x
     ultimaPosicaoY = playerPos.y
 
-    -- Reaproveita uma única tabela na memória para os 225 SQMs
     local searchPos = {x = 0, y = 0, z = playerPos.z}
 
-    -- Varredura completa da tela cheia 13x7
     for x = -RANGE_X, RANGE_X do
         for y = -RANGE_Y, RANGE_Y do
             searchPos.x = playerPos.x + x
@@ -1199,18 +1204,20 @@ macro(DELAY_MACRO, "Enter Rift", function()
 
             local tile = getTile(searchPos)
             if tile then
-                -- 1. Checagem rápida no topo do SQM (Ganha microsegundos)
+                -- 1. Checagem rápida no topo do SQM
                 local topThing = tile:getTopUseThing()
                 if topThing and topThing:getId() == PORTAL_ID then
+                    cancelarSmartFollow() -- DESLIGA O FOLLOW ANTES DE CLICAR
                     g_game_use(topThing)
                     return
                 end
 
-                -- 2. Varredura profunda via ipairs (Obrigatório para a estrutura do 8.54)
+                -- 2. Varredura profunda via ipairs
                 local items = tile:getItems()
                 if items then
                     for _, item in ipairs(items) do
                         if item and item:getId() == PORTAL_ID then
+                            cancelarSmartFollow() -- DESLIGA O FOLLOW ANTES DE CLICAR
                             g_game_use(item)
                             return 
                         end
@@ -3202,7 +3209,7 @@ macro(500, function()
     end
 end)
 
---X-Sense (Correção de Extração Bruta e Sem Lag)
+-- X-Sense (Extração Dinâmica por Prefixo de Comando)
 if type(storage.Sense) ~= "string" then
     storage.Sense = ""
 end
@@ -3211,38 +3218,45 @@ xsense = macro(30, "xSense", "ALT+4", function()
     if target and target:isPlayer() then
         storage.Sense = target:getName()
     end
+    
     if storage.Sense and storage.Sense ~= "" and (manapercent() >= 35) then
         say('sense "' .. storage.Sense)
         delay(5000)
     end
 end)
+-- Captura de chat inteligente por padrão de comando
 onTalk(function(...)
     local args = {...}
-    local text = nil
-    -- 1. Varredura bruta convertendo tudo para texto (Força o client a extrair strings de objetos)
+    local comandoReal = nil
+    -- Varre todas as strings enviadas para achar qual delas é o comando digitado
     for i = 1, #args do
-        if args[i] then
-            local strConvertida = tostring(args[i])
-            -- Procura pela string que começa com 'x' ou 'X' de forma direta e sem lag
-            local primeiroChar = string.sub(strConvertida, 1, 1)
-            if primeiroChar == 'x' or primeiroChar == 'X' then
-                text = strConvertida
+        if type(args[i]) == "string" then
+            local textoLimpo = args[i]:trim()
+            -- Filtra especificamente a string que começa com 'x' ou 'X'
+            if string.sub(textoLimpo, 1, 1):lower() == 'x' then
+                comandoReal = textoLimpo
                 break
             end
         end
     end
-    -- 2. Se nenhuma das mensagens capturadas começou com 'x', descarta instantaneamente (CPU em 0%)
-    if not text then return end
-    -- 3. Execução segura do comando "x"
-    local msg = text:trim()
-    local checkMsg = string.sub(msg, 2, #msg):trim()
-    if checkMsg == '0' then
+    -- Se nenhuma das strings capturadas começou com 'x', ignora o ciclo
+    if not comandoReal then return end
+    -- Captura tudo o que foi digitado após a primeira letra 'x'
+    local restoTexto = string.sub(comandoReal, 2, #comandoReal):trim()
+    -- Proteção contra comandos globais do servidor (! ou /)
+    local primeiroCharResto = string.sub(restoTexto, 1, 1)
+    if primeiroCharResto == "!" or primeiroCharResto == "/" or primeiroCharResto == "#" then
+        return
+    end
+    -- Se digitou apenas 'x', 'X' ou 'x0', limpa o alvo atual
+    if restoTexto == "" or restoTexto == "0" then
         storage.Sense = ""
         modules.game_textmessage.displayStatusMessage("[xSense] Alvo limpado com sucesso!")
-    else
-        storage.Sense = checkMsg
-        say('sense "' .. storage.Sense)
+        return true
     end
+    -- Salva o alvo e dispara o poder do Sense
+    storage.Sense = restoTexto
+    say('sense "' .. storage.Sense)
     return true
 end)
 
