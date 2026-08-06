@@ -1160,7 +1160,7 @@ end
 -- Enter Rift
 -- Configurações da Macro
 local PORTAL_ID = 11843 -- ID do seu portal
-local RANGE_X = 7       -- 7 SQMs para os lados
+local RANGE_X = 12       -- 7 SQMs para os lados
 local RANGE_Y = 7       -- 7 SQMs para cima/baixo
 local DELAY_MACRO = 500 -- Executa a cada meio segundo
 
