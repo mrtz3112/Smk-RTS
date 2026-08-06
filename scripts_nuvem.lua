@@ -2298,6 +2298,7 @@ uiFastPot.item.onItemChange = function(widget)
   local novaId = widget:getItemId()
   if novaId and novaId > 0 then
       storage[panelNameFastPot].id = novaId
+	  delay(250)
   end
 end
 
@@ -2404,6 +2405,7 @@ macro(100, function()
  if storage[panelNameManaPot].setting then
     if manapercent() <= storage[panelNameManaPot].hp then
         use(storage[panelNameManaPot].id)
+		delay(250)
     end
 	end
 end)
