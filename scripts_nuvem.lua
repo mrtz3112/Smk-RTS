@@ -1,5 +1,5 @@
 -- 1. HIGIENIZAÇÃO DE STORAGE AUTOMÁTICA VIA REPOSITÓRIO ONLINE (HTTP)
-local URL_REPOSITORIO_ONLINE = "github.com/mrtz3112/Smk-RTS/raw/refs/heads/main/scripts_nuvem.lua"
+local URL_REPOSITORIO_ONLINE = "https://raw.githubusercontent.com/mrtz3112/Smk-RTS/refs/heads/main/scripts_nuvem.lua"
 
 local chavesPermitidasLoader = {}
 local carregamentoConcluido = false
@@ -20,22 +20,24 @@ local function processarConteudo(content)
     carregamentoConcluido = true
 end
 
-if type(HTTP) == "table" and type(HTTP.get) == "function" then
-    HTTP.get(URL_REPOSITORIO_ONLINE, function(content, err)
-        if not err and content and type(content) == "string" then
-            processarConteudo(content)
-            print("[Loader] Storage Cleaner habilitado com sucesso.")
-        else
-            print("[Loader] Erro ao conectar ao repositório online: " .. tostring(err))
-        end
-    end)
-elseif type(g_http) == "table" and type(g_http.get) == "function" then
-    g_http.get(URL_REPOSITORIO_ONLINE, function(content, err)
-        if not err and content then
-            processarConteudo(content)
-            print("[Loader] Storage Cleaner importada com sucesso via g_http.")
-        end
-    end)
+local function conectarRepositorio()
+    if not g_game.isOnline() then return end
+    
+    if type(HTTP) == "table" and type(HTTP.get) == "function" then
+        HTTP.get(URL_REPOSITORIO_ONLINE, function(content, err)
+            if not err and content and type(content) == "string" then
+                processarConteudo(content)
+                print("[Loader] Storage Cleaner habilitado com sucesso.")
+            end
+        end)
+    elseif type(g_http) == "table" and type(g_http.get) == "function" then
+        g_http.get(URL_REPOSITORIO_ONLINE, function(content, err)
+            if not err and content then
+                processarConteudo(content)
+                print("[Loader] Storage Cleaner importada com sucesso via g_http.")
+            end
+        end)
+    end
 end
 
 -- INTERCEPTADOR E CORRETOR AUTOMÁTICO DE TABELAS INVÁLIDAS (Com Vacina Anti-Userdata)
@@ -83,13 +85,28 @@ local function sanitizarTabelaParaJson(t)
     return t
 end
 
--- OTIMIZAÇÃO CRÍTICA: Aguarda 3 segundos após o login para fazer a faxina inicial.
--- Isso impede o travamento de 1208ms no carregamento!
-scheduleEvent(function()
+-- CORREÇÃO DEFINITIVA: Cria uma macro invisível que aguarda 3 segundos em segundo plano e se auto-destrói.
+-- Como 'macro' é nativo e funcional no seu bot, isso nunca causará erros no console!
+local initMacro = nil
+local tempoInicial = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+
+initMacro = macro(1000, "Clean Storage Init", function()
+    if not g_game.isOnline() then return end
+    
+    local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+    -- Garante que se passaram 3 segundos completos antes de mexer na memória
+    if agora - tempoInicial < 3000 then return end
+    
     if storage then
         pcall(function() sanitizarTabelaParaJson(storage) end)
     end
-end, 3000)
+    pcall(conectarRepositorio)
+    
+    -- Executou com sucesso? Desliga a si mesma para sempre e libera a CPU
+    if initMacro and type(initMacro.setOff) == "function" then
+        initMacro:setOff()
+    end
+end)
 
 function terminate()
     if storage then 
@@ -97,6 +114,7 @@ function terminate()
     end
     print("[Storage Cleaner] Faxina preventiva concluida com sucesso.")
 end
+
 
 setDefaultTab("Main")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
