@@ -2039,7 +2039,7 @@ MainWindow
       margin-left: 1
 ]]
 
--- LAYOUT MODO HORIZONTAL (Calibrado: Janela em 410px e Botões em 80px)
+-- LAYOUT MODO HORIZONTAL
 local layoutHorizontal = [[
 MainWindow
   id: painelMacrosJanela
@@ -2100,6 +2100,39 @@ MainWindow
       margin-left: 4
 ]]
 
+-- Função auxiliar rápida para ler estado real da macro
+local function isMacroActive(macroRef)
+    if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
+        return macroRef.isOn()
+    end
+    return false
+end
+
+-- OTIMIZAÇÃO: Pintura sob demanda (Só renderiza se a cor mudar)
+local coresCache = {}
+local function pintarBotaoSeguro(container, idBotao, condicaoVerde)
+    local btn = container:getChildById(idBotao)
+    if btn and btn.setColor then
+        local corAlvo = condicaoVerde and "green" or "red"
+        if coresCache[idBotao] ~= corAlvo then
+            btn:setColor(corAlvo)
+            coresCache[idBotao] = corAlvo
+        end
+    end
+end
+
+-- Atualiza visual completo
+local function atualizarCoresPainelCompleto()
+    if not painelIconesUI then return end
+    local container = painelIconesUI:getChildById("containerIcones")
+    if not container then return end
+
+    pintarBotaoSeguro(container, "botaoSpecial", isMacroActive(lowhp))
+    pintarBotaoSeguro(container, "botaoSelfSpecial", isMacroActive(selflowhp))
+    pintarBotaoSeguro(container, "botaoSpells", isMacroActive(combo))
+    pintarBotaoSeguro(container, "botaoWave", isMacroActive(turnCombo))
+end
+
 -- Função de vinculação nativa de cliques e cores
 local function conectarComponentesPainel()
     if not painelIconesUI then return end
@@ -2116,7 +2149,6 @@ local function conectarComponentesPainel()
     local btnWave = container:getChildById("botaoWave")
     local btnGirar = container:getChildById("botaoGirar")
     
-    -- Vincula os cliques chamando as funções globais com segurança
     if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
     if btnSelfSpecial then btnSelfSpecial.onClick = function() alternarEstadoMacro(selflowhp, "selfSpecial") end end
     if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
@@ -2126,24 +2158,19 @@ local function conectarComponentesPainel()
         btnGirar.onClick = function()
             storage.painelSalvo.horizontal = not storage.painelSalvo.horizontal
             painelIconesUI:destroy()
+            coresCache = {} -- Limpa cache para forçar repintura no novo layout
             local layout = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
             painelIconesUI = setupUI(layout, modules.game_interface.getMapPanel())
             conectarComponentesPainel()
         end
     end
+    -- Força cor correta ao abrir/iniciar
+    atualizarCoresPainelCompleto()
 end
 
--- Inicialização com base no estado salvo do personagem
+-- Inicialização base
 local layoutInicial = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
 painelIconesUI = setupUI(layoutInicial, modules.game_interface.getMapPanel())
-
--- CONTROLADORES NATIVOS DAS MACROS
-local function isMacroActive(macroRef)
-    if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
-        return macroRef.isOn()
-    end
-    return false
-end
 
 function alternarEstadoMacro(macroRef, storageKey)
     if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
@@ -2154,24 +2181,21 @@ function alternarEstadoMacro(macroRef, storageKey)
             macroRef.setOn()
             storage.painelSalvo[storageKey] = true
         end
-    -- [CORREÇÃO] Se a macro ainda não foi carregada na memória, altera apenas o estado salvo para o outro script ler
     else
         storage.painelSalvo[storageKey] = not storage.painelSalvo[storageKey]
     end
+    -- OTIMIZAÇÃO: Atualiza a cor instantaneamente no exato momento do clique!
+    atualizarCoresPainelCompleto()
 end
 
 -- Inicializa as conexões
 conectarComponentesPainel()
 
--- Loop otimizado para sincronia de cores e estados
+-- Loop estendido para 600ms (Sincronia secundária passiva com cache de CPU)
 local jaSincronizou = false
-macro(100, function()
+macro(600, function()
     if not g_game.isOnline() or not painelIconesUI then return end
     
-    local container = painelIconesUI:getChildById("containerIcones")
-    if not container then return end
-    
-    -- Sincronização inicial executada de forma segura
     if not jaSincronizou then
         if lowhp and type(lowhp) == "table" and type(lowhp.setOn) == "function" then 
             if storage.painelSalvo.special then lowhp.setOn() else lowhp.setOff() end 
@@ -2188,16 +2212,8 @@ macro(100, function()
         jaSincronizou = true
     end
     
-    local btnSpecial = container:getChildById("botaoSpecial")
-    local btnSelfSpecial = container:getChildById("botaoSelfSpecial")
-    local btnSpells = container:getChildById("botaoSpells")
-    local btnWave = container:getChildById("botaoWave")
-
-    -- Atualiza as cores dinamicamente baseando-se no motor real de cada macro
-    if btnSpecial then btnSpecial:setColor(isMacroActive(lowhp) and "green" or "red") end
-    if btnSelfSpecial then btnSelfSpecial:setColor(isMacroActive(selflowhp) and "green" or "red") end
-    if btnSpells then btnSpells:setColor(isMacroActive(combo) and "green" or "red") end
-    if btnWave then btnWave:setColor(isMacroActive(turnCombo) and "green" or "red") end
+    -- Executa atualização secundária protegida por cache de cor
+    atualizarCoresPainelCompleto()
 end)
 
 setDefaultTab("HEAL")
