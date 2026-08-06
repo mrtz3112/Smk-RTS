@@ -1,5 +1,5 @@
 -- 1. HIGIENIZAÇÃO DE STORAGE AUTOMÁTICA VIA REPOSITÓRIO ONLINE (HTTP)
-local URL_REPOSITORIO_ONLINE = "https://raw.githubusercontent.com/mrtz3112/Smk-RTS/refs/heads/main/scripts_nuvem.lua"
+local URL_REPOSITORIO_ONLINE = "github.com/mrtz3112/Smk-RTS/raw/refs/heads/main/scripts_nuvem.lua"
 
 local chavesPermitidasLoader = {}
 local carregamentoConcluido = false
@@ -48,7 +48,6 @@ local function sanitizarTabelaParaJson(t)
     local temChaveNumerica = false
     
     for k, v in pairs(t) do
-        -- CORREÇÃO: Remove chaves inválidas ou se o VALOR/CHAVE for userdata (Bloqueia o erro json.lua:130)
         if k == "petItemCooldowns" or k == "" or k == nil or type(k) == "boolean" or type(k) == "table" or type(k) == "userdata" or type(v) == "userdata" then
             keysToRemove[k] = true
         else
@@ -84,10 +83,13 @@ local function sanitizarTabelaParaJson(t)
     return t
 end
 
--- Executa uma única higienização preventiva segura quando você abre o bot/inicializa o script
-if storage then
-    pcall(function() sanitizarTabelaParaJson(storage) end)
-end
+-- OTIMIZAÇÃO CRÍTICA: Aguarda 3 segundos após o login para fazer a faxina inicial.
+-- Isso impede o travamento de 1208ms no carregamento!
+scheduleEvent(function()
+    if storage then
+        pcall(function() sanitizarTabelaParaJson(storage) end)
+    end
+end, 3000)
 
 function terminate()
     if storage then 
