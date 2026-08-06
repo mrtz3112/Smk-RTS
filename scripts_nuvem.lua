@@ -3962,7 +3962,7 @@ local math_abs = math.abs
 local type = type
 local pcall = pcall
 
--- 1. SEQUESTRO RESTRITO DO ADAPTADOR DE MACROS NATIVAS (Freio Ajustado para 600ms)
+-- 1. SEQUESTRO RESTRITO DO ADAPTADOR DE MACROS NATIVAS (Com Cache de Atacado Anti-Slow)
 if type(macro) == "function" then
     local oldMacro = macro
     macro = function(delayTime, name, callback, ...)
@@ -3981,9 +3981,13 @@ if type(macro) == "function" then
         if targetFunc then
             local ultimoTickExecutado = (g_clock and g_clock.getMillis() or (os.clock() * 1000)) + 600
             local ultimoAndarX = 0
+            
+            -- VARIÁVEIS DE CACHE CRÍTICAS: Evitam o estouro de CPU do g_game.getAttackingCreature()
+            local cacheLastCheck = 0
+            local cachedAttackingCreature = nil
 
-            -- Mantemos o ciclo interno leve em 300ms
-            local minhaMacroTarget = oldMacro(300, macroName, function()
+            -- Injetamos a inteligência de cache diretamente na estrutura do TargetBot
+            local minhaMacroTarget = oldMacro(300, "Core Target System", function()
                 local player = g_game.getLocalPlayer()
                 if not player then return end
                 
@@ -4003,9 +4007,20 @@ if type(macro) == "function" then
 
                 local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
                 
-                -- FREIO MÁXIMO: Só processa a lógica pesada a cada 600ms cravados
+                -- FREIO MÁXIMO DO LOOP: 600ms
                 if agora - ultimoTickExecutado < 600 then
                     return
+                end
+                
+                -- OTIMIZAÇÃO HISTÓRICA: Atualiza o monstro focado apenas 1 vez por ciclo do bot
+                if agora - cacheLastCheck >= 300 then
+                    cachedAttackingCreature = g_game.getAttackingCreature()
+                    cacheLastCheck = agora
+                    
+                    -- Substitui temporariamente a chamada global pesada pelo nosso resultado em cache
+                    g_game.getAttackingCreature = function()
+                        return cachedAttackingCreature
+                    end
                 end
                 
                 ultimoTickExecutado = agora
