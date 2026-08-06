@@ -3694,36 +3694,46 @@ if player:getBlessings() == 0 then
   end)
 end
 
---CaveBot Creator Always Opened
-macro(100, function()
-  local botWindow = modules.game_bot.botWindow
-  if not botWindow then return end
-  local creatorPanel = botWindow:recursiveGetChildById('CaveBot.Editor')
-  if creatorPanel and not creatorPanel:isVisible() then
-    creatorPanel:show()
-    local titleButton = botWindow:recursiveGetChildById('createCavebotBtn') or botWindow:recursiveGetChildById('createCavebot')
-    if titleButton then
-      titleButton:setOn(true)
+-- CaveBot Creator Always Opened (Versão Ultra-Otimizada com UI Cache)
+local cachedPanel = nil
+local cachedButton = nil
+local procurouComponentes = false
+
+-- Aumentamos o loop para 1000ms (1 segundo) pois janelas de interface não mudam na velocidade da luz
+macro(1000, function()
+    local botWindow = modules.game_bot.botWindow
+    if not botWindow then return end
+
+    -- Faz a varredura pesada uma única vez para salvar os ponteiros na memória
+    if not procurouComponentes then
+        cachedPanel = botWindow:recursiveGetChildById('CaveBot.Editor')
+        cachedButton = botWindow:recursiveGetChildById('createCavebotBtn') or botWindow:recursiveGetChildById('createCavebot')
+        procurouComponentes = true
     end
-  end
+
+    -- Se o painel existir e foi fechado por engano, reabre instantaneamente via referência direta (0ms CPU)
+    if cachedPanel and not cachedPanel:isVisible() then
+        cachedPanel:show()
+        if cachedButton and cachedButton.setOn then
+            cachedButton:setOn(true)
+        end
+    end
 end)
 
 -- Magic wall Timer (Purificado em C++ - Sem processamento Lua)
 local magicWallId = 10980
 
 onAddThing(function(tile, thing)
-  -- FILTRO ULTRA RÁPIDO: Se não for um objeto sólido ou não for a Mwall, aborta em 0ms
   if not tile or not thing or thing:getId() ~= magicWallId then return end
-
-  -- Se o piso já tiver o relógio rodando, não sobrepõe para economizar CPU
   if type(tile.getTimer) == "function" and tile:getTimer() > 0 then return end
-  
-  tile:setTimer(20000) -- Grava os 20 segundos direto na memória do jogo
+  tile:setTimer(20000) 
 end)
 
 onRemoveThing(function(tile, thing)
   if not tile or not thing or thing:getId() ~= magicWallId then return end
-  tile:setTimer(0) -- Reseta o visor do quadrado imediatamente
+  if type(tile.setTimer) == "function" then
+    tile:setTimer(0) 
+  end
 end)
 
 --SafeFightSync
