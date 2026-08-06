@@ -437,7 +437,7 @@ macro(100, function()
   end
 end)
 UI.Separator()
--- Smart Follow por Nome - Versão Otimizada Segura (Sem g_clock)
+-- Smart Follow por Nome - Versão Definitiva Sem Lag (Ajuste do Ímã de Passos)
 local Objects = { 
     1385, 1386, 1387, 1388, 369, 370, 434, 435, 1948, 5543, 7725, 19183, 19184,
     411, 412, 413, 414, 432, 433, 459, 460, 475, 476, 479, 480, 2984, 2985, 5732,
@@ -462,12 +462,19 @@ local toFollowPos = {}
 local lastWalkTarget = nil
 local lastWalkTime = 0
 
+-- OTIMIZAÇÃO DE STRING: Armazena o nome estático em cache para não processar texto no evento de passos
+local cachedTargetName = ""
+local function atualizarNomeCache(nome)
+    local txt = tostring(nome or "")
+    cachedTargetName = txt:gsub("^%s*(.-)%s*$", "%1"):lower()
+end
+atualizarNomeCache(storage.followTargetName)
+
 local function stableWalk(targetPos)
     local myPlayer = g_game.getLocalPlayer()
     if not myPlayer then return end
 
     local now = os.clock()
-    -- Evita recalcular Pathfinding se o destino for idêntico e o player já estiver se movendo, com um fail-safe de 0.4 segundos (400ms) para destravar
     if myPlayer:isWalking() and lastWalkTarget and lastWalkTarget.x == targetPos.x and lastWalkTarget.y == targetPos.y and lastWalkTarget.z == targetPos.z and (now - lastWalkTime < 0.4) then
         return
     end
@@ -482,7 +489,6 @@ local function stableWalk(targetPos)
     end
 end
 
--- Função auxiliar otimizada para interagir com itens ao redor sem usar loops pesados de tabelas internas
 local function checkAndUseAdjacentItems(myPos, hashFilter)
     for x = -1, 1 do
         for y = -1, 1 do
@@ -503,11 +509,7 @@ end
 
 macro(200, "Smart Follow", function() 
     if not g_game.isOnline() then return end
-    
-    local targetName = tostring(storage.followTargetName or "")
-    targetName = targetName:gsub("^%s*(.-)%s*$", "%1"):lower()
-    
-    if targetName == "" or targetName == "nome do player" then return end
+    if cachedTargetName == "" or cachedTargetName == "nome do player" then return end
     
     local myPlayer = g_game.getLocalPlayer()
     if not myPlayer then return end
@@ -515,9 +517,10 @@ macro(200, "Smart Follow", function()
     local myPos = myPlayer:getPosition()
     local target = nil
 
-    -- Varredura de espectadores
-    for _, spec in ipairs(getSpectators(myPos)) do
-        if spec:isPlayer() and spec:getName():lower() == targetName then
+    local spectators = getSpectators(myPos)
+    for i = 1, #spectators do
+        local spec = spectators[i]
+        if spec and spec:isPlayer() and spec:getName():lower() == cachedTargetName then
             target = spec
             break
         end
@@ -536,147 +539,114 @@ macro(200, "Smart Follow", function()
         end
 
         stableWalk(tpos)
-
-        -- Checagem de portas otimizada (sem loops de itens dentro do tile)
         checkAndUseAdjacentItems(myPos, doorsHash)
         return
     end
 
-    -- Caso o líder suma da tela (subiu/desceu escadas)
     local lastLeaderPosInMyFloor = toFollowPos[myPos.z]
     if lastLeaderPosInMyFloor then
         if getDistanceBetween(myPos, lastLeaderPosInMyFloor) > 0 then
             stableWalk(lastLeaderPosInMyFloor)
             return
         end
-        
-        -- Checagem de escadas/bueiros otimizada
         checkAndUseAdjacentItems(myPos, objectsHash)
     end
 end)
 
 addTextEdit("followTargetName", storage.followTargetName or "Nome do Player", function(widget, text)
     storage.followTargetName = text
+    atualizarNomeCache(text) -- Atualiza o cache apenas quando você digita algo novo
 end)
 
+-- Ímã de passos limpo e em 0ms (Usa a checagem direta do cache sem funções pesadas de string)
 onCreaturePositionChange(function(creature, newPos, oldPos)
-    if not newPos then return end
-    local targetName = tostring(storage.followTargetName or "")
-    targetName = targetName:gsub("^%s*(.-)%s*$", "%1"):lower()
-    
-    if targetName ~= "" and creature:getName():lower() == targetName then
+    if not newPos or cachedTargetName == "" then return end
+    if creature:getName():lower() == cachedTargetName then
         toFollowPos[newPos.z] = newPos
     end
 end)
 
-
 UI.Separator()
--- Deposit Gold & Stack Items (Versão Otimizada - Pure Engine 8.54)
+-- Deposit Gold & Stack Items (Versão Definitiva Unificada - Sem Duplo Loop)
 local ultimoMovimentoStack = 0
 local cachedPosicao = {x = 0, y = 0, z = 0, slot = 0} 
 
 macro(1500, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
   
-  -- Uso seguro do os.clock() convertido para milissegundos
   local agora = os.clock() * 1000
-  if agora - ultimoMovimentoStack < 500 then return end
+  if agora - ultimoMovimentoStack < 600 then return end
 
-  -- Lista de moedas estruturada corretamente para leitura em Lua
+  -- 1. CHECAGEM RÁPIDA DE DINHEIRO
   local coinIds = { 3031, 3035, 3043, 10137 } 
-  local minAmount = 1
-  local shouldDeposit = false
-
-  -- 1. CHECAGEM CORRETA DE DINHEIRO (Usando os IDs reais das moedas)
   for i = 1, #coinIds do
-    local idMoeda = coinIds[i]
-    local item = findItem(idMoeda)
-    if item and item:getCount() >= minAmount then
-      shouldDeposit = true
-      break
+    local item = findItem(coinIds[i])
+    if item and item:getCount() >= 1 then
+      say("!deposit all")
+      ultimoMovimentoStack = agora + 600
+      return
     end
   end
-  
-  if shouldDeposit then
-    say("!deposit all")
-    ultimoMovimentoStack = agora + 500
-    return
-  end
 
-  -- 2. MAPEAR ITENS AGRUPÁVEIS (Lógica nativa e otimizada para o maior bolo)
+  -- 2. MAPEAMENTO DOS MAIORES BOLOS (LOOP ÚNICO)
   local containers = g_game.getContainers()
   local itensMapeados = {}
-  local precisaAgrupar = false
 
   for _, container in pairs(containers) do
     if container then
-        local items = container:getItems()
-        for index = 1, #items do
-          local item = items[index]
-          if item and item:isStackable() then 
-            local itemId = item:getId()
-            local count = item:getCount()
-            local posicaoAtual = container:getSlotPosition(index - 1)
+      local items = container:getItems()
+      for index = 1, #items do
+        local item = items[index]
+        if item and item:isStackable() then 
+          local itemId = item:getId()
+          local count = item:getCount()
+          local posicaoAtual = container:getSlotPosition(index - 1)
 
-            if posicaoAtual then
-              if itensMapeados[itemId] then
-                precisaAgrupar = true
-                -- Garante o agrupamento estrito em direção ao maior bolo do inventário
-                if count > itensMapeados[itemId].count then
-                  itensMapeados[itemId] = {
-                    posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
-                    count = count,
-                    containerId = container:getId(),
-                    slotIndex = index - 1
-                  }
-                end
-              else
-                itensMapeados[itemId] = {
-                  posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
-                  count = count,
-                  containerId = container:getId(),
-                  slotIndex = index - 1
-                }
-              end
+          if posicaoAtual then
+            -- Lógica matemática estrita: Prioriza sempre a pilha com maior quantidade
+            if not itensMapeados[itemId] or count > itensMapeados[itemId].count then
+              itensMapeados[itemId] = {
+                posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
+                count = count,
+                containerId = container:getId(),
+                slotIndex = index - 1
+              }
             end
           end
         end
+      end
     end
   end
 
-  if not precisaAgrupar then
-    return
-  end
-
-  -- 3. EXECUTAR A MOVIMENTAÇÃO SEM QUEBRAR O DELAY
+  -- 3. MOVIMENTAÇÃO INTERNA COM PARADA IMEDIATA (0ms CPU)
   for _, container in pairs(containers) do
     if container then
-        local items = container:getItems()
-        for index = 1, #items do
-          local item = items[index]
-          if item and item:isStackable() then
-            local itemId = item:getId()
-            local destino = itensMapeados[itemId]
+      local items = container:getItems()
+      for index = 1, #items do
+        local item = items[index]
+        if item and item:isStackable() then
+          local itemId = item:getId()
+          local destino = itensMapeados[itemId]
 
-            if destino then
-              local slotAtualIndex = index - 1
-              local mesmoContainer = (container:getId() == destino.containerId)
-              local mesmoSlot = (slotAtualIndex == destino.slotIndex)
+          if destino then
+            local slotAtualIndex = index - 1
+            local mesmoContainer = (container:getId() == destino.containerId)
+            local mesmoSlot = (slotAtualIndex == destino.slotIndex)
 
-              if not (mesmoContainer and mesmoSlot) then
-                cachedPosicao.x = destino.posicao.x
-                cachedPosicao.y = destino.posicao.y
-                cachedPosicao.z = destino.posicao.z
-                cachedPosicao.slot = destino.posicao.slot
+            -- Se achou uma parte separada da pilha principal, junta elas imediatamente
+            if not (mesmoContainer and mesmoSlot) then
+              cachedPosicao.x = destino.posicao.x
+              cachedPosicao.y = destino.posicao.y
+              cachedPosicao.z = destino.posicao.z
+              cachedPosicao.slot = destino.posicao.slot
 
-                -- Move os itens e atualiza o cooldown de segurança corretamente
-                g_game.move(item, cachedPosicao, item:getCount())
-                ultimoMovimentoStack = agora 
-                return 
-              end
+              g_game.move(item, cachedPosicao, item:getCount())
+              ultimoMovimentoStack = agora 
+              return -- Quebra o macro aqui: Evita recalcular o restante e zera o lag
             end
           end
         end
+      end
     end
   end
 end)
@@ -4182,138 +4152,60 @@ if CaveBot and type(CaveBot.delay) == "function" then
     end
 end
 
--- TargetBot (Versão Otimizada Purificada - Sem Lag de Loops e Sem g_clock)
-if TargetBot and type(TargetBot.getCreatures) == "function" then
-    local oldGetCreatures = TargetBot.getCreatures
+-- TargetBot
+if g_map and type(g_map.getSpectatorsInRange) == "function" then
+    -- Salva a função nativa de forma segura no escopo local do script
+    local oldGetSpectatorsInRange = g_map.getSpectatorsInRange
     local getLocalPlayer = g_game.getLocalPlayer
-    local isOnline = g_game.isOnline
-    local getPartyMembers = g_game.getPartyMembers
-    
-    local ultimoTempoProcessado = 0
-    local listaFiltradaCache = {}
-    
-    -- CONTADOR DE AQUECIMENTO: Protege a thread principal no milissegundo do Reload
-    local ciclosDeAquecimento = 0
-    
-    -- Memória de Party Indexada por Chaves (Hash) para busca instantânea em 0ms
-    local cacheIdsParty = {}
-    local totalMembrosParty = 0
-    local ultimoTempoCheckParty = 0
-    
-    if not _G.oldLogWarning then
-        _G.oldLogWarning = g_logger and g_logger.warning or logWarning or print
-        if g_logger and g_logger.warning then g_logger.warning = function() end
-        elseif logWarning then logWarning = function() end end
-    end
 
-    -- Tempo convertido com base no os.clock() de forma segura
-    local tempoReativarLog = (os.clock() * 1000) + 2500
-    local logJáReativado = false
-
-    TargetBot.getCreatures = function(...)
-        local agora = os.clock() * 1000
-
-        -- ESCUDO DE FRAME ZERO: Pula os primeiros 5 ciclos após o carregamento para estabilizar o FPS do cliente
-        if ciclosDeAquecimento < 5 then
-            ciclosDeAquecimento = ciclosDeAquecimento + 1
-            return listaFiltradaCache
-        end
-
-        if agora >= tempoReativarLog and not logJáReativado then
-            logJáReativado = true
-            if _G.oldLogWarning then
-                if g_logger and g_logger.warning then g_logger.warning = _G.oldLogWarning
-                elseif logWarning then logWarning = _G.oldLogWarning end
-                _G.oldLogWarning = nil
-                print("[Loader] Engine purificada com sucesso. Pronto para a Hunt!")
-            end
-        end
-
-        -- FREIO CRÍTICO DE COMBATE CORRIGIDO: Agora salva o tempo real corretamente sem usar a variável 'governor' inválida
-        if agora - ultimoTempoProcessado < 590 then
-            return listaFiltradaCache
-        end
-        
-        ultimoTempoProcessado = agora
-
-        local listaOriginal = oldGetCreatures(...)
-        if not listaOriginal or #listaOriginal == 0 then 
-            listaFiltradaCache = listaOriginal
-            return listaOriginal 
+    g_map.getSpectatorsInRange = function(centerPos, multiFloor, minRange, maxRange)
+        -- Executa a busca padrão do mapa para pegar os objetos brutos
+        local originalSpecs = oldGetSpectatorsInRange(centerPos, multiFloor, minRange, maxRange)
+        if not originalSpecs or #originalSpecs == 0 then 
+            return originalSpecs 
         end
 
         local player = getLocalPlayer()
-        if not player then listaFiltradaCache = listaOriginal return listaOriginal end
+        if not player then return originalSpecs end
         local playerPos = player:getPosition()
-        if not playerPos then listaFiltradaCache = listaOriginal return listaOriginal end
-
-        -- Atualização da Party indexada a cada 5 segundos contra lag de rede
-        if agora - ultimoTempoCheckParty >= 5000 then
-            cacheIdsParty = {}
-            totalMembrosParty = 0
-            if pcall(isOnline) and isOnline() then
-                local members = getPartyMembers()
-                if members then
-                    for m = 1, #members do
-                        local member = members[m]
-                        if member and member:getId() then
-                            cacheIdsParty[member:getId()] = true
-                            totalMembrosParty = totalMembrosParty + 1
-                        end
-                    end
-                end
-            end
-            ultimoTempoCheckParty = agora
-        end
+        if not playerPos then return originalSpecs end
 
         local pz = playerPos.z
         local px = playerPos.x
         local py = playerPos.y
-        local myId = player:getId()
 
-        listaFiltradaCache = {}
-        local totalAdicionados = 0
-        local limiteMaximoMonstros = 2 
+        local filtrados = {}
+        local total = 0
 
-        for i = 1, #listaOriginal do
-            local creature = listaOriginal[i]
-            if creature and creature:isMonster() and creature:getHealthPercent() > 0 then
-                local cPos = creature:getPosition()
-                
-                if cPos and cPos.z == pz then
-                    local distX = px - cPos.x
-                    if distX < 0 then distX = -distX end
-                    
-                    if distX <= 4 then
+        -- LIMPEZA AGRESSIVA DE MONSTROS: Remove o lag antes de chegar na linha 50
+        for i = 1, #originalSpecs do
+            local creature = originalSpecs[i]
+            if creature then
+                -- Se for um monstro, aplica filtros leves de distância geométrica (0ms CPU)
+                if creature:isMonster() then
+                    local cPos = creature:getPosition()
+                    if cPos and cPos.z == pz and creature:getHealthPercent() > 0 then
+                        local distX = px - cPos.x
+                        if distX < 0 then distX = -distX end
+                        
                         local distY = py - cPos.y
                         if distY < 0 then distY = -distY end
-                        
-                        if distY <= 4 then
-                            local mTargetId = 0
-                            if type(creature.getTargetId) == "function" then mTargetId = creature:getTargetId() or 0
-                            elseif creature.targetId then mTargetId = creature.targetId
-                            elseif type(creature.getTarget) == "function" then
-                                local tgt = creature:getTarget()
-                                if tgt then mTargetId = tgt:getId() end
-                            end
 
-                            -- OTIMIZAÇÃO CRÍTICA: Busca direta na tabela Hash (0ms de custo de CPU), sem loops aninhados
-                            if mTargetId > 0 and mTargetId ~= myId and totalMembrosParty > 0 then
-                                if not cacheIdsParty[mTargetId] then 
-                                    goto skipCreature 
-                                end
-                            end
-
-                            totalAdicionados = totalAdicionados + 1
-                            listaFiltradaCache[totalAdicionados] = creature
-                            if totalAdicionados >= limiteMaximoMonstros then break end
+                        -- Reduz o raio máximo para 4 SQMs para que o TargetBot nem tente calcular rotas longas
+                        if distX <= 4 and distY <= 4 then
+                            total = total + 1
+                            filtrados[total] = creature
                         end
                     end
+                else
+                    -- Se for player, NPC ou item, mantém na lista normalmente sem mexer
+                    total = total + 1
+                    filtrados[total] = creature
                 end
             end
-            ::skipCreature::
         end
-        return listaFiltradaCache
+
+        return filtrados
     end
 end
 print("[Loader] TargetBot otimizado com sucesso.")
