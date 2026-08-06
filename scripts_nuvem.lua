@@ -2269,7 +2269,7 @@ setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ Survival ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
--- Fast Regen (Versão Otimizada - Apenas Botão Healing Visível)
+-- Fast Regen (Versão Simplificada - Apenas Delay Original)
 local panelName = "selfregen"
 local ui = setupUI([[
 Panel
@@ -2331,28 +2331,18 @@ UI.TextEdit(storage.autohealspell1 or "regeneration", function(widget, text)
   cacheHealSpell = textoLimpo
 end)
 
-local ultimoTempoRegen = 0
-local COOLDOWN_REGEN = 1000 
-
--- CORREÇÃO: Removido o nome de identificação para a macro rodar em background (Sem criar botões extras)
-macro(500, function()
+-- A macro agora roda direto no seu intervalo original de 1 segundo (1000ms) sem outras travas
+macro(1000, function()
   if not g_game.isOnline() or not storage[panelName].enabled then return end
 
   if storage[panelName].setting and cacheHealSpell ~= "" then
     if hppercent() <= storage[panelName].hp then
-        local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-        
-        if agora - ultimoTempoRegen < COOLDOWN_REGEN then
-            return
-        end
-        
         say(cacheHealSpell)
-        ultimoTempoRegen = agora 
     end
   end
 end)
 UI.Separator()
--- Mana Shield (Versão Otimizada - Apenas Botão Mana Shield Visível)
+-- Mana Shield (Versão Simplificada - Apenas Cooldown Original)
 local panelName = "manabarrier"
 local ui = setupUI([[
 Panel
@@ -2417,13 +2407,13 @@ end)
 local ultimoUsoBarreira = 0
 local COOLDOWN_BARREIRA = 46000 
 
--- CORREÇÃO: Removido o nome de identificação para a macro rodar em background (Sem botões fantasmas)
+-- Loop a 100ms que respeita estritamente a janela única de 46 segundos
 macro(100, function()
   if not g_game.isOnline() or not storage[panelName].enabled then return end
   
   if storage[panelName].setting and cacheBarrierSpell ~= "" then
     if hppercent() <= storage[panelName].hp then
-        local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+        local agora = os.time() * 1000
         
         if (agora - ultimoUsoBarreira) >= COOLDOWN_BARREIRA then
             say(cacheBarrierSpell)
