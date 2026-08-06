@@ -2540,7 +2540,6 @@ end
 
 uiFastPot.HP:setValue(storage[panelNameFastPot].hp)
 
--- Macro disparando sem travas a cada ciclo de 100ms
 macro(100, function()
   if not g_game.isOnline() or not storage[panelNameFastPot].enabled then return end
 
@@ -2551,8 +2550,8 @@ macro(100, function()
   end
 end)
 
---fast mana potion
-local panelNameManaPot = "selfmppot"
+-- Fast Mana Potion (Versão Sem Freios - Spam Livre 100ms)
+local panelNameNameManaPot = "selfmppot"
 local uiManaPot = setupUI([[
 Panel
   height: 50
@@ -2593,59 +2592,59 @@ Panel
     step: 1
     
 ]], parent)
-uiManaPot:setId(panelNameManaPot)
+uiManaPot:setId(panelNameNameManaPot)
 
-if not storage[panelNameManaPot] then
-  storage[panelNameManaPot] = {
+if not storage[panelNameNameManaPot] then
+  storage[panelNameNameManaPot] = {
       id = 11860,
       enabled = false,
       setting = true,
       hp = 50
   }
 else
-  if not storage[panelNameManaPot].id or storage[panelNameManaPot].id == 0 then
-      storage[panelNameManaPot].id = 11860
+  if not storage[panelNameNameManaPot].id or storage[panelNameNameManaPot].id == 0 then
+      storage[panelNameNameManaPot].id = 11860
   end
 end
 
-uiManaPot.title:setOn(storage[panelNameManaPot].enabled)
+uiManaPot.title:setOn(storage[panelNameNameManaPot].enabled)
 uiManaPot.title.onClick = function(widget)
-  storage[panelNameManaPot].enabled = not storage[panelNameManaPot].enabled
-  widget:setOn(storage[panelNameManaPot].enabled)
+  storage[panelNameNameManaPot].enabled = not storage[panelNameNameManaPot].enabled
+  widget:setOn(storage[panelNameNameManaPot].enabled)
 end
 
 local updateMpText = function()
-    if storage[panelNameManaPot].setting then
-    uiManaPot.help:setText("Mana: < " .. storage[panelNameManaPot].hp .. "%")
-	end
+    if storage[panelNameNameManaPot].setting then
+        uiManaPot.help:setText("Mana: < " .. storage[panelNameNameManaPot].hp .. "%")
+    end
 end
 
 updateMpText()
 uiManaPot.HP.onValueChange = function(scroll, value)
-  storage[panelNameManaPot].hp = value
+  storage[panelNameNameManaPot].hp = value
   updateMpText()
 end
 
-uiManaPot.item:setItemId(storage[panelNameManaPot].id)
+uiManaPot.item:setItemId(storage[panelNameNameManaPot].id)
 uiManaPot.item.onItemChange = function(widget)
   local novaId = widget:getItemId()
   if novaId and novaId > 0 then
-      storage[panelNameManaPot].id = novaId
+      storage[panelNameNameManaPot].id = novaId
   end
 end
 
-uiManaPot.HP:setValue(storage[panelNameManaPot].hp)
+uiManaPot.HP:setValue(storage[panelNameNameManaPot].hp)
 
 macro(100, function()
- if not storage[panelNameManaPot].enabled then return end
+ if not storage[panelNameNameManaPot].enabled then return end
 
- if storage[panelNameManaPot].setting then
-    if manapercent() <= storage[panelNameManaPot].hp then
-        use(storage[panelNameManaPot].id)
-		delay(250)
+ if storage[panelNameNameManaPot].setting then
+    if manapercent() <= storage[panelNameNameManaPot].hp then
+        use(storage[panelNameNameManaPot].id)
     end
-	end
+ end
 end)
+
 -- Pet on Hp (Versão Simplificada e Sem Cooldown no Storage)
 local panelName = "selfpetconfig"
 local ui = setupUI([[
