@@ -4324,34 +4324,54 @@ print("[Loader] Estabilizador de performace carregado com sucesso.")
 
 
 -- BLINDAGEM DA FUNÇÃO GOTOLABEL (Mata o Slow de 179ms do check_pos)
--- 1. SALVA A FUNÇÃO ORIGINAL DE MUDAR DE LABEL DO BOT
 local oldGotoLabelGlobal = gotoLabel
 local oldCaveBotGotoLabel = CaveBot and CaveBot.gotoLabel
 
 local ultimoTempoTrocaLabelGlobal = 0
 local ultimaLabelTentada = ""
 
--- Criamos uma função de checagem inteligente com trava de 10 segundos
 local function filtrarChamadaLabelSeguro(labelName, funcaoOriginal, ...)
     if not labelName or not funcaoOriginal then return end
 
     local agoraLabel = os.clock() * 1000
     local labelAlvo = tostring(labelName):lower()
 
-    -- SEGREDO DO SUCESSO: Se o check_pos tentar forçar o retorno para a MESMA label
-    -- em um intervalo menor que 10 segundos, barra o comando no mesmo microssegundo!
+    -- 1. FILTRO ANTI-LOOP: Bloqueia chamadas frenéticas repetidas do check_pos
     if labelAlvo == ultimaLabelTentada and (agoraLabel - ultimoTempoTrocaLabelGlobal < 10000) then
-        return -- Descarta a ordem repetida sem deixar chegar na linha 26 do cavebot.lua
+        return 
     end
 
-    -- Se passou no filtro de tempo, atualiza o histórico e deixa o bot processar seguro
     ultimaLabelTentada = labelAlvo
     ultimoTempoTrocaLabelGlobal = agoraLabel
     
-    return funcaoOriginal(labelName, ...)
+    -- 2. VACINA DE TRANSIÇÃO DE MAPA: Se o bot estiver alternando labels entre mapas,
+    -- atrasa a execução em 300ms usando o agendador nativo do jogo (scheduleEvent).
+    -- Isso dá o tempo para o C++ limpar a memória gráfica antes do Lua tentar ler o waypoint 1!
+    if type(scheduleEvent) == "function" then
+        scheduleEvent(function()
+            if not g_game.isOnline() then return end
+            
+            -- Força o reset do índice para a linha 1 da nova label após o delay
+            if CaveBot and CaveBot.currentWaypoint then
+                CaveBot.currentWaypoint = 1
+            end
+            
+            -- Executa a troca de label de forma limpa e segura
+            pcall(funcaoOriginal, labelName)
+            
+            -- Dá um pulso para a caminhada iniciar sem travar
+            if CaveBot and type(CaveBot.preNext) == "function" then
+                CaveBot.preNext()
+            end
+        end, 500) -- 500 milissegundos de folga para a thread respirar
+        return
+    else
+        -- Fallback caso o servidor não tenha a função scheduleEvent
+        return funcaoOriginal(labelName, ...)
+    end
 end
 
--- 2. INJETA A BLINDAGEM EM AMBOS OS PONTEIROS QUE O BOT PODE USAR
+-- Injeta a nova inteligência nos ponteiros do jogo
 if type(oldGotoLabelGlobal) == "function" then
     gotoLabel = function(labelName, ...)
         return filtrarChamadaLabelSeguro(labelName, oldGotoLabelGlobal, ...)
