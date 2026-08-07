@@ -1198,7 +1198,7 @@ function getDash(dir)
     end
 end
 
--- Enter Rift (Versão Definitiva - Sem Trava de Posição Parada)
+-- Enter Rift (Versão Definitiva Silenciosa - Clica Apenas se o Portal Existir)
 local PORTAL_ID = 11843
 local RANGE_X = 13       
 local RANGE_Y = 7        
@@ -1223,8 +1223,7 @@ macro(400, "Enter Rift", function()
     if agoraRift - ultimoTickRift < 400 then return end
     ultimoTickRift = agoraRift
 
-    -- PROTEÇÃO ABSOLUTA ANTI-MARKET: Se a janela do Market estiver aberta na UI,
-    -- aborta a macro na hora. Isso impede 100% o loop de reabrir a janela sozinho!
+    -- PROTEÇÃO ABSOLUTA ANTI-MARKET: Se a janela do Market estiver aberta na UI, aborta.
     local rootWidget = g_ui.getRootWidget()
     if rootWidget then
         local marketWin = rootWidget:recursiveGetChildById("marketwindow") or rootWidget:recursiveGetChildById("marketpanel")
@@ -1233,7 +1232,7 @@ macro(400, "Enter Rift", function()
         end
     end
 
-    -- Busca nativa do portal nos espectadores da tela
+    -- 1. BUSCA PASSIVA: Varre os espectadores ativos carregados na tela
     local specs = g_map.getSpectatorsInRange(playerPos, false, RANGE_X, RANGE_Y)
     if specs then
         for i = 1, #specs do
@@ -1242,12 +1241,12 @@ macro(400, "Enter Rift", function()
                 local tile = creature:getTile()
                 if tile then
                     local topThing = tile:getTopUseThing()
-                    if topThing and topThing:getId() == PORTAL_ID then
+                    -- VALIDAÇÃO CIRÚRGICA: Só avança se o objeto do topo existir e for EXATAMENTE o PORTAL_ID
+                    if topThing and type(topThing.getId) == "function" and topThing:getId() == PORTAL_ID then
                         local tilePos = tile:getPosition()
-                        -- Verifica se o portal está no mesmo andar que você
                         if tilePos and tilePos.z == playerPos.z then
                             g_game_use(topThing)
-                            return
+                            return -- Achou o portal real, clica e encerra o ciclo
                         end
                     end
                 end
@@ -1255,18 +1254,20 @@ macro(400, "Enter Rift", function()
         end
     end
     
-    -- Fallback de curto alcance (Até 2 SQMs ao seu redor) caso o portal surja do seu lado
+    -- 2. FALLBACK COMPACTO: Varre apenas os blocos geométricos próximos (Raio curto de 2 SQMs)
     local searchPos = {x = 0, y = 0, z = playerPos.z}
     for x = -2, 2 do
         searchPos.x = playerPos.x + x
         for y = -2, 2 do
             searchPos.y = playerPos.y + y
+            
             local tile = getTile(searchPos)
             if tile then
                 local topThing = tile:getTopUseThing()
-                if topThing and topThing:getId() == PORTAL_ID then
+                -- VALIDAÇÃO CIRÚRGICA DE DUPLO CHEQUE: Garante que o fallback só clique se o ID bater 100%
+                if topThing and type(topThing.getId) == "function" and topThing:getId() == PORTAL_ID then
                     g_game_use(topThing)
-                    return
+                    return -- Clica apenas no portal verdadeiro e aborta
                 end
             end
         end
@@ -1278,6 +1279,13 @@ local IDs_JANELAS_CONHECIDAS = { "dungeonwindow", "dungeonpanel", "riftwindow", 
 
 macro(2000, "Enter Dungeon", function()
     if not g_game.isOnline() then return end
+
+    -- TRAVA CIRÚRGICA DE ZONE: Só funciona se o jogador estiver dentro da Protection Zone (PZ)
+    -- Se você estiver fora de PZ (na hunt batendo nos bichos), aborta a macro em 0ms de CPU!
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer or not localPlayer:isProtectionZone() then
+        return
+    end
 
     local rootWidget = g_ui.getRootWidget()
     if not rootWidget then return end
@@ -1327,7 +1335,6 @@ macro(2000, "Enter Dungeon", function()
         end
     end
 end)
-
 
 --Auto Attack House Trainer
 if not storage.trainerMacroPauseUntil then
@@ -4314,3 +4321,46 @@ macro(5000, function()
     end
 end)
 print("[Loader] Estabilizador de performace carregado com sucesso.")
+
+
+-- BLINDAGEM DA FUNÇÃO GOTOLABEL (Mata o Slow de 179ms do check_pos)
+-- 1. SALVA A FUNÇÃO ORIGINAL DE MUDAR DE LABEL DO BOT
+local oldGotoLabelGlobal = gotoLabel
+local oldCaveBotGotoLabel = CaveBot and CaveBot.gotoLabel
+
+local ultimoTempoTrocaLabelGlobal = 0
+local ultimaLabelTentada = ""
+
+-- Criamos uma função de checagem inteligente com trava de 10 segundos
+local function filtrarChamadaLabelSeguro(labelName, funcaoOriginal, ...)
+    if not labelName or not funcaoOriginal then return end
+
+    local agoraLabel = os.clock() * 1000
+    local labelAlvo = tostring(labelName):lower()
+
+    -- SEGREDO DO SUCESSO: Se o check_pos tentar forçar o retorno para a MESMA label
+    -- em um intervalo menor que 10 segundos, barra o comando no mesmo microssegundo!
+    if labelAlvo == ultimaLabelTentada and (agoraLabel - ultimoTempoTrocaLabelGlobal < 10000) then
+        return -- Descarta a ordem repetida sem deixar chegar na linha 26 do cavebot.lua
+    end
+
+    -- Se passou no filtro de tempo, atualiza o histórico e deixa o bot processar seguro
+    ultimaLabelTentada = labelAlvo
+    ultimoTempoTrocaLabelGlobal = agoraLabel
+    
+    return funcaoOriginal(labelName, ...)
+end
+
+-- 2. INJETA A BLINDAGEM EM AMBOS OS PONTEIROS QUE O BOT PODE USAR
+if type(oldGotoLabelGlobal) == "function" then
+    gotoLabel = function(labelName, ...)
+        return filtrarChamadaLabelSeguro(labelName, oldGotoLabelGlobal, ...)
+    end
+end
+
+if CaveBot and type(oldCaveBotGotoLabel) == "function" then
+    CaveBot.gotoLabel = function(labelName, ...)
+        return filtrarChamadaLabelSeguro(labelName, oldCaveBotGotoLabel, ...)
+    end
+end
+print("[Loader] Função gotoLabel blindada contra loops.")
