@@ -532,8 +532,10 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
 end)
 
 UI.Separator()
--- Deposit Gold & Stack Items (Versão Definitiva Direto para o Maior Bolo - smkmain.lua)
+-- Deposit Gold & Stack Items
 local ultimoMovimentoStack = 0
+local precisaVerificarInventario = true
+local hashUltimoInventario = ""
 
 -- Tabelas de memória RAM para ignorar itens que o servidor rejeitou empilhar
 local itensRejeitadosPeloServidor = {}
@@ -541,10 +543,31 @@ local ultimoSlotTentado = nil
 local ultimaQuantidadeTentada = 0
 local ultimoTempoTentativa = 0
 
-macro(1500, "DepositGold & StackItems", function()
+-- MACRO PRINCIPAL
+macro(500, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
   
   local agora = os.clock() * 1000
+
+-- VERIFICAÇÃO ULTRA LEVE DE MUDANÇA (0% CPU)
+  local containers = g_game.getContainers()
+  local hashAtual = ""
+  
+  -- Cria uma assinatura rápida baseada na quantidade de itens de cada container open
+  for id, container in pairs(containers) do
+    if container and container:getId() <= 15 then
+      hashAtual = hashAtual .. id .. "_" .. container:getItemsCount() .. "|"
+    end
+  end
+
+  -- Se a assinatura mudou (abriu BP, dropou item, gastou runa), força a checagem profunda
+  if hashAtual ~= hashUltimoInventario then
+    precisaVerificarInventario = true
+    hashUltimoInventario = hashAtual
+  end
+
+  -- Se nada mudou estruturalmente no inventário, encerra o frame IMEDIATAMENTE aqui
+  if not precisaVerificarInventario then return end
   if agora - ultimoMovimentoStack < 700 then return end
 
   -- 1. CHECAGEM RÁPIDA DE DINHEIRO
@@ -573,10 +596,10 @@ macro(1500, "DepositGold & StackItems", function()
   ultimoTempoTentativa = 0
 
   -- 2. ETAPA DE MAPEAMENTO: Localiza o MAIOR BOLO absoluto do inventário primeiro
-  local containers = g_game.getContainers()
   local itensMapeados = {}
   local todosOsItensAgrupaveis = {}
   local totalAgrupaveis = 0
+  local houveMovimentacaoNesseFrame = false
 
   for _, container in pairs(containers) do
     if container and container:getId() <= 15 then
@@ -649,11 +672,17 @@ macro(1500, "DepositGold & StackItems", function()
             -- Executa o movimento direto usando o ponteiro nativo perfeito do bolo maior
             g_game.move(itemReal, destinoFinal.posicao, itemReal:getCount())
             ultimoMovimentoStack = agora 
-            return -- Encerra o frame aqui: Mantém 0ms de uso de CPU e evita conflitos
+            houveMovimentacaoNesseFrame = true
+            return
           end
         end
       end
     end
+  end
+
+  -- Se processou tudo e não moveu nenhum item, o inventário está perfeitamente organizado. Locka!
+  if not houveMovimentacaoNesseFrame then
+    precisaVerificarInventario = false
   end
 end)
 
@@ -1197,10 +1226,10 @@ function getDash(dir)
     end
 end
 
--- Enter Rift (Versão Definitiva Silenciosa - Clica Apenas se o Portal Existir)
+-- Enter Rift (Versão Definitiva - Otimizada e Direcionada ao Label - smkmain.lua)
 local PORTAL_ID = 11843
-local RANGE_X = 13       
-local RANGE_Y = 7        
+local RANGE_X = 13       -- Limita a busca à largura real da tela do monitor
+local RANGE_Y = 7        -- Limita a busca à altura real da tela do monitor
 
 local getLocalPlayer = g_game.getLocalPlayer
 local getTile = g_map.getTile
@@ -1208,7 +1237,7 @@ local g_game_use = g_game.use
 
 local ultimoTickRift = 0
 
-macro(400, "Enter Rift", function()
+macro(250, "Enter Rift", function() -- 250ms para pescar o portal instantaneamente
     if not g_game.isOnline() then return end
     
     local player = getLocalPlayer()
@@ -1217,56 +1246,40 @@ macro(400, "Enter Rift", function()
     local playerPos = player:getPosition()
     if not playerPos then return end
 
-    -- Cooldown de 400ms para poupar processamento
     local agoraRift = os.clock() * 1000
-    if agoraRift - ultimoTickRift < 400 then return end
+    if agoraRift - ultimoTickRift < 250 then return end
     ultimoTickRift = agoraRift
 
-    -- PROTEÇÃO ABSOLUTA ANTI-MARKET: Se a janela do Market estiver aberta na UI, aborta.
-    local rootWidget = g_ui.getRootWidget()
-    if rootWidget then
-        local marketWin = rootWidget:recursiveGetChildById("marketwindow") or rootWidget:recursiveGetChildById("marketpanel")
-        if marketWin and marketWin:isVisible() then
-            return 
-        end
-    end
-
-    -- 1. BUSCA PASSIVA: Varre os espectadores ativos carregados na tela
-    local specs = g_map.getSpectatorsInRange(playerPos, false, RANGE_X, RANGE_Y)
-    if specs then
-        for i = 1, #specs do
-            local creature = specs[i]
-            if creature then
-                local tile = creature:getTile()
-                if tile then
-                    local topThing = tile:getTopUseThing()
-                    -- VALIDAÇÃO CIRÚRGICA: Só avança se o objeto do topo existir e for EXATAMENTE o PORTAL_ID
-                    if topThing and type(topThing.getId) == "function" and topThing:getId() == PORTAL_ID then
-                        local tilePos = tile:getPosition()
-                        if tilePos and tilePos.z == playerPos.z then
-                            g_game_use(topThing)
-                            return -- Achou o portal real, clica e encerra o ciclo
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
-    -- 2. FALLBACK COMPACTO: Varre apenas os blocos geométricos próximos (Raio curto de 2 SQMs)
+    -- RADAR GEOMÉTRICO RESTRITO: Procura apenas nos tiles visíveis (Reduz de ~2000 tiles para apenas ~370)
     local searchPos = {x = 0, y = 0, z = playerPos.z}
-    for x = -2, 2 do
+    
+    for x = -RANGE_X, RANGE_X do
         searchPos.x = playerPos.x + x
-        for y = -2, 2 do
+        for y = -RANGE_Y, RANGE_Y do
             searchPos.y = playerPos.y + y
             
             local tile = getTile(searchPos)
             if tile then
-                local topThing = tile:getTopUseThing()
-                -- VALIDAÇÃO CIRÚRGICA DE DUPLO CHEQUE: Garante que o fallback só clique se o ID bater 100%
-                if topThing and type(topThing.getId) == "function" and topThing:getId() == PORTAL_ID then
-                    g_game_use(topThing)
-                    return -- Clica apenas no portal verdadeiro e aborta
+                -- BUSCA PROFUNDA (Sua lógica funcional de varrer os itens do piso)
+                local items = tile:getItems()
+                if items then
+                    for i = 1, #items do
+                        local item = items[i]
+                        if item and item:getId() == PORTAL_ID then
+                            -- LOG DE SEGURANÇA: Mostra no terminal (Ctrl + T) que a macro funcionou
+                            print("[Dungeon] Rift encontrada.")
+                            
+                            -- Executa a ação nativa perfeita do jogo
+                            g_game_use(item)
+                            
+                            -- Encaminha o Cavebot imediatamente para gerenciar o Rift
+                            CaveBot.gotoLabel("Rift")
+                            
+                            -- Delay de segurança de 1.5 segundos para o mapa carregar e evitar cliques repetidos
+                            ultimoTickRift = agoraRift + 1500 
+                            return 
+                        end
+                    end
                 end
             end
         end
@@ -2377,7 +2390,7 @@ macro(100, function()
   end
 end)
 UI.Separator()
--- Mana Shield (Versão Simplificada - Apenas Cooldown Original)
+-- Mana Shield (Versão Simplificada - Apenas Cooldown Original - smkmain.lua)
 local panelName = "manabarrier"
 local ui = setupUI([[
 Panel
@@ -2453,7 +2466,6 @@ macro(100, function()
         if (agora - ultimoUsoBarreira) >= COOLDOWN_BARREIRA then
             say(cacheBarrierSpell)
             ultimoUsoBarreira = agora
-            print("[Barrier] Magia conjurada! Cooldown: 46s.")
         end
     end
   end
@@ -3108,27 +3120,43 @@ end)
 UI.Label("-----------------------------------"):setColor('#C39BD3')
 UI.Label("~ HUD Hotkeys ~"):setColor('#EBDEF0')
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+-- 1. START/STOP CAVEBOT (Otimizado com Anti-Spam e Filtro de Estado)
+local ultimoApertoCave = 0
+hotkey("CTRL+1", function()
+    local agora = os.clock() * 1000
+    if agora - ultimoApertoCave < 300 then return end -- Bloqueia spam de cliques em 300ms
+    if SMK_MudandoDeMapaMute then return end
+    ultimoApertoCave = agora
 
---Start/Stop CaveBot (Sua macro original corrigida com freio de processamento)
-macro(800, "Start/Stop Cave", ("CTRL+1"), function(killcave)
-if CaveBot.isOn() then
- CaveBot.setOff()
- killcave.setOff()
-else
- CaveBot.setOn()
- killcave.setOff()
-end
+    if CaveBot and type(CaveBot.isOn) == "function" then
+        -- Usa diretamente as funções nativas de parada/início sem loops redundantes
+        if CaveBot.isOn() then
+            if type(CaveBot.stop) == "function" then CaveBot.stop() 
+            elseif type(CaveBot.setOff) == "function" then CaveBot.setOff() end
+        else
+            if type(CaveBot.start) == "function" then CaveBot.start() 
+            elseif type(CaveBot.setOn) == "function" then CaveBot.setOn() end
+        end
+    end
 end)
 
---start/stop TargetBot (Sua macro original corrigida com freio de processamento)
-macro(800, "Start/Stop Target", ("CTRL+2"), function(killtarget)
-if TargetBot.isOn() then
- TargetBot.setOff()
- killtarget.setOff()
-else
- TargetBot.setOn()
- killtarget.setOff()
-end
+-- 2. START/STOP TARGETBOT (Otimizado com Anti-Spam e Filtro de Estado)
+local ultimoApertoTarget = 0
+hotkey("CTRL+2", function()
+    local agora = os.clock() * 1000
+    if agora - ultimoApertoTarget < 300 then return end -- Bloqueia spam de cliques em 300ms
+    if SMK_MudandoDeMapaMute then return end
+    ultimoApertoTarget = agora
+
+    if TargetBot and type(TargetBot.isOn) == "function" then
+        if TargetBot.isOn() then
+            if type(TargetBot.stop) == "function" then TargetBot.stop() 
+            elseif type(TargetBot.setOff) == "function" then TargetBot.setOff() end
+        else
+            if type(TargetBot.start) == "function" then TargetBot.start() 
+            elseif type(TargetBot.setOn) == "function" then TargetBot.setOn() end
+        end
+    end
 end)
 
 -- BugMap AWSD/Setas/NumPad (Versão Definitiva Purificada e Sem Lag)
@@ -3772,17 +3800,27 @@ hp:setText("                   ".. manapercent().. "          ")
 hp:setColor("white")
 end)
 
---Auto Bless
-if player:getBlessings() == 0 then
-  say("!bless")
-  use(10258)
-  schedule(1000, function()
-    if player:getBlessings() == 0 then
-      print("[Loader] Bless automatica habilitada com sucesso.")
+-- Auto Bless (Com Verificação de Item e Aviso de Falha)
+local player = g_game.getLocalPlayer()
+if player and player:getBlessings() == 0 then
+    -- Procura o item de bless nas backpacks abertas
+    local itemBless = findItem(10258)
+    if not itemBless then
+        -- Caso não encontre o item, avisa no terminal e interrompe a execução
+        print("[Loader] Soul Bless nao encontrada, nao foi possivel renovar.")
+    else
+        -- Se o item existir, executa os comandos de renovação normais
+        say("!bless")
+        use(itemBless) -- Executa o uso diretamente no objeto do item encontrado
+        
+        schedule(1000, function()
+            local pCheck = g_game.getLocalPlayer()
+            if pCheck and pCheck:getBlessings() == 0 then
+                print("[Loader] Soul Bless renovada com sucesso.")
+            end
+        end)
     end
-  end)
 end
-
 
 -- CaveBot Creator Always Opened (Versão Ultra-Otimizada com UI Cache)
 local cachedPanel = nil
@@ -3853,8 +3891,6 @@ onRemoveThing(function(tile, thing)
     tile:setTimer(0) 
   end
 end)
-
-
 
 --SafeFightSync
 local ultimoEstadoSeguro = nil
@@ -4016,8 +4052,7 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
--- CreaturePriority
--- PARTE 1: Inicialização e Otimização Hash de Monstros Especiais
+-- CreaturePriority & Anti-Lure Avançado Conectado à Interface (Versão Otimizada - Ultra Performance)
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 local specialMonstersHash = {}
 
@@ -4025,12 +4060,6 @@ for _, name in ipairs(specialMonsters) do
     specialMonstersHash[string.lower(name)] = true
 end
 
--- Variáveis de controle de Cache para evitar loops repetitivos
-local lastCheck = 0
-local cachedSpecialAttackingMe = 0
-local lastLureCheckTime = 0
-
--- Auxiliar rápido para checar se o nome é especial (Evita reescrever código)
 local function isMonsterSpecial(creatureName)
     if specialMonstersHash[creatureName] then return true end
     for name, _ in pairs(specialMonstersHash) do
@@ -4041,20 +4070,49 @@ local function isMonsterSpecial(creatureName)
     return false
 end
 
--- PARTE 2: Função checkSpecialMonstersLure Totalmente Reformulada (Com Cache)
-checkSpecialMonstersLure = function()
-    local cNow = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-    
-    -- OTIMIZAÇÃO CRÍTICA: Se já varreu a tela nos últimos 150ms, usa o resultado salvo na memória!
-    if cNow - lastLureCheckTime < 150 then
-        if cachedSpecialAttackingMe >= 2 then
-            if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = cNow + 1000
-            elseif CaveBot and type(CaveBot.macro) == "table" then CaveBot.macro.delay = cNow + 1000
-            elseif CaveBot and type(CaveBot.delay) == "function" then CaveBot.delay(1000) end
+-- CONTROLES DE CACHE E ESTADO
+local cavebotPausadoPeloLure = false
+local configEspecialAtiva = false
+local limiteMonstrosEspeciais = 2 -- Valor padrão de segurança
+local ultimoCheckInterface = 0
+
+-- MACRO EXCLUSIVA CONECTADA AO COORDENADOR DE UI DO TARGETBOT
+macro(100, function()
+    if not g_game.isOnline() then return end
+
+    local agora = os.clock() * 1000
+
+    -- ============================================================================
+    -- OTIMIZAÇÃO DE PERFORMANCE: Cache de Leitura de Configurações
+    -- ============================================================================
+    -- Em vez de ler a tabela pesada do TargetBot 10 vezes por segundo, lemos a cada 1.5s
+    -- Isso elimina completamente os avisos de "Slow hotkey" no terminal.
+    if agora - ultimoCheckInterface > 1500 then
+        ultimoCheckInterface = agora
+        if TargetBot and type(TargetBot.getCreatureConfigs) == "function" then
+            local targetConfigs = TargetBot.getCreatureConfigs()
+            if targetConfigs then
+                for i = 1, #targetConfigs do
+                    local cfg = targetConfigs[i]
+                    -- Procura a configuração geral de hunt (geralmente registrada como * ou similar)
+                    if cfg and cfg.name == "*" then
+                        configEspecialAtiva = cfg.antiLureSpecial or false
+                        limiteMonstrosEspeciais = cfg.specialLureCount or 2
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    -- Se a caixinha "Anti-Lure Special" não estiver marcada na interface, libera o bot e encerra
+    if not configEspecialAtiva then
+        if cavebotPausadoPeloLure and CaveBot and type(CaveBot.start) == "function" then
+            CaveBot.start()
+            cavebotPausadoPeloLure = false
         end
         return
     end
-    lastLureCheckTime = cNow
 
     local localPlayer = g_game.getLocalPlayer()
     if not localPlayer then return end
@@ -4066,7 +4124,7 @@ checkSpecialMonstersLure = function()
     local specialAttackingMe = 0
     local spectators = g_map.getSpectators(playerPos, false)
 
-    -- Loop de varredura ultraleve usando a tabela Hash
+    -- Rastreamento de tela veloz através da tabela Hash
     for i = 1, #spectators do
         local spec = spectators[i]
         if spec:isMonster() and spec:getHealthPercent() > 0 then
@@ -4088,21 +4146,33 @@ checkSpecialMonstersLure = function()
         end
     end
 
-    cachedSpecialAttackingMe = specialAttackingMe
-
-    if specialAttackingMe >= 2 then
-        if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = cNow + 1000
-        elseif CaveBot and type(CaveBot.macro) == "table" then CaveBot.macro.delay = cNow + 1000
-        elseif CaveBot and type(CaveBot.delay) == "function" then CaveBot.delay(1000) end
+    -- TOMADA DE DECISÃO INTERTRAVADA COM O SLIDER DA INTERFACE
+    if specialAttackingMe >= limiteMonstrosEspeciais then
+        if CaveBot and type(CaveBot.isOn) == "function" and CaveBot.isOn() then
+            if type(CaveBot.stop) == "function" then 
+                CaveBot.stop() 
+                cavebotPausadoPeloLure = true
+                print("[UI Anti-Lure]: CaveBot TRAVADO por atingir o limite de " .. limiteMonstrosEspeciais .. " especiais.")
+            end
+        end
+    else
+        if cavebotPausadoPeloLure then
+            if CaveBot and type(CaveBot.isOn) == "function" and not CaveBot.isOn() then
+                if type(CaveBot.start) == "function" then
+                    CaveBot.start()
+                    cavebotPausadoPeloLure = false
+                    print("[UI Anti-Lure]: Perigo reduzido. CaveBot liberado automaticamente.")
+                end
+            else
+                cavebotPausadoPeloLure = false
+            end
+        end
     end
-end
+end)
 
--- PARTE 3: Injeção Otimizada no TargetBot.Creature.calculatePriority
+-- PARTE 3: Injeção de prioridade baseada em alvo
 if TargetBot and TargetBot.Creature then
     TargetBot.Creature.calculatePriority = function(creature, config, path)
-        -- Roda a checagem otimizada de Lure
-        checkSpecialMonstersLure()
-
         local priority = 0
         local path_length = #path
 
@@ -4112,7 +4182,6 @@ if TargetBot and TargetBot.Creature then
 
         local creatureName = string.lower(creature:getName() or "")
         
-        -- Checagem direta via Hash (0ms de processamento)
         if isMonsterSpecial(creatureName) then
             local localPlayer = g_game.getLocalPlayer()
             local myId = localPlayer and localPlayer:getId() or 0
