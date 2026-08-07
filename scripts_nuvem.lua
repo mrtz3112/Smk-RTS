@@ -657,7 +657,6 @@ macro(1500, "DepositGold & StackItems", function()
   end
 end)
 
-
 -- Auto Dodge Ultra-Otimizado (Anti-Lag / Lazy Pathfinding)
 local effectIdToAvoid = 237
 local maxSearchRange = 13
