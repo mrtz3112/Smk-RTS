@@ -4170,15 +4170,12 @@ if type(oldFindPath) == "function" then
             return nil
         end
 
-        -- Filtro geométrico simples em memória (0ms de custo de CPU)
         local distX = startPos.x - endPos.x
         if distX < 0 then distX = -distX end
         
         local distY = startPos.y - endPos.y
         if distY < 0 then distY = -distY end
 
-        -- Se o monstro estiver a mais de 7 SQMs, rejeita o cálculo na hora.
-        -- Isso impede que o algoritmo A* rode para monstros travados fora da tela.
         if distX > 7 or distY > 7 then
             return nil
         end
@@ -4187,7 +4184,7 @@ if type(oldFindPath) == "function" then
     end
 end
 
--- 2. GANCHO AUXILIAR DE COMPORTAMENTO E FILTRO DE PARTY
+-- 2. GANCHO DE COMPORTAMENTO COM TRAVA DE PARTY E INIMIGOS ALHEIOS
 if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams) == "function" then
     local oldCalculateParams = TargetBot.Creature.calculateParams
     local getLocalPlayer = g_game.getLocalPlayer
@@ -4218,7 +4215,7 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
             return { danger = 0, priority = 0 }
         end
 
-        -- Sincronização do cache da Party
+        -- Sincronização do cache da Party (Apenas a cada 5 segundos)
         if agora - ultimoTempoCheckParty >= 5000 then
             cacheIdsParty = {}
             totalMembrosParty = 0
@@ -4237,14 +4234,29 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
             ultimoTempoCheckParty = agora
         end
 
-        -- Filtro inteligente de alvos alheios (Ignora se for de fora da PT)
-        if type(creature.getTarget) == "function" then
-            local monsterTarget = creature:getTarget()
-            if monsterTarget and monsterTarget:isPlayer() then
-                local targetId = monsterTarget:getId()
-                if targetId and targetId ~= myId then
-                    if not cacheIdsParty[targetId] then
-                        return { danger = 0, priority = 0 }
+        -- Puxa todas as pessoas visíveis ao redor do monstro em memória RAM
+        local specs = getSpectators(cPos)
+        if specs then
+            for s = 1, #specs do
+                local spec = specs[s]
+                
+                -- Se encontrar um jogador próximo que NÃO seja você
+                if spec and spec:isPlayer() and spec ~= player then
+                    local sPos = spec:getPosition()
+                    
+                    if sPos and sPos.z == cPos.z then
+                        -- Checa se o monstro está colado (raio de 1 SQM de ataque) batendo nesse cara
+                        local distMonstroParaPlayerX = math.abs(cPos.x - sPos.x)
+                        local distMonstroParaPlayerY = math.abs(cPos.y - sPos.y)
+                        
+                        if distMonstroParaPlayerX <= 1 and distMonstroParaPlayerY <= 1 then
+                            -- O monstro está colado em alguém. Ele está na sua Party?
+                            local estranhoAlvoId = spec:getId()
+                            if estranhoAlvoId and not cacheIdsParty[estranhoAlvoId] then
+                                -- Se o monstro estiver atacando um cara que NÃO é da sua PT, ignora!
+                                return { danger = 0, priority = 0 }
+                            end
+                        end
                     end
                 end
             end
@@ -4274,6 +4286,7 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
     end
 end
 print("[Loader] TargetBot otimizado com sucesso.")
+
 
 
 -- ANTI-STUTTERING DEFINITIVO: Reciclagem de Tabelas (0ms Gasto de CPU)
