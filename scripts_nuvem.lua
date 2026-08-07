@@ -3922,10 +3922,7 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
--- ============================================================================
---    ANTI-LURE ELITES MASTER (VERSÃO FINAL - INTERRUPTOR DE MÓDULOS)
--- ============================================================================
-
+-- ANTI-LURE ELITES MASTER (Lógica Original Restaurada e Corrigida)
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 local specialMonstersHash = {}
 
@@ -3943,40 +3940,34 @@ local function isMonsterSpecial(creatureName)
     return false
 end
 
--- Controles internos de estado
+-- CONTROLES INTERNOS DE LEITURA REATIVA
 local configEspecialAtiva = false
 local limiteMonstrosEspeciais = 1
 local ultimoCheckInterface = 0
-local sistemaTravadoPorElite = false
 
--- Guarda o estado original para saber o que religar depois
-local cavebotEstavaLigado = false
-local targetbotEstavaLigado = false
-
--- ============================================================================
--- MACRO PRINCIPAL: INTERRUPTOR DE FORÇA BRUTA (Roda a 50ms para reação imediata)
--- ============================================================================
-macro(50, function()
+-- MACRO EXCLUSIVA ANTI-LURE (Roda a 100ms aplicando o freio por delay puro)
+macro(100, function()
     if not g_game.isOnline() then return end
 
     local agora = os.clock() * 1000
 
-    -- 1. Captura reativa dos botões da interface (Foto)
     if agora - ultimoCheckInterface > 200 then
         ultimoCheckInterface = agora
-        local alvoConfig = nil
+        -- CORREÇÃO DA LEITURA: Busca tanto no storage quanto no TargetBot real para garantir o vínculo da sua foto
+        local cfg = nil
         if TargetBot and TargetBot.configs and TargetBot.configs.creatures then
-            alvoConfig = TargetBot.configs.creatures["*"]
+            cfg = TargetBot.configs.creatures["*"]
         elseif storage and storage.TargetBot and storage.TargetBot.creatures then
-            alvoConfig = storage.TargetBot.creatures["*"]
+            cfg = storage.TargetBot.creatures["*"]
         end
-        if alvoConfig then
-            configEspecialAtiva = alvoConfig.antiLureSpecial or false
-            limiteMonstrosEspeciais = alvoConfig.specialLureCount or 1
+        
+        if cfg then
+            configEspecialAtiva = cfg.antiLureSpecial or false
+            limiteMonstrosEspeciais = cfg.specialLureCount or 1
         end
     end
 
-    -- Se o recurso estiver desligado na UI, garante que tudo funcione normalmente
+    -- Se o botão verde "Lure Elites" estiver desmarcado na foto, encerra e libera a hunt
     if not configEspecialAtiva then
         return
     end
@@ -3986,10 +3977,10 @@ macro(50, function()
     local playerPos = localPlayer:getPosition()
     if not playerPos then return end
 
-    -- 2. Contagem de Elites em tela
     local specialAttackingMe = 0
     local spectators = g_map.getSpectators(playerPos, false) or {}
 
+    -- Varre a tela inteira contando a presença real de Elites vivos por proximidade
     for i = 1, #spectators do
         local spec = spectators[i]
         if spec and spec:isMonster() and spec:getHealthPercent() > 0 then
@@ -4000,88 +3991,80 @@ macro(50, function()
         end
     end
 
-    -- 3. APLICAÇÃO DO FREIO ABSOLUTO (ELITE DETECTADO)
     if specialAttackingMe >= limiteMonstrosEspeciais then
+        -- Aplica os 2000ms de trava na macro de passos nativa do seu bot
+        local tempoDeTrava = agora + 2000
         
-        -- Se ainda não aplicamos a trava, salva o estado atual e desliga os módulos
-        if not sistemaTravadoPorElite then
-            -- Salva se o Cavebot/Targetbot estavam ligados antes do bicho aparecer
-            if CaveBot then cavebotEstavaLigado = CaveBot.isOn() end
-            if TargetBot then targetbotEstavaLigado = TargetBot.isOn() end
-            
-            sistemaTravadoPorElite = true
+        -- CORREÇÃO DA INJEÇÃO: Executa de forma limpa sem estourar escopo
+        if cavebotMacro and type(cavebotMacro) == "table" then 
+            cavebotMacro.delay = tempoDeTrava
+        elseif CaveBot and type(CaveBot.macro) == "table" then 
+            CaveBot.macro.delay = tempoDeTrava
+        elseif CaveBot and type(CaveBot.delay) == "function" then 
+            pcall(function() CaveBot.delay(2000) end) 
         end
-
-        -- Desliga o Cavebot na raiz (C++ e Interface)
-        if CaveBot and type(CaveBot.setOff) == "function" then CaveBot.setOff()
-        elseif CaveBot and type(CaveBot.stop) == "function" then CaveBot.stop() end
         
-        -- Desliga o TargetBot na raiz para ele parar de lurar monstros comuns
-        if TargetBot and type(TargetBot.setOff) == "function" then TargetBot.setOff()
-        elseif TargetBot and type(TargetBot.stop) == "function" then TargetBot.stop() end
-
-        -- Limpa completamente qualquer comando de andar pendente no teclado/mouse virtual
-        if type(g_game.clearWalkingPath) == "function" then g_game.clearWalkingPath() end
-        if localPlayer.clearWalkPath then localPlayer:clearWalkPath() end
-        if localPlayer.stopWalking then localPlayer:stopWalking() end
-        
-        g_game.cancelWalk()
+        -- Executa os comandos clássicos de parada física imediata no cliente gráfico
         if type(g_game.stop) == "function" then g_game.stop() end
-
-    else
-        -- 4. LIBERAÇÃO DA HUNT (ELITE MORREU OU FOI EMBORA)
-        if sistemaTravadoPorElite then
-            -- Restaura o Cavebot se ele estava ativo antes
-            if cavebotEstavaLigado and CaveBot then
-                if type(CaveBot.setOn) == "function" then CaveBot.setOn()
-                elseif type(CaveBot.start) == "function" then CaveBot.start() end
-            end
-            
-            -- Restaura o TargetBot se ele estava ativo antes
-            if targetbotEstavaLigado and TargetBot then
-                if type(TargetBot.setOn) == "function" then TargetBot.setOn()
-                elseif type(TargetBot.start) == "function" then TargetBot.start() end
-            end
-            
-            sistemaTravadoPorElite = false
-        end
+        if type(g_game.cancelWalk) == "function" then g_game.cancelWalk() end
     end
 end)
 
--- ============================================================================
--- MACRO DE ATAQUE MECÂNICO (Substitui o TargetBot enquanto ele estiver desligado)
--- ============================================================================
-macro(100, function()
-    if not g_game.isOnline() or not sistemaTravadoPorElite then return end
-    
-    local localPlayer = g_game.getLocalPlayer()
-    if not localPlayer then return end
+-- PARTE 3: Injeção de prioridade baseada em alvo (Sua lógica de prioridade original)
+if TargetBot and TargetBot.Creature then
+    TargetBot.Creature.calculatePriority = function(creature, config, path)
+        local priority = 0
+        local path_length = #path
 
-    -- Mantém o ataque no Elite atual até ele morrer
-    local atualAlvo = g_game.getAttackingCreature()
-    if atualAlvo and atualAlvo:isMonster() then
-        if isMonsterSpecial(string.lower(atualAlvo:getName() or "")) then
-            return 
-        end
-    end
-
-    local playerPos = localPlayer:getPosition()
-    local spectators = g_map.getSpectators(playerPos, false) or {}
-    
-    -- Força o clique de ataque no Elite
-    for i = 1, #spectators do
-        local spec = spectators[i]
-        if spec and spec:isMonster() and spec:getHealthPercent() > 0 then
-            local sName = string.lower(spec:getName() or "")
-            if isMonsterSpecial(sName) then
-                g_game.attack(spec)
-                break
+        local atacandoAtual = g_game.getAttackingCreature()
+        if atacandoAtual == creature then
+            priority = priority + 500
+            if path_length <= 1 then
+                return priority + 1000 
             end
         end
+
+        local creatureName = string.lower(creature:getName() or "")
+        if isMonsterSpecial(creatureName) then
+            local localPlayer = g_game.getLocalPlayer()
+            local myId = localPlayer and localPlayer:getId() or 0
+            
+            local mTargetId = 0
+            if type(creature.getTargetId) == "function" then mTargetId = creature:getTargetId() or 0
+            elseif creature.targetId then mTargetId = creature.targetId
+            elseif type(creature.getTarget) == "function" then
+                local tgt = creature:getTarget()
+                if tgt then mTargetId = tgt:getId() end
+            end
+
+            local attackingOtherPlayer = (mTargetId > 0 and mTargetId ~= myId)
+            if not attackingOtherPlayer then
+                if path_length == 1 then
+                    priority = priority + 1000
+                end
+            end
+        end
+
+        if path_length > config.maxDistance then
+            return priority
+        end
+
+        priority = priority + config.priority
+        
+        if path_length == 1 then
+            priority = priority + 500
+        elseif path_length <= 3 then
+            priority = priority + 2
+        end
+
+        local hp = creature:getHealthPercent() or 100
+        if hp < 20 then priority = priority + 5
+        elseif hp < 50 then priority = priority + 2
+        elseif hp < 80 then priority = priority + 0.5 end
+
+        return priority
     end
-end)
-
-
+end
 
 -- ============================================================================
 --          CaveBot Optimizer (CORRIGIDO: Suporta Freios de Anti-Lure)
