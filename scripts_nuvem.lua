@@ -878,7 +878,6 @@ macro(500, "Enter Rift",  function()
   end
 end)
 
-
 -- Auto Subir/Descer Escadas
 Stairs = {}
 Stairs.saveStatus = {}
@@ -4152,27 +4151,3 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
     end
 end
 print("[Loader] TargetBot otimizado com sucesso.")
-
--- ============================================================================
---    ANTI-STUTTERING DEFINITIVO (CORRIGIDO: Sem Micro-Trancadas de Movimento)
--- ============================================================================
-local ultimaReciclagem = 0
-macro(5000, function()
-    if not g_game.isOnline() then return end
-    
-    local agoraPerf = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-    
-    -- O próprio script limpa as tabelas de cache locais reiniciando os índices.
-    -- Isso avisa ao C++ do jogo para reaproveitar o mesmo espaço da memória RAM!
-    if agoraPerf - ultimaReciclagem >= 10000 then
-        ultimaReciclagem = agoraPerf
-        
-        -- Executa uma limpeza segura de tabelas fantasmas que possam estar ativas
-        if type(toFollowPos) == "table" then
-            for k in pairs(toFollowPos) do toFollowPos[k] = nil end
-        end
-        
-        -- REMOVIDO: g_app.optimize() que causava lags de ticks e atropelava os waypoints do 8.54!
-    end
-end)
-print("[Loader] Estabilizador de performance habilitado com sucesso.")
