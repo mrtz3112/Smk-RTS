@@ -840,6 +840,111 @@ macro(30, "Dodge Red SQM Spells", function()
     end
 end)
 
+--Enter Dungeons
+local window_name = "Dungeons"
+macro(2000, "Enter Dungeon", function()
+  if not g_game.isOnline() then return end
+  -- Se você NÃO estiver em Protection Zone (na hunt correndo risco), para a execução na hora.
+  if not isInPz() then 
+    return 
+  end
+
+  -- SUA LÓGICA ORIGINAL 100% FUNCIONAL RESTAURADA:
+  for i, rootW in pairs(g_ui.getRootWidget():getChildren()) do
+    if string.find(rootW:getText():lower(), window_name:lower()) then
+      for i, child in pairs(rootW:getChildren()) do
+          if child:getText() == "Start" then
+             child:onClick()
+ 
+             delay(1000)
+             break
+           end
+      end
+ 
+      break
+    end
+  end
+end)
+
+-- Enter Rift (Versão Inteligente com Loop de Alarme Sem Alteração de Título)
+local PORTAL_ID = 11843
+local RANGE_X = 13       -- Limita a busca à largura real da tela do monitor
+local RANGE_Y = 7        -- Limita a busca à altura real da tela do monitor
+
+local getLocalPlayer = g_game.getLocalPlayer
+local getTile = g_map.getTile
+local g_game_use = g_game.use
+
+local ultimoTickRift = 0
+local ultimoTickSom = 0 -- Controla o loop rápido do áudio do Magnum
+
+macro(250, "Enter Rift", function()
+    if not g_game.isOnline() then return end
+    
+    local agoraRift = os.clock() * 1000
+
+    -- FILTRO DE VARREDURA POR AMOSTRAGEM (0ms CPU)
+    if not findItem(PORTAL_ID) then return end
+
+    -- LOOP DE ÁUDIO E PRINT (Roda a cada 400ms enquanto o portal estiver visível)
+    if agoraRift - ultimoTickSom >= 400 then
+        ultimoTickSom = agoraRift
+        
+        -- Mantém o seu print limpo no terminal
+        print("[Dungeon] Rift encontrada.")
+        
+        pcall(function()
+            -- CORREÇÃO: Força o uso do g_sound nativo primeiro para não mudar o título do cliente.
+            -- Caso use a função alarm, passa o texto vazio "" para manter a barra intocada!
+            if g_sound and type(g_sound.play) == "function" then
+                g_sound.play("/sounds/magnum.ogg")
+            elseif type(alarm) == "function" then
+                alarm("/sounds/magnum.ogg", "") -- Texto em branco garante que o título do Windows não muda
+            end
+        end)
+    end
+    
+    -- Controla o intervalo de cliques físicos para não dar spam de "use" no servidor
+    if agoraRift - ultimoTickRift < 250 then return end
+    ultimoTickRift = agoraRift
+
+    local player = getLocalPlayer()
+    if not player then return end
+
+    local playerPos = player:getPosition()
+    if not playerPos then return end
+
+    -- RADAR GEOMÉTRICO RESTRITO: Executa o rastreamento para o clique
+    local searchPos = {x = 0, y = 0, z = playerPos.z}
+    
+    for x = -RANGE_X, RANGE_X do
+        searchPos.x = playerPos.x + x
+        for y = -RANGE_Y, RANGE_Y do
+            searchPos.y = playerPos.y + y
+            
+            local tile = getTile(searchPos)
+            if tile then
+                local items = tile:getItems()
+                if items then
+                    for i = 1, #items do
+                        local item = items[i]
+                        if item and item:getId() == PORTAL_ID then
+                            -- Executa a ação nativa perfeita do jogo
+                            g_game_use(item)
+                            
+                            -- Encaminha o Cavebot imediatamente para gerenciar o Rift
+                            CaveBot.gotoLabel("Rift")
+                            
+                            -- Delay de segurança de 1.5 segundos para o clique físico
+                            ultimoTickRift = agoraRift + 1500 
+                            return 
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
 
 -- ============================================================================
 -- AUTO-ESCADAS ULTIMATE EDITION (Versão Definitiva Widescreen Otimizada)
@@ -1117,112 +1222,6 @@ macro(150, "Auto Escadas", function()
     else
         return markOnThing(Stairs.bestTile, "#FF0000")
     end
-end)
-
--- Enter Rift (Versão Inteligente com Loop de Alarme Sem Alteração de Título)
-local PORTAL_ID = 11843
-local RANGE_X = 13       -- Limita a busca à largura real da tela do monitor
-local RANGE_Y = 7        -- Limita a busca à altura real da tela do monitor
-
-local getLocalPlayer = g_game.getLocalPlayer
-local getTile = g_map.getTile
-local g_game_use = g_game.use
-
-local ultimoTickRift = 0
-local ultimoTickSom = 0 -- Controla o loop rápido do áudio do Magnum
-
-macro(250, "Enter Rift", function()
-    if not g_game.isOnline() then return end
-    
-    local agoraRift = os.clock() * 1000
-
-    -- FILTRO DE VARREDURA POR AMOSTRAGEM (0ms CPU)
-    if not findItem(PORTAL_ID) then return end
-
-    -- LOOP DE ÁUDIO E PRINT (Roda a cada 400ms enquanto o portal estiver visível)
-    if agoraRift - ultimoTickSom >= 400 then
-        ultimoTickSom = agoraRift
-        
-        -- Mantém o seu print limpo no terminal
-        print("[Dungeon] Rift encontrada.")
-        
-        pcall(function()
-            -- CORREÇÃO: Força o uso do g_sound nativo primeiro para não mudar o título do cliente.
-            -- Caso use a função alarm, passa o texto vazio "" para manter a barra intocada!
-            if g_sound and type(g_sound.play) == "function" then
-                g_sound.play("/sounds/magnum.ogg")
-            elseif type(alarm) == "function" then
-                alarm("/sounds/magnum.ogg", "") -- Texto em branco garante que o título do Windows não muda
-            end
-        end)
-    end
-    
-    -- Controla o intervalo de cliques físicos para não dar spam de "use" no servidor
-    if agoraRift - ultimoTickRift < 250 then return end
-    ultimoTickRift = agoraRift
-
-    local player = getLocalPlayer()
-    if not player then return end
-
-    local playerPos = player:getPosition()
-    if not playerPos then return end
-
-    -- RADAR GEOMÉTRICO RESTRITO: Executa o rastreamento para o clique
-    local searchPos = {x = 0, y = 0, z = playerPos.z}
-    
-    for x = -RANGE_X, RANGE_X do
-        searchPos.x = playerPos.x + x
-        for y = -RANGE_Y, RANGE_Y do
-            searchPos.y = playerPos.y + y
-            
-            local tile = getTile(searchPos)
-            if tile then
-                local items = tile:getItems()
-                if items then
-                    for i = 1, #items do
-                        local item = items[i]
-                        if item and item:getId() == PORTAL_ID then
-                            -- Executa a ação nativa perfeita do jogo
-                            g_game_use(item)
-                            
-                            -- Encaminha o Cavebot imediatamente para gerenciar o Rift
-                            CaveBot.gotoLabel("Rift")
-                            
-                            -- Delay de segurança de 1.5 segundos para o clique físico
-                            ultimoTickRift = agoraRift + 1500 
-                            return 
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-
---Enter Dungeons
-local window_name = "Dungeons"
-macro(2000, "Enter Dungeons", function()
-  if not g_game.isOnline() then return end
-  -- Se você NÃO estiver em Protection Zone (na hunt correndo risco), para a execução na hora.
-  if not isInPz() then 
-    return 
-  end
-
-  -- SUA LÓGICA ORIGINAL 100% FUNCIONAL RESTAURADA:
-  for i, rootW in pairs(g_ui.getRootWidget():getChildren()) do
-    if string.find(rootW:getText():lower(), window_name:lower()) then
-      for i, child in pairs(rootW:getChildren()) do
-          if child:getText() == "Start" then
-             child:onClick()
- 
-             delay(1000)
-             break
-           end
-      end
- 
-      break
-    end
-  end
 end)
 
 --Auto Attack House Trainer
