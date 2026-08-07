@@ -4153,16 +4153,15 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
 end
 print("[Loader] TargetBot otimizado com sucesso.")
 
-
-
--- ANTI-STUTTERING DEFINITIVO: Reciclagem de Tabelas (0ms Gasto de CPU)
+-- ============================================================================
+--    ANTI-STUTTERING DEFINITIVO (CORRIGIDO: Sem Micro-Trancadas de Movimento)
+-- ============================================================================
 local ultimaReciclagem = 0
 macro(5000, function()
     if not g_game.isOnline() then return end
     
     local agoraPerf = g_clock and g_clock.getMillis() or (os.clock() * 1000)
     
-    -- O SEGREDO DO SUCESSO SEM COLLECTGARBAGE:
     -- O próprio script limpa as tabelas de cache locais reiniciando os índices.
     -- Isso avisa ao C++ do jogo para reaproveitar o mesmo espaço da memória RAM!
     if agoraPerf - ultimaReciclagem >= 10000 then
@@ -4173,85 +4172,7 @@ macro(5000, function()
             for k in pairs(toFollowPos) do toFollowPos[k] = nil end
         end
         
-        -- Força uma pequena pausa de microsegundos no motor gráfico para estabilizar o FPS
-        if g_app and type(g_app.optimize) == "function" then
-            pcall(g_app.optimize)
-        end
+        -- REMOVIDO: g_app.optimize() que causava lags de ticks e atropelava os waypoints do 8.54!
     end
 end)
-print("[Loader] Estabilizador de performace carregado com sucesso.")
-
-
---     BLINDAGEM DA FUNÇÃO GOTOLABEL
-local oldGotoLabelGlobal = gotoLabel
-local oldCaveBotGotoLabel = CaveBot and CaveBot.gotoLabel
-
-local ultimoTempoTrocaLabelGlobal = 0
-local ultimaLabelTentada = ""
-local SMK_MudandoDeMapaMute = false
-
-local function filtrarChamadaLabelSeguro(labelName, funcaoOriginal, ...)
-    if not labelName or not funcaoOriginal then return false end
-
-    local agoraLabel = os.clock() * 1000
-    local labelAlvo = tostring(labelName):lower()
-
-    -- 1. FILTRO ANTI-LOOP: Impede o check_pos de flodar o comando em loop
-    if labelAlvo == ultimaLabelTentada and (agoraLabel - ultimoTempoTrocaLabelGlobal < 8000) then
-        return true -- Retorna true para o bot entender que a ordem foi aceita/processada
-    end
-
-    ultimaLabelTentada = labelAlvo
-    ultimoTempoTrocaLabelGlobal = agoraLabel
-    
-    SMK_MudandoDeMapaMute = true
-
-    -- 2. TRANSIÇÃO CIRÚRGICA: Se tiver scheduleEvent, agenda mas avisa o bot que deu certo
-    if type(scheduleEvent) == "function" then
-        scheduleEvent(function()
-            if not g_game.isOnline() then SMK_MudandoDeMapaMute = false return end
-            
-            if CaveBot and CaveBot.currentWaypoint then
-                CaveBot.currentWaypoint = 1
-            end
-            
-            pcall(funcaoOriginal, labelName)
-            
-            scheduleEvent(function()
-                SMK_MudandoDeMapaMute = false
-                if CaveBot and type(CaveBot.preNext) == "function" then
-                    CaveBot.preNext()
-                end
-            end, 150)
-        end, 80)
-        return true -- CORREÇÃO CRÍTICA: Diz ao Cavebot que a ação foi bem-sucedida para evitar o Warning
-    else
-        SMK_MudandoDeMapaMute = false
-        local success, result = pcall(funcaoOriginal, labelName, ...)
-        return success and (result ~= nil and result or true) or false
-    end
-end
-
-if type(oldGotoLabelGlobal) == "function" then
-    gotoLabel = function(labelName, ...)
-        return filtrarChamadaLabelSeguro(labelName, oldGotoLabelGlobal, ...)
-    end
-end
-
-if CaveBot and type(oldCaveBotGotoLabel) == "function" then
-    CaveBot.gotoLabel = function(labelName, ...)
-        return filtrarChamadaLabelSeguro(labelName, oldCaveBotGotoLabel, ...)
-    end
-end
-
--- 3. INTEGRAÇÃO COM O FINDPATH DO TARGETBOT
-local oldFindPathSMK = findPath
-if type(oldFindPathSMK) == "function" then
-    findPath = function(startPos, endPos, maxDist, options, ...)
-        if SMK_MudandoDeMapaMute then
-            return nil
-        end
-        return oldFindPathSMK(startPos, endPos, maxDist, options, ...)
-    end
-end
-print("[Loader] Funcao gotoLabel blindada contra loops.")
+print("[Loader] Estabilizador de performance habilitado com sucesso.")
