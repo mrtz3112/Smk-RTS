@@ -171,7 +171,7 @@ ButtonT = UI.Button("Reconect", function()
 end)
 updateButtonReconectText()
 UI.Separator()
---Alarms
+--Alarms Customizado Clean (Substitua tudo no botão Alarms)
 local panelName = "alarms"
 local ui = setupUI([[
 Panel
@@ -231,8 +231,6 @@ local parents =
   window.settingsList
 }
 
-
--- type
 addAlarm = function(id, title, defaultValue, alarmType, parent, tooltip)
   local widget = UI.createWidget(widgets[alarmType], parents[parent])
   widget:setId(id)
@@ -264,14 +262,11 @@ addAlarm = function(id, title, defaultValue, alarmType, parent, tooltip)
       config[id].value = newText
     end
   end
-
 end
 
--- settings
 addAlarm("ignoreFriends", "Ignore Friends", true, 1, 2)
 addAlarm("flashClient", "Flash Client", true, 1, 2)
 
--- alarm list
 addAlarm("damageTaken", "Damage Taken", false, 1, 1)
 addAlarm("lowHealth", "Low Health", 20, 2, 1)
 addAlarm("lowMana", "Low Mana", 20, 2, 1)
@@ -285,30 +280,31 @@ addAlarm("customMessage", "Custom Message:", "", 3, 1, "You can add text, that i
 
 UI.Separator(window.list)
 
-addAlarm("creatureDetected", "Creature Detected", false, 1, 1)
+-- Painel limpo mantendo apenas o Rift Detected e o Player Detected
+addAlarm("riftDetected", "Rift Detected", false, 1, 1)
 addAlarm("playerDetected", "Player Detected", false, 1, 1)
-addAlarm("creatureName", "Creature Name:", "", 3, 1, "You can add a name or part of it, that if found in any visible creature name will trigger alert.\nYou can add many, just separate them by comma.")
-
 
 local lastCall = now
 local function alarm(file, windowText)
-  if now - lastCall < 2000 then return end -- 2s delay
+  if now - lastCall < 2000 then return end
   lastCall = now
 
   if not g_resources.fileExists(file) then
     file = "/sounds/alarm.ogg"
-    lastCall = now + 4000 -- alarm.ogg length is 6s
+    lastCall = now + 4000
   end
 
-  
   if modules.game_bot.g_app.getOs() == "windows" and config.flashClient.enabled then
     g_window.flash()
   end
-  g_window.setTitle(player:getName() .. " - " .. windowText)
+  
+  if windowText ~= "OCULTO" then
+    g_window.setTitle(player:getName() .. " - " .. windowText)
+  end
+  
   playSound(file)
 end
 
--- damage taken & custom message
 onTextMessage(function(mode, text)
   if not config.enabled then return end
   if mode == 22 and config.damageTaken.enabled then
@@ -322,10 +318,7 @@ onTextMessage(function(mode, text)
       local parts = string.split(alertText, ",")
 
       for i=1,#parts do
-        local part = parts[i]
-        part = part:trim()
-        part = part:lower()
-
+        local part = parts[i]:trim():lower()
         if text:find(part) then
           return alarm('/sounds/magnum.ogg', "Special Message!")
         end
@@ -334,11 +327,10 @@ onTextMessage(function(mode, text)
   end
 end)
 
--- default & private message
 onTalk(function(name, level, mode, text, channelId, pos)
   if not config.enabled then return end
-  if name == player:getName() then return end -- ignore self messages
-  if config.ignoreFriends.enabled and isFriend(name) then return end -- ignore friends if enabled
+  if name == player:getName() then return end
+  if config.ignoreFriends.enabled and isFriend(name) then return end
 
   if mode == 1 and config.defaultMsg.enabled then
     return alarm("/sounds/magnum.ogg", "Default Message!")
@@ -349,9 +341,13 @@ onTalk(function(name, level, mode, text, channelId, pos)
   end
 end)
 
--- health & mana
 macro(100, function() 
   if not config.enabled then return end
+  
+  if config.riftDetected.enabled and findItem(11843) then
+     return alarm("/sounds/magnum.ogg", "OCULTO")
+  end
+
   if config.lowHealth.enabled then
     if hppercent() < config.lowHealth.value then
       return alarm("/sounds/Low_Health.ogg", "Low Health!")
@@ -367,29 +363,12 @@ macro(100, function()
   for i, spec in ipairs(getSpectators()) do
     if not spec:isLocalPlayer() and not (config.ignoreFriends.enabled and isFriend(spec)) then
 
-      if config.creatureDetected.enabled then
-        return alarm("/sounds/magnum.ogg", "Creature Detected!")
-      end
-
       if spec:isPlayer() then 
         if spec:isTimedSquareVisible() and config.playerAttack.enabled then
           return alarm("/sounds/Player_Attack.ogg", "Player Attack!")
         end
         if config.playerDetected.enabled then
           return alarm("/sounds/Player_Detected.ogg", "Player Detected!")
-        end
-      end
-
-      if config.creatureName.enabled then
-        local name = spec:getName():lower()
-        local fragments = string.split(config.creatureName.value, ",")
-        
-        for i=1,#fragments do
-          local frag = fragments[i]:trim():lower()
-
-          if name:lower():find(frag) then
-            return alarm("/sounds/alarm.ogg", "Special Creature Detected!")
-          end
         end
       end
     end
@@ -866,8 +845,8 @@ macro(2000, "Enter Dungeon", function()
   end
 end)
 
--- Enter Rift (Versão Inteligente com Loop de Alarme Sem Alteração de Título)
-local PORTAL_ID = 11843
+-- Enter Rift (Versão Definitiva 100% Funcional Restaurada - smkmain.lua)
+local PORTAL_ID = 11843 -- ID original do Portal da Rift restaurado!
 local RANGE_X = 13       -- Limita a busca à largura real da tela do monitor
 local RANGE_Y = 7        -- Limita a busca à altura real da tela do monitor
 
@@ -876,7 +855,6 @@ local getTile = g_map.getTile
 local g_game_use = g_game.use
 
 local ultimoTickRift = 0
-local ultimoTickSom = 0 -- Controla o loop rápido do áudio do Magnum
 
 macro(250, "Enter Rift", function()
     if not g_game.isOnline() then return end
@@ -885,26 +863,7 @@ macro(250, "Enter Rift", function()
 
     -- FILTRO DE VARREDURA POR AMOSTRAGEM (0ms CPU)
     if not findItem(PORTAL_ID) then return end
-
-    -- LOOP DE ÁUDIO E PRINT (Roda a cada 400ms enquanto o portal estiver visível)
-    if agoraRift - ultimoTickSom >= 400 then
-        ultimoTickSom = agoraRift
-        
-        -- Mantém o seu print limpo no terminal
-        print("[Dungeon] Rift encontrada.")
-        
-        pcall(function()
-            -- CORREÇÃO: Força o uso do g_sound nativo primeiro para não mudar o título do cliente.
-            -- Caso use a função alarm, passa o texto vazio "" para manter a barra intocada!
-            if g_sound and type(g_sound.play) == "function" then
-                g_sound.play("/sounds/magnum.ogg")
-            elseif type(alarm) == "function" then
-                alarm("/sounds/magnum.ogg", "") -- Texto em branco garante que o título do Windows não muda
-            end
-        end)
-    end
     
-    -- Controla o intervalo de cliques físicos para não dar spam de "use" no servidor
     if agoraRift - ultimoTickRift < 250 then return end
     ultimoTickRift = agoraRift
 
@@ -914,7 +873,7 @@ macro(250, "Enter Rift", function()
     local playerPos = player:getPosition()
     if not playerPos then return end
 
-    -- RADAR GEOMÉTRICO RESTRITO: Executa o rastreamento para o clique
+    -- RADAR GEOMÉTRICO WIDESCREEN
     local searchPos = {x = 0, y = 0, z = playerPos.z}
     
     for x = -RANGE_X, RANGE_X do
@@ -929,6 +888,7 @@ macro(250, "Enter Rift", function()
                     for i = 1, #items do
                         local item = items[i]
                         if item and item:getId() == PORTAL_ID then
+                            
                             -- Executa a ação nativa perfeita do jogo
                             g_game_use(item)
                             
@@ -946,9 +906,7 @@ macro(250, "Enter Rift", function()
     end
 end)
 
--- ============================================================================
--- AUTO-ESCADAS ULTIMATE EDITION (Versão Definitiva Widescreen Otimizada)
--- ============================================================================
+-- Auto Subir/Descer Escadas
 Stairs = {}
 Stairs.saveStatus = {}
 Stairs.pos = nil
@@ -1075,7 +1033,7 @@ Stairs.goUse = function(pos)
 end
 
 -- ============================================================================
--- FUNÇÃO DE BUSCA ULTRA PERFORMANCE (Filtro Antecipado Widescreen 13x7)
+-- FUNÇÃO DE BUSCA ULTRA PERFORMANCE (Restrita ao Limite Máximo de 3 SQMs)
 -- ============================================================================
 Stairs.checkAll = function()
     local playerObj = g_game.getLocalPlayer()
@@ -1086,17 +1044,14 @@ Stairs.checkAll = function()
     local bestTileFound = nil
     local bestDistance = 9999
 
-    -- Realiza o mapeamento completo da proporção do monitor sem gerar picos de lag
-    for x = -13, 13 do
-        for y = -7, 7 do
+    for x = -3, 3 do
+        for y = -3, 3 do
             local stairPos = {x = pPos.x + x, y = pPos.y + y, z = pPos.z}
             local tile = g_map.getTile(stairPos)
             
-            -- FILTRO ANTECIPADO: Avalia o tipo de piso antes de tentar traçar rotas
             if tile and Stairs.checkTile(tile) then
                 local dist = Stairs.accurateDistance(pPos, stairPos)
                 
-                -- OTIMIZAÇÃO CRÍTICA: Poupa o processador descartando caminhos de escadas mais distantes
                 if dist < bestDistance then
                     if findPath(stairPos, pPos) then
                         bestDistance = dist
@@ -1113,7 +1068,20 @@ Stairs.checkAll = function()
     return bestTileFound
 end
 
+-- ============================================================================
+-- SINAIS DE EVENTO BLINDADOS (Proteção Total Contra Inicialização Nil)
+-- ============================================================================
 onPlayerPositionChange(function(newPos, oldPos)
+    -- BLINDAGEM DE INICIALIZAÇÃO: Se a tabela ou a macro não existirem na memória ainda, aborta
+    if not Stairs or not Stairs.config or not AutoEscadasMacroObjeto then
+        return
+    end
+
+    -- Se a macro estiver desligada no painel, mata a execução instantaneamente (0ms CPU)
+    if AutoEscadasMacroObjeto:isOff() then
+        return
+    end
+
     Stairs.config.stand = now
     Stairs.config.tryWalk = nil
     if newPos.z ~= oldPos.z or getDistanceBetween(oldPos, newPos) > 1 or table.equals(Stairs.pos, newPos) then
@@ -1125,12 +1093,20 @@ onPlayerPositionChange(function(newPos, oldPos)
 end)
 
 onAddThing(function(tile, thing)
+    if not Stairs or not Stairs.config or not AutoEscadasMacroObjeto or AutoEscadasMacroObjeto:isOff() then 
+        return 
+    end
+    
     if type(Stairs.pos) == "table" and tile and table.equals(tile:getPosition(), Stairs.pos) then
         Stairs.bestTile = tile
     end
 end)
 
 function markOnThing(thing, color)
+    if not Stairs or not Stairs.config or not AutoEscadasMacroObjeto or AutoEscadasMacroObjeto:isOff() then 
+        return false 
+    end
+    
     if thing then
         if thing:getPosition() then
             local topThing = thing:getTopUseThing()
@@ -1153,7 +1129,8 @@ end
 -- MACRO DE MOVIMENTAÇÃO (40ms - Exige manter a tecla Espaço pressionada)
 -- ============================================================================
 Stairs.walk = macro(40, function()
-    -- INTERRUPÇÃO DE SEGURANÇA: Cancela a corrida instantaneamente caso o Espaço seja solto
+    if not Stairs or not Stairs.config then return Stairs.walk.setOff() end
+
     if modules.corelib and modules.corelib.g_keyboard and type(modules.corelib.g_keyboard.isKeyPressed) == "function" then
         if not modules.corelib.g_keyboard.isKeyPressed("Space") then
             return Stairs.walk.setOff()
@@ -1163,11 +1140,9 @@ Stairs.walk = macro(40, function()
     if modules.corelib.g_keyboard.isKeyPressed("Escape") then
         return Stairs.walk.setOff()
     end
-    
     player:lockWalk(300)
     if Stairs.config.tryWalk then return end
 
-    -- Utiliza a leitura estocada na memória RAM para não causar concorrência de processamento
     markOnThing(Stairs.bestTile, "#00FF00")
     if Stairs.bestTile and Stairs.bestTile:isWalkable() then
         if not Stairs.bestTile:isPathable() then
@@ -1182,24 +1157,24 @@ end)
 Stairs.walk.setOff()
 
 -- ============================================================================
--- MACRO PRINCIPAL DO RADAR (Suave a 150ms - Nome Limpo na UI)
+-- MACRO PRINCIPAL DO RADAR (Suave a 150ms)
 -- ============================================================================
-macro(150, "Auto Escadas", function()
-    local espacoPressionado = false
+AutoEscadasMacroObjeto = macro(150, "Auto Escadas", function()
+    if not Stairs or not Stairs.config then return end
+    if Stairs.walk.isOn() then 
+        if modules.corelib.g_keyboard and not modules.corelib.g_keyboard.isKeyPressed("Space") then
+            Stairs.walk.setOff()
+        end
+        return 
+    end
     
+    local espacoPressionado = false
     if modules.corelib and modules.corelib.g_keyboard and type(modules.corelib.g_keyboard.isKeyPressed) == "function" then
         if modules.corelib.g_keyboard.isKeyPressed("Space") and modules.game_console and not modules.game_console:isChatEnabled() then
             espacoPressionado = true
         end
     end
 
-    if Stairs.walk.isOn() then 
-        if not espacoPressionado then
-            Stairs.walk.setOff()
-        end
-        return 
-    end
-    
     local currentPos = Stairs.postostring(pos())
     if currentPos ~= Stairs.lastPos then
         local resultadoProvisorio = Stairs.checkAll()
@@ -1209,7 +1184,6 @@ macro(150, "Auto Escadas", function()
             Stairs.pos = Stairs.bestTile and Stairs.bestTile:getPosition()
             Stairs.lastPos = currentPos
         elseif now - Stairs.config.ultimoSucessoRadar > 500 then
-            -- Sistema de persistência: Evita falhas de clique mantendo o alvo por 500ms caso o radar oscile na corrida
             markOnThing(Stairs.bestTile, "")
             Stairs.bestTile = nil
             Stairs.pos = nil
