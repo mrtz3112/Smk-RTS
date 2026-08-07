@@ -3922,174 +3922,93 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
--- ANTI-LURE ELITES MASTER (Lógica Original Restaurada e Corrigida)
+-- Creature_Priority
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
-local specialMonstersHash = {}
-
-for _, name in ipairs(specialMonsters) do
-    specialMonstersHash[string.lower(name)] = true
-end
 
 local function isMonsterSpecial(creatureName)
-    if specialMonstersHash[creatureName] then return true end
-    for name, _ in pairs(specialMonstersHash) do
-        if string.find(creatureName, name, 1, true) then
+  if not creatureName then return false end
+  local nomeLimpo = string.lower(creatureName)
+  for i = 1, #specialMonsters do
+    if string.find(nomeLimpo, specialMonsters[i], 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
+-- INJEÇÃO DE PRIORIDADE BALANCEADA NATIVA DO TARGETBOT
+TargetBot.Creature.calculatePriority = function(creature, config, path)
+  -- config is based on creature_editor
+  local priority = 0
+  local path_length = #path
+
+  -- extra priority if it's current target
+  if g_game.getAttackingCreature() == creature then
+    priority = priority + 1
+  end
+
+  -- check if distance is fine, if not then attack only if already attacked
+  if path_length > config.maxDistance then
+    return priority
+  end
+
+  -- add config priority
+  priority = priority + config.priority
+  
+  -- 1. ESCUDO DE SOBREVIVÊNCIA: Extra prioridade por distância curta
+  -- Se o monstro estiver colado (distância = 1 SQM), ganha +5000 pontos automáticos.
+  if path_length == 1 then
+    priority = priority + 5000
+  elseif path_length <= 3 then
+    priority = priority + 1
+  end
+
+  -- 2. AJUSTE CRÍTICO: Atribui os 1000 pontos se o monstro for especial.
+  -- Como é aplicado após a distância, se o Elite colar, ele soma 5000 + 1000 = 6000 pontos.
+  -- Isso garante prioridade máxima absoluta dele contra qualquer monstro normal colado (5000 pontos).
+  if isMonsterSpecial(creature:getName()) then
+    priority = priority + 1000
+  end
+
+  -- extra priority for low health
+  if config.chase and creature:getHealthPercent() < 30 then
+    priority = priority + 5
+  elseif creature:getHealthPercent() < 20 then
+    priority = priority + 2.5
+  elseif creature:getHealthPercent() < 40 then
+    priority = priority + 1.5
+  elseif creature:getHealthPercent() < 60 then
+    priority = priority + 0.5
+  elseif creature:getHealthPercent() < 80 then
+    priority = priority + 0.2
+  end
+
+  return priority
+end
+
+
+-- ============================================================================
+--    TARGETBOT INTEGRADO: OTIMIZADOR, FILTRO DE PARTY E ANTI-LURE ALHEIO V3
+-- ============================================================================
+
+-- LISTA DE MONSTROS ESPECIAIS (Busca parcial inteligente por texto)
+local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
+
+local function isMonsterSpecial(creatureName)
+    if not creatureName then return false end
+    local nomeLimpo = string.lower(creatureName)
+    for i = 1, #specialMonsters do
+        if string.find(nomeLimpo, specialMonsters[i], 1, true) then
             return true
         end
     end
     return false
 end
 
--- CONTROLES INTERNOS DE LEITURA REATIVA
-local configEspecialAtiva = false
-local limiteMonstrosEspeciais = 1
-local ultimoCheckInterface = 0
+local cacheIdsParty = {}
+local ultimoTempoCheckParty = 0
 
--- MACRO EXCLUSIVA ANTI-LURE (Roda a 100ms aplicando o freio por delay puro)
-macro(100, function()
-    if not g_game.isOnline() then return end
-
-    local agora = os.clock() * 1000
-
-    if agora - ultimoCheckInterface > 200 then
-        ultimoCheckInterface = agora
-        -- CORREÇÃO DA LEITURA: Busca tanto no storage quanto no TargetBot real para garantir o vínculo da sua foto
-        local cfg = nil
-        if TargetBot and TargetBot.configs and TargetBot.configs.creatures then
-            cfg = TargetBot.configs.creatures["*"]
-        elseif storage and storage.TargetBot and storage.TargetBot.creatures then
-            cfg = storage.TargetBot.creatures["*"]
-        end
-        
-        if cfg then
-            configEspecialAtiva = cfg.antiLureSpecial or false
-            limiteMonstrosEspeciais = cfg.specialLureCount or 1
-        end
-    end
-
-    -- Se o botão verde "Lure Elites" estiver desmarcado na foto, encerra e libera a hunt
-    if not configEspecialAtiva then
-        return
-    end
-
-    local localPlayer = g_game.getLocalPlayer()
-    if not localPlayer then return end
-    local playerPos = localPlayer:getPosition()
-    if not playerPos then return end
-
-    local specialAttackingMe = 0
-    local spectators = g_map.getSpectators(playerPos, false) or {}
-
-    -- Varre a tela inteira contando a presença real de Elites vivos por proximidade
-    for i = 1, #spectators do
-        local spec = spectators[i]
-        if spec and spec:isMonster() and spec:getHealthPercent() > 0 then
-            local sName = string.lower(spec:getName() or "")
-            if isMonsterSpecial(sName) then
-                specialAttackingMe = specialAttackingMe + 1
-            end
-        end
-    end
-
-    if specialAttackingMe >= limiteMonstrosEspeciais then
-        -- Aplica os 2000ms de trava na macro de passos nativa do seu bot
-        local tempoDeTrava = agora + 2000
-        
-        -- CORREÇÃO DA INJEÇÃO: Executa de forma limpa sem estourar escopo
-        if cavebotMacro and type(cavebotMacro) == "table" then 
-            cavebotMacro.delay = tempoDeTrava
-        elseif CaveBot and type(CaveBot.macro) == "table" then 
-            CaveBot.macro.delay = tempoDeTrava
-        elseif CaveBot and type(CaveBot.delay) == "function" then 
-            pcall(function() CaveBot.delay(2000) end) 
-        end
-        
-        -- Executa os comandos clássicos de parada física imediata no cliente gráfico
-        if type(g_game.stop) == "function" then g_game.stop() end
-        if type(g_game.cancelWalk) == "function" then g_game.cancelWalk() end
-    end
-end)
-
--- PARTE 3: Injeção de prioridade baseada em alvo (Sua lógica de prioridade original)
-if TargetBot and TargetBot.Creature then
-    TargetBot.Creature.calculatePriority = function(creature, config, path)
-        local priority = 0
-        local path_length = #path
-
-        local atacandoAtual = g_game.getAttackingCreature()
-        if atacandoAtual == creature then
-            priority = priority + 500
-            if path_length <= 1 then
-                return priority + 1000 
-            end
-        end
-
-        local creatureName = string.lower(creature:getName() or "")
-        if isMonsterSpecial(creatureName) then
-            local localPlayer = g_game.getLocalPlayer()
-            local myId = localPlayer and localPlayer:getId() or 0
-            
-            local mTargetId = 0
-            if type(creature.getTargetId) == "function" then mTargetId = creature:getTargetId() or 0
-            elseif creature.targetId then mTargetId = creature.targetId
-            elseif type(creature.getTarget) == "function" then
-                local tgt = creature:getTarget()
-                if tgt then mTargetId = tgt:getId() end
-            end
-
-            local attackingOtherPlayer = (mTargetId > 0 and mTargetId ~= myId)
-            if not attackingOtherPlayer then
-                if path_length == 1 then
-                    priority = priority + 1000
-                end
-            end
-        end
-
-        if path_length > config.maxDistance then
-            return priority
-        end
-
-        priority = priority + config.priority
-        
-        if path_length == 1 then
-            priority = priority + 500
-        elseif path_length <= 3 then
-            priority = priority + 2
-        end
-
-        local hp = creature:getHealthPercent() or 100
-        if hp < 20 then priority = priority + 5
-        elseif hp < 50 then priority = priority + 2
-        elseif hp < 80 then priority = priority + 0.5 end
-
-        return priority
-    end
-end
-
--- ============================================================================
---          CaveBot Optimizer (CORRIGIDO: Suporta Freios de Anti-Lure)
--- ============================================================================
-if CaveBot and type(CaveBot.delay) == "function" then
-    -- Proteção de Reload para não duplicar ponteiros na memória RAM
-    if not CaveBot.oldDelayOriginalPointer then
-        CaveBot.oldDelayOriginalPointer = CaveBot.delay
-    end
-    local originalDelay = CaveBot.oldDelayOriginalPointer
-    CaveBot.delay = function(ms, ...)
-        local delayVal = ms or 0
-        if delayVal > 500 then
-            return originalDelay(ms, ...)
-        end
-        if delayVal >= 200 and delayVal <= 500 then
-            return originalDelay(250, ...)
-        end
-        return originalDelay(ms, ...)
-    end
-end
-
-
--- TargetBot
--- 1. INTERCEPTADOR SEGURO DE PATHFINDING (Mata o lag da linha 50 do target.lua)
+-- 1. INTERCEPTADOR SEGURO DE PATHFINDING (Sua lógica original contra lag)
 local oldFindPath = findPath
 if type(oldFindPath) == "function" then
     findPath = function(startPos, endPos, maxDist, options, ...)
@@ -4120,10 +4039,6 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
     local monstrosProcessadosNoCiclo = 0
     local ultimoTickCiclo = 0
 
-    local cacheIdsParty = {}
-    local totalMembrosParty = 0
-    local ultimoTempoCheckParty = 0
-
     TargetBot.Creature.calculateParams = function(creature, path, ...)
         local player = getLocalPlayer()
         if not player or not creature then return { danger = 0, priority = 0 } end
@@ -4136,7 +4051,6 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
 
         local pPos = player:getPosition()
         local cPos = creature:getPosition()
-        local myId = player:getId()
 
         if not pPos or not cPos or pPos.z ~= cPos.z then
             return { danger = 0, priority = 0 }
@@ -4145,7 +4059,6 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
         -- Sincronização do cache da Party (Apenas a cada 5 segundos)
         if agora - ultimoTempoCheckParty >= 5000 then
             cacheIdsParty = {}
-            totalMembrosParty = 0
             if pcall(isOnline) and isOnline() then
                 local members = type(g_game.getPartyList) == "function" and g_game.getPartyList()
                 if members then
@@ -4153,7 +4066,6 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
                         local member = members[m]
                         if member and member:getId() then
                             cacheIdsParty[member:getId()] = true
-                            totalMembrosParty = totalMembrosParty + 1
                         end
                     end
                 end
@@ -4161,27 +4073,42 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
             ultimoTempoCheckParty = agora
         end
 
-        -- Puxa todas as pessoas visíveis ao redor do monstro em memória RAM
-        local specs = getSpectators(cPos)
-        if specs then
-            for s = 1, #specs do
-                local spec = specs[s]
-                
-                -- Se encontrar um jogador próximo que NÃO seja você
-                if spec and spec:isPlayer() and spec ~= player then
-                    local sPos = spec:getPosition()
-                    
-                    if sPos and sPos.z == cPos.z then
-                        -- Checa se o monstro está colado (raio de 1 SQM de ataque) batendo nesse cara
-                        local distMonstroParaPlayerX = math.abs(cPos.x - sPos.x)
-                        local distMonstroParaPlayerY = math.abs(cPos.y - sPos.y)
-                        
-                        if distMonstroParaPlayerX <= 1 and distMonstroParaPlayerY <= 1 then
-                            -- O monstro está colado em alguém. Ele está na sua Party?
-                            local estranhoAlvoId = spec:getId()
-                            if estranhoAlvoId and not cacheIdsParty[estranhoAlvoId] then
-                                -- Se o monstro estiver atacando um cara que NÃO é da sua PT, ignora!
-                                return { danger = 0, priority = 0 }
+        local cName = creature:getName()
+        local ehElite = isMonsterSpecial(cName)
+        local deveIgnorarMonstro = false
+
+        -- CHECAGEM DIRETA DE TARGET ID (Método Rápido em C++)
+        local mTargetId = 0
+        if type(creature.getTargetId) == "function" then mTargetId = creature:getTargetId() or 0
+        elseif creature.targetId then mTargetId = creature.targetId
+        elseif type(creature.getTarget) == "function" then
+            local tgt = creature:getTarget()
+            if tgt then mTargetId = tgt:getId() or 0 end
+        end
+
+        -- Se o Elite tiver um alvo definido que não seja você e não seja da Party
+        if ehElite and mTargetId > 0 and mTargetId ~= player:getId() and not cacheIdsParty[mTargetId] then
+            deveIgnorarMonstro = true
+        end
+
+        -- IDENTIFICAÇÃO DE ALVOS ALHEIOS POR PROXIMIDADE
+        if not deveIgnorarMonstro then
+            local specs = getSpectators(cPos)
+            if specs then
+                for s = 1, #specs do
+                    local spec = specs[s]
+                    if spec and spec:isPlayer() and spec ~= player then
+                        local sPos = spec:getPosition()
+                        if sPos and sPos.z == cPos.z then
+                            local distMonstroParaPlayerX = math.abs(cPos.x - sPos.x)
+                            local distMonstroParaPlayerY = math.abs(cPos.y - sPos.y)
+                            
+                            if distMonstroParaPlayerX <= 1 and distMonstroParaPlayerY <= 1 then
+                                local estranhoAlvoId = spec:getId()
+                                if estranhoAlvoId and not cacheIdsParty[estranhoAlvoId] then
+                                    deveIgnorarMonstro = true
+                                    break
+                                end
                             end
                         end
                     end
@@ -4189,19 +4116,31 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
             end
         end
 
+        -- CORREÇÃO CRÍTICA: Se deve ignorar o monstro, roda a função original para atualizar os waypoints, mas zera a relevância dele no target
+        if deveIgnorarMonstro then
+            local res = oldCalculateParams(creature, path, ...)
+            if res then
+                res.danger = 0
+                res.priority = 0
+                return res
+            end
+            return { danger = 0, priority = 0 }
+        end
+
         local distX = math.abs(pPos.x - cPos.x)
         local distY = math.abs(pPos.y - cPos.y)
 
-        -- Se o monstro estiver longe, reduz prioridade para proteger processamento
+        -- Filtros de otimização de CPU originais da sua hunt
         if distX > 3 or distY > 3 then
             if distX <= 7 and distY <= 7 then
                 local res = oldCalculateParams(creature, path, ...)
                 if res then res.priority = 1 return res end
             end
+            local res = oldCalculateParams(creature, path, ...)
+            if res then res.danger = 0 res.priority = 0 return res end
             return { danger = 0, priority = 0 }
         end
 
-        -- Limitador de amostragem na Box cheia
         if monstrosProcessadosNoCiclo >= 3 then
             local res = oldCalculateParams(creature, path, ...)
             if res then res.priority = 1 return res end
@@ -4243,9 +4182,7 @@ end)
 print("[Loader] Estabilizador de performace carregado com sucesso.")
 
 
--- ============================================================================
---     BLINDAGEM DA FUNÇÃO GOTOLABEL (CORRIGIDA - SEM ERROS NO CONSOLE)
--- ============================================================================
+--     BLINDAGEM DA FUNÇÃO GOTOLABEL
 local oldGotoLabelGlobal = gotoLabel
 local oldCaveBotGotoLabel = CaveBot and CaveBot.gotoLabel
 
