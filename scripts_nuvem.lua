@@ -117,10 +117,10 @@ end
 
 
 setDefaultTab("Main")
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("      Smk Custom: v4.1      "):setColor('#C39BD3')
-UI.Label("        Since 2025       "):setColor('#C39BD3')
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
+UI.Label("      Smk Custom: v4.2      "):setColor('#FFDEAD')
+UI.Label("        Since 2025       "):setColor('#FFDEAD')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
 --Macro Editor
 UI.Button("Macro Editor", function(newText)
     UI.MultilineEditorWindow(storage.combos or "", {title="Macro Editor", description="Aqui voce pode editar os seus combos."}, function(text)
@@ -171,7 +171,7 @@ ButtonT = UI.Button("Reconect", function()
 end)
 updateButtonReconectText()
 UI.Separator()
---Alarms Customizado Clean (Substitua tudo no botão Alarms)
+--Alarms Original Restaurado (Substitua tudo no botão Alarms)
 local panelName = "alarms"
 local ui = setupUI([[
 Panel
@@ -231,6 +231,8 @@ local parents =
   window.settingsList
 }
 
+
+-- type
 addAlarm = function(id, title, defaultValue, alarmType, parent, tooltip)
   local widget = UI.createWidget(widgets[alarmType], parents[parent])
   widget:setId(id)
@@ -262,11 +264,14 @@ addAlarm = function(id, title, defaultValue, alarmType, parent, tooltip)
       config[id].value = newText
     end
   end
+
 end
 
+-- settings
 addAlarm("ignoreFriends", "Ignore Friends", true, 1, 2)
 addAlarm("flashClient", "Flash Client", true, 1, 2)
 
+-- alarm list
 addAlarm("damageTaken", "Damage Taken", false, 1, 1)
 addAlarm("lowHealth", "Low Health", 20, 2, 1)
 addAlarm("lowMana", "Low Mana", 20, 2, 1)
@@ -280,31 +285,30 @@ addAlarm("customMessage", "Custom Message:", "", 3, 1, "You can add text, that i
 
 UI.Separator(window.list)
 
--- Painel limpo mantendo apenas o Rift Detected e o Player Detected
-addAlarm("riftDetected", "Rift Detected", false, 1, 1)
+addAlarm("creatureDetected", "Creature Detected", false, 1, 1)
 addAlarm("playerDetected", "Player Detected", false, 1, 1)
+addAlarm("creatureName", "Creature Name:", "", 3, 1, "You can add a name or part of it, that if found in any visible creature name will trigger alert.\nYou can add many, just separate them by comma.")
+
 
 local lastCall = now
 local function alarm(file, windowText)
-  if now - lastCall < 2000 then return end
+  if now - lastCall < 2000 then return end -- 2s delay
   lastCall = now
 
   if not g_resources.fileExists(file) then
     file = "/sounds/alarm.ogg"
-    lastCall = now + 4000
+    lastCall = now + 4000 -- alarm.ogg length is 6s
   end
 
+  
   if modules.game_bot.g_app.getOs() == "windows" and config.flashClient.enabled then
     g_window.flash()
   end
-  
-  if windowText ~= "OCULTO" then
-    g_window.setTitle(player:getName() .. " - " .. windowText)
-  end
-  
+  g_window.setTitle(player:getName() .. " - " .. windowText)
   playSound(file)
 end
 
+-- damage taken & custom message
 onTextMessage(function(mode, text)
   if not config.enabled then return end
   if mode == 22 and config.damageTaken.enabled then
@@ -318,7 +322,10 @@ onTextMessage(function(mode, text)
       local parts = string.split(alertText, ",")
 
       for i=1,#parts do
-        local part = parts[i]:trim():lower()
+        local part = parts[i]
+        part = part:trim()
+        part = part:lower()
+
         if text:find(part) then
           return alarm('/sounds/magnum.ogg', "Special Message!")
         end
@@ -327,10 +334,11 @@ onTextMessage(function(mode, text)
   end
 end)
 
+-- default & private message
 onTalk(function(name, level, mode, text, channelId, pos)
   if not config.enabled then return end
-  if name == player:getName() then return end
-  if config.ignoreFriends.enabled and isFriend(name) then return end
+  if name == player:getName() then return end -- ignore self messages
+  if config.ignoreFriends.enabled and isFriend(name) then return end -- ignore friends if enabled
 
   if mode == 1 and config.defaultMsg.enabled then
     return alarm("/sounds/magnum.ogg", "Default Message!")
@@ -341,13 +349,9 @@ onTalk(function(name, level, mode, text, channelId, pos)
   end
 end)
 
+-- health & mana
 macro(100, function() 
   if not config.enabled then return end
-  
-  if config.riftDetected.enabled and findItem(11843) then
-     return alarm("/sounds/magnum.ogg", "OCULTO")
-  end
-
   if config.lowHealth.enabled then
     if hppercent() < config.lowHealth.value then
       return alarm("/sounds/Low_Health.ogg", "Low Health!")
@@ -363,12 +367,29 @@ macro(100, function()
   for i, spec in ipairs(getSpectators()) do
     if not spec:isLocalPlayer() and not (config.ignoreFriends.enabled and isFriend(spec)) then
 
+      if config.creatureDetected.enabled then
+        return alarm("/sounds/magnum.ogg", "Creature Detected!")
+      end
+
       if spec:isPlayer() then 
         if spec:isTimedSquareVisible() and config.playerAttack.enabled then
           return alarm("/sounds/Player_Attack.ogg", "Player Attack!")
         end
         if config.playerDetected.enabled then
           return alarm("/sounds/Player_Detected.ogg", "Player Detected!")
+        end
+      end
+
+      if config.creatureName.enabled then
+        local name = spec:getName():lower()
+        local fragments = string.split(config.creatureName.value, ",")
+        
+        for i=1,#fragments do
+          local frag = fragments[i]:trim():lower()
+
+          if name:lower():find(frag) then
+            return alarm("/sounds/alarm.ogg", "Special Creature Detected!")
+          end
         end
       end
     end
@@ -827,38 +848,28 @@ macro(2000, "Enter Dungeon", function()
   if not isInPz() then 
     return 
   end
-
   -- SUA LÓGICA ORIGINAL 100% FUNCIONAL RESTAURADA:
   for i, rootW in pairs(g_ui.getRootWidget():getChildren()) do
     if string.find(rootW:getText():lower(), window_name:lower()) then
       for i, child in pairs(rootW:getChildren()) do
           if child:getText() == "Start" then
              child:onClick()
- 
              delay(1000)
              break
            end
       end
- 
       break
     end
   end
 end)
 
 -- Enter Rift
-macro(500, "Click Rift",  function()
-  if not g_game.isOnline() then return end
-  -- TRAVA DE EXECUÇÃO: A macro só lê as linhas abaixo se o portal estiver na tela!
-  -- Isso impede que ela fique mandando cliques fantasmas o tempo todo no seu jogo.
-  if not findItem(11843) then return end
+macro(500, "Enter Rift",  function()
   for i, tile in ipairs(g_map.getTiles(posz())) do
     for u,item in ipairs(tile:getItems()) do
       if (item and item:getId() == 11843) then
-        -- INJEÇÃO DE ÁUDIO NATAL: Toca o Magnum direto antes de mudar de mapa
-        pcall(function()
-            playSound("/sounds/magnum.ogg")
-        end)
-        print("[Dungeon] Rift encontrada.")
+	    print("[Dungeon] Rift encontrada.")
+	    playSound("/sounds/magnum.ogg")
         g_game.use(item)
         CaveBot.gotoLabel("Rift")
         return
@@ -1524,12 +1535,12 @@ end)
 UI.Separator()
 UI.Button("Screen: +  Zoom", function() zoomIn() end)
 UI.Button("Screen: -  Zoom", function() zoomOut() end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
 
 setDefaultTab("Fight")
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Smart Cast ~"):setColor('#EBDEF0')
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
+UI.Label("~ Spell Caster ~"):setColor('#DEB887')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- Smart Cast (Versão Ultra-Otimizada Anti-Lag com Lazy Scanning)
 local alcanceMaximoTarget = 4 
 local raioDeAreaDoMonstro = 3 
@@ -1623,20 +1634,20 @@ combo = macro(200, "Smart Cast", function()
 end)
 -- Interface Gráfica (UI)
 UI.Separator()
-UI.Label("Area Spells (2+ Mobs)"):setColor('#FFEA99')
+UI.Label("Area (2+ Mobs)"):setColor('#F5F5DC')
 UI.Separator()
 UI.TextEdit(storage.areaspell01 or "", function(widget, text) storage.areaspell01 = text; atualizarCacheSpells() end)
 UI.TextEdit(storage.areaspell02 or "", function(widget, text) storage.areaspell02 = text; atualizarCacheSpells() end)
 UI.Separator()
-UI.Label("Single Spells"):setColor('#FFEA99')
+UI.Label("Single"):setColor('#F5F5DC')
 UI.Separator()
 UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text; atualizarCacheSpells() end)
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text; atualizarCacheSpells() end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text; atualizarCacheSpells() end)
 atualizarCacheSpells()
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Others ~"):setColor('#EBDEF0')
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
+UI.Label("~ Others ~"):setColor('#DEB887')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- [INICIALIZAÇÃO] CONFIGURAÇÃO DE MEMÓRIA DO PAINEL FIGHT
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
@@ -1865,11 +1876,10 @@ macro(200, function()
     storage.painelSalvo.wave = turnCombo.isOn()
 end)
 
-UI.Label("-----------------------------------"):setColor('#C39BD3')
--- ====================================================================
--- SPELL CASTER / PAINEL DE BOTÕES (Versão Unificada Blindada Anti-Falhas)
--- ====================================================================
-
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
+-- ============================================================================
+-- PAINEL DE ÍCONES SPELL CASTER
+-- ============================================================================
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
 if storage.painelSalvo.selfSpecial == nil then storage.painelSalvo.selfSpecial = false end
@@ -1878,12 +1888,14 @@ if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 if storage.painelSalvo.horizontal == nil then storage.painelSalvo.horizontal = false end
 
 local painelIconesUI = nil
+local ultimoIdPlayerPainel = 0
 
--- LAYOUT MODO VERTICAL (Compactado e Enxuto)
+-- LAYOUT MODO VERTICAL (Título alterado para #FFDEAD)
 local layoutVertical = [[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Spell Caster')
+  color: #FFDEAD
   size: 92 180
   focusable: false
   draggable: true
@@ -1939,11 +1951,12 @@ MainWindow
       margin-left: 1
 ]]
 
--- LAYOUT MODO HORIZONTAL
+-- LAYOUT MODO HORIZONTAL (Título alterado para #FFDEAD)
 local layoutHorizontal = [[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Spell Caster')
+  color: #FFDEAD
   size: 410 75
   focusable: false
   draggable: true
@@ -2000,7 +2013,6 @@ MainWindow
       margin-left: 4
 ]]
 
--- Função auxiliar rápida para ler estado real da macro com proteção anti-nil
 local function isMacroActive(macroRef)
     if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
         local status, resultado = pcall(macroRef.isOn)
@@ -2009,22 +2021,17 @@ local function isMacroActive(macroRef)
     return false
 end
 
--- OTIMIZAÇÃO: Pintura sob demanda (Só renderiza se a cor mudar)
-local coresCache = {}
+-- PINTURA DIRETA FORÇADA CONTINUA: Aplica as suas cores hexadecimais customizadas a cada frame
 local function pintarBotaoSeguro(container, idBotao, condicaoVerde)
     local btn = container:getChildById(idBotao)
-    if btn and btn.setColor then
-        local corAlvo = condicaoVerde and "green" or "red"
-        if coresCache[idBotao] ~= corAlvo then
-            pcall(function() btn:setColor(corAlvo) end)
-            coresCache[idBotao] = corAlvo
-        end
+    if btn and type(btn.setColor) == "function" then
+        local corAlvo = condicaoVerde and "#32CD32" or "#FF6347"
+        pcall(function() btn:setColor(corAlvo) end)
     end
 end
 
--- Atualiza visual completo
 local function atualizarCoresPainelCompleto()
-    if not painelIconesUI then return end
+    if not g_game.isOnline() or not painelIconesUI then return end
     local container = painelIconesUI:getChildById("containerIcones")
     if not container then return end
 
@@ -2034,8 +2041,7 @@ local function atualizarCoresPainelCompleto()
     pintarBotaoSeguro(container, "botaoWave", isMacroActive(turnCombo))
 end
 
--- OTIMIZAÇÃO: Função de alternar movida para cima para evitar erro de leitura (nil value)
-local conectarComponentesPainel -- Declaração antecipada para o botão Girar usar
+local conectarComponentesPainel -- Declaração antecipada
 
 local function alternarEstadoMacro(macroRef, storageKey)
     if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
@@ -2054,7 +2060,6 @@ local function alternarEstadoMacro(macroRef, storageKey)
     atualizarCoresPainelCompleto()
 end
 
--- Função de vinculação nativa de cliques e cores
 conectarComponentesPainel = function()
     if not painelIconesUI then return end
     
@@ -2080,7 +2085,6 @@ conectarComponentesPainel = function()
             if storage and storage.painelSalvo then
                 storage.painelSalvo.horizontal = not storage.painelSalvo.horizontal
                 painelIconesUI:destroy()
-                coresCache = {} 
                 local layout = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
                 painelIconesUI = setupUI(layout, modules.game_interface.getMapPanel())
                 conectarComponentesPainel()
@@ -2090,19 +2094,39 @@ conectarComponentesPainel = function()
     atualizarCoresPainelCompleto()
 end
 
--- INICIALIZAÇÃO CORRETA E SEGURA DO LAYOUT
+-- INITIALIZAÇÃO INDESTRUTÍVEL (Limpa clones antes de criar)
 local mapPanel = modules.game_interface and modules.game_interface.getMapPanel and modules.game_interface.getMapPanel()
 if mapPanel and storage and storage.painelSalvo then
+    local janelasNoPainel = mapPanel:getChildren()
+    if janelasNoPainel then
+        for i = 1, #janelasNoPainel do
+            local j = janelasNoPainel[i]
+            if j and j:getId() == "painelMacrosJanela" then
+                j:destroy()
+            end
+        end
+    end
+
     local layoutInicial = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
     painelIconesUI = setupUI(layoutInicial, mapPanel)
     conectarComponentesPainel()
 end
 
--- Loop estendido para 600ms (Sincronia secundária passiva com cache de CPU)
+-- LOOP DE ATUALIZAÇÃO CONTÍNUA RECALIBRADO
 local jaSincronizou = false
-macro(600, function()
+macro(400, function() 
     if not g_game.isOnline() or not painelIconesUI then return end
     
+    local player = g_game.getLocalPlayer()
+    if not player then return end 
+
+    local idAtual = player:getId() or 0
+
+    if idAtual > 0 and idAtual ~= ultimoIdPlayerPainel then
+        ultimoIdPlayerPainel = idAtual
+        jaSincronizou = false 
+    end
+
     if not jaSincronizou then
         pcall(function()
             if lowhp and type(lowhp) == "table" and type(lowhp.setOn) == "function" then 
@@ -2125,9 +2149,9 @@ macro(600, function()
 end)
 
 setDefaultTab("HEAL")
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Survival ~"):setColor('#EBDEF0')
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
+UI.Label("~ Survival ~"):setColor('#DEB887')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- Fast Regen (Versão Livre - Velocidade Máxima do Servidor)
 local panelName = "selfregen"
 local ui = setupUI([[
@@ -2282,9 +2306,9 @@ macro(100, function()
     end
   end
 end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Potions & Pet ~"):setColor('#EBDEF0')
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
+UI.Label("~ Potions & Pet ~"):setColor('#DEB887')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- Fast Potion (Versão Livre - Velocidade Máxima do Servidor)
 local panelNameFastPot = "selffastpot" 
 local uiFastPot = setupUI([[
@@ -2584,9 +2608,9 @@ petMacro = macro(100, function()
         end
     end
 end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Haste & Buff ~"):setColor('#EBDEF0')
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
+UI.Label("~ Haste & Buff ~"):setColor('#DEB887')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
 buffs = macro(100, "Haste", "CTRL+4", function()
     if isInPz() then 
         return 
@@ -2624,12 +2648,12 @@ end)
 UI.TextEdit(storage.buffskill02 or "", function(widget, text)    
     storage.buffskill02 = text
 end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
 
 setDefaultTab("Extra")
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ Utility ~"):setColor('#EBDEF0')
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
+UI.Label("~ Utility ~"):setColor('#DEB887')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
 --automsgtrade
 macro(100, "Trade Channel", function()
   local trade = getChannelId("Trade")
@@ -2929,9 +2953,9 @@ onTextMessage(function(mode, text)
         end
     end
 end)
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-UI.Label("~ HUD Hotkeys ~"):setColor('#EBDEF0')
-UI.Label("-----------------------------------"):setColor('#C39BD3')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
+UI.Label("~ HUD Hotkeys ~"):setColor('#DEB887')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- 1. START/STOP CAVEBOT (Otimizado com Anti-Spam e Filtro de Estado)
 local ultimoApertoCave = 0
 hotkey("CTRL+1", function()
@@ -3313,8 +3337,10 @@ onTalk(function(...)
     return true
 end)
 
-UI.Label("-----------------------------------"):setColor('#C39BD3')
-
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
+-- ============================================================================
+-- HUD PVE/PVP PREMIUM - SMK CUSTOM v4.2 (Versão Unificada Final)
+-- ============================================================================
 local pvehud = setupUI([[
 Panel
   id: pveMainPanel
@@ -3330,7 +3356,7 @@ Panel
   Label
     id: iconlayer
     height: 12
-    color: #C39BD3
+    color: #FFDEAD
     font: verdana-11px-rounded
     background-color: #00000090
     anchors.top: parent.top
@@ -3342,7 +3368,7 @@ Panel
   Label
     id: iconlayer2
     height: 12
-    color: #C39BD3
+    color: #FFDEAD
     font: verdana-11px-rounded
     background-color: #00000090
     anchors.top: parent.top
@@ -3501,7 +3527,7 @@ Panel
   Label
     id: skills3
     height: 12
-    color: #C39BD3
+    color: #FFDEAD
     font: verdana-11px-rounded
     background-color: #00000090
     anchors.top: parent.top
@@ -3527,16 +3553,44 @@ Panel
 -- PvE/PvP HUD Painel (Versão Ultra-Otimizada com Cache de Estado e Texto)
 local hudCache = {}
 
+-- CONTROLES DE SEGURANÇA E SESSÃO ANTI-MORTE
+local ultimoIdPlayerCache = 0
+
+-- MACRO DE RENDERIZAÇÃO E ATUALIZAÇÃO DA HUD
 macro(300, function()
   if not g_game.isOnline() or not pvehud then return end
 
-  -- 1. LABELS TEXTOS ESTÁTICOS: Renderiza uma única vez na inicialização
+  local player = g_game.getLocalPlayer()
+  -- VACINA DE RESET: Se o objeto do player sumiu temporariamente na morte, aborta para não ler lixo
+  if not player then return end 
+
+  local playerIdAtual = player:getId() or 0
+
+  -- Se o ID do jogador mudou ou resetou (acontece no teleporte do templo após a morte)
+  -- Força a limpeza completa do cache para re-colorir a HUD inteira no próximo frame!
+  if playerIdAtual ~= ultimoIdPlayerCache then
+    ultimoIdPlayerCache = playerIdAtual
+    hudCache.estaticos = false
+    hudCache.cave = nil
+    hudCache.target = nil
+    hudCache.dash = nil
+    hudCache.buffsinfo = nil
+    hudCache.mwallinfo = nil
+    hudCache.chaseatk = nil
+    hudCache.enemy = nil
+    hudCache.xsense = nil
+    hudCache.txtLvl = nil
+    hudCache.txtMl = nil
+    hudCache.txtSk = nil
+  end
+
+  -- 1. LABELS TEXTOS ESTÁTICOS: Renderiza e garante as cores originais da interface
   if not hudCache.estaticos then
-    if pvehud.iconlayer then pvehud.iconlayer:setText("     ~ [Smk Custom - v4.1] ~   ") end
-    if pvehud.iconlayer2 then pvehud.iconlayer2:setText(" ~ [Instagram: @cafeh_ofc] ~  ") end
-    if pvehud.tab1 then pvehud.tab1:setText("           ~           [PvE]           ~       ") end
-    if pvehud.tab2 then pvehud.tab2:setText("           ~           [PvP]           ~       ") end
-    if pvehud.tab3 then pvehud.tab3:setText("           ~         [Skills]        ~         ") end
+    if pvehud.iconlayer then pvehud.iconlayer:setText("     ~ [Smk Custom - v4.2] ~   ") pvehud.iconlayer:setColor("#FFDEAD") end
+    if pvehud.iconlayer2 then pvehud.iconlayer2:setText(" ~ [Instagram: @cafeh_ofc] ~  ") pvehud.iconlayer2:setColor("#FFDEAD") end
+    if pvehud.tab1 then pvehud.tab1:setText("           ~           [PvE]           ~       ") pvehud.tab1:setColor("#FFFFF0") end
+    if pvehud.tab2 then pvehud.tab2:setText("           ~           [PvP]           ~       ") pvehud.tab2:setColor("#FFFFF0") end
+    if pvehud.tab3 then pvehud.tab3:setText("           ~         [Skills]        ~         ") pvehud.tab3:setColor("#FFFFF0") end
     hudCache.estaticos = true
   end
 
@@ -3570,32 +3624,36 @@ macro(300, function()
   atualizarBotaoHUD("enemy", enemy, "~ Enemy: [Alt+3]")
   atualizarBotaoHUD("xsense", xsense, "~ Auto xSense: [Alt+4]")
 
-  -- 3. MONITORAMENTO DE SKILLS INTELIGENTE (Só redesenha se os números mudarem)
-  local player = g_game.getLocalPlayer()
-  if player then
-    local lvl, lvlPct = player:getLevel(), player:getLevelPercent()
-    local ml, mlPct = player:getMagicLevel(), player:getMagicLevelPercent()
-    local sk, skPct = player:getSkillLevel(2), player:getSkillLevelPercent(2)
+  -- 3. MONITORAMENTO DE SKILLS INTELIGENTE (Mantém as cores gravadas mesmo mudando porcentagem)
+  local lvl, lvlPct = player:getLevel(), player:getLevelPercent()
+  local ml, mlPct = player:getMagicLevel(), player:getMagicLevelPercent()
+  local sk, skPct = player:getSkillLevel(2), player:getSkillLevelPercent(2)
 
+  -- Ignora a renderização se os dados de nível retornarem corrompidos/zerados no frame exato da morte
+  if lvl and lvl > 0 then
     local txtLvl = "~ Level: " .. lvl .. " - (" .. lvlPct .. "%)"
     if pvehud.skills1 and hudCache.txtLvl ~= txtLvl then
       pvehud.skills1:setText(txtLvl)
+      pvehud.skills1:setColor("#8FBC8F") 
       hudCache.txtLvl = txtLvl
     end
 
     local txtMl = "~ Reiatsu: " .. ml .. " - (" .. mlPct .. "%)"
     if pvehud.skills3 and hudCache.txtMl ~= txtMl then
       pvehud.skills3:setText(txtMl)
+      pvehud.skills3:setColor("#DDA0DD") 
       hudCache.txtMl = txtMl
     end
 
     local txtSk = "~ Weapon: " .. sk .. " - (" .. skPct .. "%)"
     if pvehud.skills8 and hudCache.txtSk ~= txtSk then
       pvehud.skills8:setText(txtSk)
+      pvehud.skills8:setColor("#B0E0E6") 
       hudCache.txtSk = txtSk
     end
   end
 end)
+
 
 
 --Ice Hud HP Percent
@@ -3864,7 +3922,9 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
--- CreaturePriority & Anti-Lure Avançado Conectado à Interface (Versão Final Silenciosa)
+-- ============================================================================
+-- CREATURE PRIORITY & ANTI-LURE ELITES (Versão Injetada Direta no TargetBot)
+-- ============================================================================
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 local specialMonstersHash = {}
 
@@ -3882,83 +3942,22 @@ local function isMonsterSpecial(creatureName)
     return false
 end
 
--- CONTROLES DE CACHE E ESTADO
-local cavebotPausadoPeloLure = false
-local ultimoCheckInterface = 0
-local configEspecialAtiva = false
-local limiteMonstrosEspeciais = 2
+-- CONFIGURAÇÃO DIRETA (Apenas mude o número se quiser travar com mais ou menos)
+local LIMITE_MAXIMO_ELITES = 2
 
--- MACRO EXCLUSIVA ANTI-LURE (Roda 100% ativa em segundo plano)
-macro(100, function()
-    if not g_game.isOnline() then return end
+-- Estrutura de Cache interna para gerenciar o tempo sem travar os frames
+if type(Stairs) ~= "table" then Stairs = {} end
+Stairs.config = Stairs.config or {}
+Stairs.config.ultimoCalculoLure = 0
+Stairs.config.elitesContadosCache = 0
 
-    local agora = os.clock() * 1000
-    local atacandoAtual = g_game.getAttackingCreature()
-
-    -- ============================================================================
-    -- LEITURA SEGURA DE ARQUIVO/STORAGE (Garante ler o Slider do seu painel)
-    -- ============================================================================
-    if agora - ultimoCheckInterface > 1000 then
-        ultimoCheckInterface = agora
-        if storage.TargetBot and storage.TargetBot.creatures then
-            for nomeConfig, cfg in pairs(storage.TargetBot.creatures) do
-                if nomeConfig == "*" or (atacandoAtual and string.lower(atacandoAtual:getName()) == string.lower(nomeConfig)) then
-                    configEspecialAtiva = cfg.antiLureSpecial or false
-                    limiteMonstrosEspeciais = cfg.specialLureCount or 2
-                    break
-                end
-            end
-        end
-    end
-
-    -- Se não ativou o "Lure Elites" no painel, encerra e garante fluxo livre
-    if not configEspecialAtiva then
-        return
-    end
-
-    local localPlayer = g_game.getLocalPlayer()
-    if not localPlayer then return end
-
-    local specialAttackingMe = 0
-    local monstrosNaTela = getMonsters() or {}
-
-    -- Varre os monstros na tela contando os Elites vivos
-    for i = 1, #monstrosNaTela do
-        local m = monstrosNaTela[i]
-        if m and m:isMonster() and m:getHealthPercent() > 0 then
-            local creatureName = string.lower(m:getName() or "")
-            if isMonsterSpecial(creatureName) then
-                specialAttackingMe = specialAttackingMe + 1
-            end
-        end
-    end
-
-    -- TOMADA DE DECISÃO POR CONGELAMENTO SEGURO SILENCIOSO (Sem prints de texto)
-    if specialAttackingMe >= limiteMonstrosEspeciais then
-        -- Força a trava direto no motor interno do Candy/vBot
-        local tempoDeTrava = agora + 1500
-        if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = tempoDeTrava
-        elseif CaveBot and type(CaveBot.macro) == "table" then CaveBot.macro.delay = tempoDeTrava
-        elseif CaveBot and type(CaveBot.delay) == "function" then CaveBot.delay(1500) end
-        
-        -- Garante a parada física imediata dos passos para não lurar mais
-        if type(g_game.stop) == "function" then g_game.stop() end
-        if type(g_game.cancelWalk) == "function" then g_game.cancelWalk() end
-        
-        cavebotPausadoPeloLure = true
-    else
-        if cavebotPausadoPeloLure then
-            cavebotPausadoPeloLure = false
-        end
-    end
-end)
-
--- PARTE 3: Injeção de prioridade baseada em alvo (Versão Anti-Slow TargetBot)
 if TargetBot and TargetBot.Creature then
     TargetBot.Creature.calculatePriority = function(creature, config, path)
         local priority = 0
         local path_length = #path
+        local agora = os.clock() * 1000
 
+        -- 1. SISTEMA ANTI-SLOW: Prioridade imediata para o alvo atual
         local atacandoAtual = g_game.getAttackingCreature()
         if atacandoAtual == creature then
             priority = priority + 500
@@ -3967,8 +3966,46 @@ if TargetBot and TargetBot.Creature then
             end
         end
 
+        -- ============================================================================
+        -- 2. CONTADOR ANTI-LURE INTEGRADO (0ms CPU - Usa o próprio loop do TargetBot!)
+        -- ============================================================================
+        -- A cada 200ms, usamos a lista de monstros que o TargetBot já está lendo nativamente
+        if agora - Stairs.config.ultimoCalculoLure > 200 then
+            Stairs.config.ultimoCalculoLure = agora
+            
+            local localPlayer = g_game.getLocalPlayer()
+            local playerPos = localPlayer and localPlayer:getPosition()
+            
+            if playerPos then
+                local specialAttackingMe = 0
+                -- Varre o cache visual estável que o cliente já tem na tela
+                local spectators = g_map.getSpectators(playerPos, false) or {}
+                
+                for i = 1, #spectators do
+                    local spec = spectators[i]
+                    if spec and spec:isMonster() and spec:getHealthPercent() > 0 then
+                        local sName = string.lower(spec:getName() or "")
+                        if isMonsterSpecial(sName) then
+                            specialAttackingMe = specialAttackingMe + 1
+                        end
+                    end
+                end
+                Stairs.config.elitesContadosCache = specialAttackingMe
+            end
+        end
+
+        -- FREIO MECÂNICO IMEDIATO: Se o cache bateu o limite, esmaga as ordens do Cavebot
+        if Stairs.config.elitesContadosCache >= LIMITE_MAXIMO_ELITES then
+            if CaveBot and type(CaveBot.stop) == "function" then CaveBot.stop() end
+            if CaveBot and type(CaveBot.setOff) == "function" then CaveBot.setOff() end
+            if CaveBot and type(CaveBot.clearWalk) == "function" then CaveBot.clearWalk() end
+            if type(g_game.stop) == "function" then g_game.stop() end
+            if type(g_game.cancelWalk) == "function" then g_game.cancelWalk() end
+        end
+        -- ============================================================================
+
+        -- 3. CÁLCULO DE PRIORIDADE DOS MONSTROS ESPECIAIS
         local creatureName = string.lower(creature:getName() or "")
-        
         if isMonsterSpecial(creatureName) then
             local localPlayer = g_game.getLocalPlayer()
             local myId = localPlayer and localPlayer:getId() or 0
@@ -4009,7 +4046,6 @@ if TargetBot and TargetBot.Creature then
         return priority
     end
 end
-
 
 -- CaveBot
 if CaveBot and type(CaveBot.delay) == "function" then
