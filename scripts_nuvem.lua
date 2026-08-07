@@ -3923,7 +3923,7 @@ dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
 -- ============================================================================
--- CREATURE PRIORITY & ANTI-LURE ELITES (Versão Injetada Direta no TargetBot)
+-- ANTI-LURE ELITES MASTER (Lógica Original por Delay e Sincronia de Interface)
 -- ============================================================================
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 local specialMonstersHash = {}
@@ -3942,22 +3942,78 @@ local function isMonsterSpecial(creatureName)
     return false
 end
 
--- CONFIGURAÇÃO DIRETA (Apenas mude o número se quiser travar com mais ou menos)
-local LIMITE_MAXIMO_ELITES = 2
+-- CONTROLES INTERNOS DE LEITURA REATIVA
+local configEspecialAtiva = false
+local limiteMonstrosEspeciais = 1
+local ultimoCheckInterface = 0
 
--- Estrutura de Cache interna para gerenciar o tempo sem travar os frames
-if type(Stairs) ~= "table" then Stairs = {} end
-Stairs.config = Stairs.config or {}
-Stairs.config.ultimoCalculoLure = 0
-Stairs.config.elitesContadosCache = 0
+-- MACRO EXCLUSIVA ANTI-LURE (Roda a 100ms aplicando o freio por delay puro)
+macro(100, function()
+    if not g_game.isOnline() then return end
 
+    local agora = os.clock() * 1000
+
+    -- ============================================================================
+    -- LEITURA RESPONSIVA: Sincroniza 100% com o seu Editor (Slider e Caixinha Verde)
+    -- ============================================================================
+    if agora - ultimoCheckInterface > 200 then
+        ultimoCheckInterface = agora
+        if storage and storage.TargetBot and storage.TargetBot.creatures then
+            -- Puxa as configurações do monstro universal "*" da sua foto!
+            local cfg = storage.TargetBot.creatures["*"]
+            if cfg then
+                configEspecialAtiva = cfg.antiLureSpecial or false
+                limiteMonstrosEspeciais = cfg.specialLureCount or 1
+            end
+        end
+    end
+
+    -- Se o botão verde "Lure Elites" estiver desmarcado na foto, encerra e libera a hunt
+    if not configEspecialAtiva then
+        return
+    end
+
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer then return end
+    local playerPos = localPlayer:getPosition()
+    if not playerPos then return end
+
+    local specialAttackingMe = 0
+    local spectators = g_map.getSpectators(playerPos, false) or {}
+
+    -- Varre a tela inteira contando a presença real de Elites vivos por proximidade
+    for i = 1, #spectators do
+        local spec = spectators[i]
+        if spec and spec:isMonster() and spec:getHealthPercent() > 0 then
+            local sName = string.lower(spec:getName() or "")
+            if isMonsterSpecial(sName) then
+                specialAttackingMe = specialAttackingMe + 1
+            end
+        end
+    end
+
+    -- ============================================================================
+    -- SISTEMA DE DELAY CLÁSSICO E ORIGINAL (Pausa os waypoints por 2 segundos)
+    -- ============================================================================
+    if specialAttackingMe >= limiteMonstrosEspeciais then
+        -- Aplica os 2000ms de trava na macro de passos nativa do seu bot
+        local tempoDeTrava = agora + 2000
+        if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = tempoDeTrava
+        elseif CaveBot and type(CaveBot.macro) == "table" then CaveBot.macro.delay = tempoDeTrava
+        elseif CaveBot and type(CaveBot.delay) == "function" then CaveBot.delay(2000) end
+        
+        -- Executa os comandos clássicos de parada física imediata no cliente gráfico
+        if type(g_game.stop) == "function" then g_game.stop() end
+        if type(g_game.cancelWalk) == "function" then g_game.cancelWalk() end
+    end
+end)
+
+-- PARTE 3: Injeção de prioridade baseada em alvo (Otimizada e livre de lags)
 if TargetBot and TargetBot.Creature then
     TargetBot.Creature.calculatePriority = function(creature, config, path)
         local priority = 0
         local path_length = #path
-        local agora = os.clock() * 1000
 
-        -- 1. SISTEMA ANTI-SLOW: Prioridade imediata para o alvo atual
         local atacandoAtual = g_game.getAttackingCreature()
         if atacandoAtual == creature then
             priority = priority + 500
@@ -3966,45 +4022,6 @@ if TargetBot and TargetBot.Creature then
             end
         end
 
-        -- ============================================================================
-        -- 2. CONTADOR ANTI-LURE INTEGRADO (0ms CPU - Usa o próprio loop do TargetBot!)
-        -- ============================================================================
-        -- A cada 200ms, usamos a lista de monstros que o TargetBot já está lendo nativamente
-        if agora - Stairs.config.ultimoCalculoLure > 200 then
-            Stairs.config.ultimoCalculoLure = agora
-            
-            local localPlayer = g_game.getLocalPlayer()
-            local playerPos = localPlayer and localPlayer:getPosition()
-            
-            if playerPos then
-                local specialAttackingMe = 0
-                -- Varre o cache visual estável que o cliente já tem na tela
-                local spectators = g_map.getSpectators(playerPos, false) or {}
-                
-                for i = 1, #spectators do
-                    local spec = spectators[i]
-                    if spec and spec:isMonster() and spec:getHealthPercent() > 0 then
-                        local sName = string.lower(spec:getName() or "")
-                        if isMonsterSpecial(sName) then
-                            specialAttackingMe = specialAttackingMe + 1
-                        end
-                    end
-                end
-                Stairs.config.elitesContadosCache = specialAttackingMe
-            end
-        end
-
-        -- FREIO MECÂNICO IMEDIATO: Se o cache bateu o limite, esmaga as ordens do Cavebot
-        if Stairs.config.elitesContadosCache >= LIMITE_MAXIMO_ELITES then
-            if CaveBot and type(CaveBot.stop) == "function" then CaveBot.stop() end
-            if CaveBot and type(CaveBot.setOff) == "function" then CaveBot.setOff() end
-            if CaveBot and type(CaveBot.clearWalk) == "function" then CaveBot.clearWalk() end
-            if type(g_game.stop) == "function" then g_game.stop() end
-            if type(g_game.cancelWalk) == "function" then g_game.cancelWalk() end
-        end
-        -- ============================================================================
-
-        -- 3. CÁLCULO DE PRIORIDADE DOS MONSTROS ESPECIAIS
         local creatureName = string.lower(creature:getName() or "")
         if isMonsterSpecial(creatureName) then
             local localPlayer = g_game.getLocalPlayer()
@@ -4046,6 +4063,7 @@ if TargetBot and TargetBot.Creature then
         return priority
     end
 end
+
 
 -- CaveBot
 if CaveBot and type(CaveBot.delay) == "function" then
