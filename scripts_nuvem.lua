@@ -845,66 +845,28 @@ macro(2000, "Enter Dungeon", function()
   end
 end)
 
--- Enter Rift (Versão Definitiva 100% Funcional Restaurada - smkmain.lua)
-local PORTAL_ID = 11843 -- ID original do Portal da Rift restaurado!
-local RANGE_X = 13       -- Limita a busca à largura real da tela do monitor
-local RANGE_Y = 7        -- Limita a busca à altura real da tela do monitor
-
-local getLocalPlayer = g_game.getLocalPlayer
-local getTile = g_map.getTile
-local g_game_use = g_game.use
-
-local ultimoTickRift = 0
-
-macro(250, "Enter Rift", function()
-    if not g_game.isOnline() then return end
-    
-    local agoraRift = os.clock() * 1000
-
-    -- FILTRO DE VARREDURA POR AMOSTRAGEM (0ms CPU)
-    if not findItem(PORTAL_ID) then return end
-    
-    if agoraRift - ultimoTickRift < 250 then return end
-    ultimoTickRift = agoraRift
-
-    local player = getLocalPlayer()
-    if not player then return end
-
-    local playerPos = player:getPosition()
-    if not playerPos then return end
-
-    -- RADAR GEOMÉTRICO WIDESCREEN
-    local searchPos = {x = 0, y = 0, z = playerPos.z}
-    
-    for x = -RANGE_X, RANGE_X do
-        searchPos.x = playerPos.x + x
-        for y = -RANGE_Y, RANGE_Y do
-            searchPos.y = playerPos.y + y
-            
-            local tile = getTile(searchPos)
-            if tile then
-                local items = tile:getItems()
-                if items then
-                    for i = 1, #items do
-                        local item = items[i]
-                        if item and item:getId() == PORTAL_ID then
-                            
-                            -- Executa a ação nativa perfeita do jogo
-                            g_game_use(item)
-                            
-                            -- Encaminha o Cavebot imediatamente para gerenciar o Rift
-                            CaveBot.gotoLabel("Rift")
-                            
-                            -- Delay de segurança de 1.5 segundos para o clique físico
-                            ultimoTickRift = agoraRift + 1500 
-                            return 
-                        end
-                    end
-                end
-            end
-        end
+-- Enter Rift
+macro(500, "Click Rift",  function()
+  if not g_game.isOnline() then return end
+  -- TRAVA DE EXECUÇÃO: A macro só lê as linhas abaixo se o portal estiver na tela!
+  -- Isso impede que ela fique mandando cliques fantasmas o tempo todo no seu jogo.
+  if not findItem(11843) then return end
+  for i, tile in ipairs(g_map.getTiles(posz())) do
+    for u,item in ipairs(tile:getItems()) do
+      if (item and item:getId() == 11843) then
+        -- INJEÇÃO DE ÁUDIO NATAL: Toca o Magnum direto antes de mudar de mapa
+        pcall(function()
+            playSound("/sounds/magnum.ogg")
+        end)
+        print("[Dungeon] Rift encontrada.")
+        g_game.use(item)
+        CaveBot.gotoLabel("Rift")
+        return
+      end
     end
+  end
 end)
+
 
 -- Auto Subir/Descer Escadas
 Stairs = {}
@@ -3902,7 +3864,7 @@ dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
 
--- CreaturePriority & Anti-Lure Avançado Conectado à Interface (Versão Otimizada - Ultra Performance)
+-- CreaturePriority & Anti-Lure Avançado Conectado à Interface (Versão Final Silenciosa)
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 local specialMonstersHash = {}
 
@@ -3922,112 +3884,87 @@ end
 
 -- CONTROLES DE CACHE E ESTADO
 local cavebotPausadoPeloLure = false
-local configEspecialAtiva = false
-local limiteMonstrosEspeciais = 2 -- Valor padrão de segurança
 local ultimoCheckInterface = 0
+local configEspecialAtiva = false
+local limiteMonstrosEspeciais = 2
 
--- MACRO EXCLUSIVA CONECTADA AO COORDENADOR DE UI DO TARGETBOT
+-- MACRO EXCLUSIVA ANTI-LURE (Roda 100% ativa em segundo plano)
 macro(100, function()
     if not g_game.isOnline() then return end
 
     local agora = os.clock() * 1000
+    local atacandoAtual = g_game.getAttackingCreature()
 
     -- ============================================================================
-    -- OTIMIZAÇÃO DE PERFORMANCE: Cache de Leitura de Configurações
+    -- LEITURA SEGURA DE ARQUIVO/STORAGE (Garante ler o Slider do seu painel)
     -- ============================================================================
-    -- Em vez de ler a tabela pesada do TargetBot 10 vezes por segundo, lemos a cada 1.5s
-    -- Isso elimina completamente os avisos de "Slow hotkey" no terminal.
-    if agora - ultimoCheckInterface > 1500 then
+    if agora - ultimoCheckInterface > 1000 then
         ultimoCheckInterface = agora
-        if TargetBot and type(TargetBot.getCreatureConfigs) == "function" then
-            local targetConfigs = TargetBot.getCreatureConfigs()
-            if targetConfigs then
-                for i = 1, #targetConfigs do
-                    local cfg = targetConfigs[i]
-                    -- Procura a configuração geral de hunt (geralmente registrada como * ou similar)
-                    if cfg and cfg.name == "*" then
-                        configEspecialAtiva = cfg.antiLureSpecial or false
-                        limiteMonstrosEspeciais = cfg.specialLureCount or 2
-                        break
-                    end
+        if storage.TargetBot and storage.TargetBot.creatures then
+            for nomeConfig, cfg in pairs(storage.TargetBot.creatures) do
+                if nomeConfig == "*" or (atacandoAtual and string.lower(atacandoAtual:getName()) == string.lower(nomeConfig)) then
+                    configEspecialAtiva = cfg.antiLureSpecial or false
+                    limiteMonstrosEspeciais = cfg.specialLureCount or 2
+                    break
                 end
             end
         end
     end
 
-    -- Se a caixinha "Anti-Lure Special" não estiver marcada na interface, libera o bot e encerra
+    -- Se não ativou o "Lure Elites" no painel, encerra e garante fluxo livre
     if not configEspecialAtiva then
-        if cavebotPausadoPeloLure and CaveBot and type(CaveBot.start) == "function" then
-            CaveBot.start()
-            cavebotPausadoPeloLure = false
-        end
         return
     end
 
     local localPlayer = g_game.getLocalPlayer()
     if not localPlayer then return end
 
-    local myId = localPlayer:getId()
-    local playerPos = localPlayer:getPosition()
-    if not playerPos then return end
-
     local specialAttackingMe = 0
-    local spectators = g_map.getSpectators(playerPos, false)
+    local monstrosNaTela = getMonsters() or {}
 
-    -- Rastreamento de tela veloz através da tabela Hash
-    for i = 1, #spectators do
-        local spec = spectators[i]
-        if spec:isMonster() and spec:getHealthPercent() > 0 then
-            local creatureName = string.lower(spec:getName() or "")
-            
+    -- Varre os monstros na tela contando os Elites vivos
+    for i = 1, #monstrosNaTela do
+        local m = monstrosNaTela[i]
+        if m and m:isMonster() and m:getHealthPercent() > 0 then
+            local creatureName = string.lower(m:getName() or "")
             if isMonsterSpecial(creatureName) then
-                local mTargetId = 0
-                if type(spec.getTargetId) == "function" then mTargetId = spec:getTargetId() or 0
-                elseif spec.targetId then mTargetId = spec.targetId
-                elseif type(spec.getTarget) == "function" then
-                    local tgt = spec:getTarget()
-                    if tgt then mTargetId = tgt:getId() end
-                end
-
-                if mTargetId == myId then
-                    specialAttackingMe = specialAttackingMe + 1
-                end
+                specialAttackingMe = specialAttackingMe + 1
             end
         end
     end
 
-    -- TOMADA DE DECISÃO INTERTRAVADA COM O SLIDER DA INTERFACE
+    -- TOMADA DE DECISÃO POR CONGELAMENTO SEGURO SILENCIOSO (Sem prints de texto)
     if specialAttackingMe >= limiteMonstrosEspeciais then
-        if CaveBot and type(CaveBot.isOn) == "function" and CaveBot.isOn() then
-            if type(CaveBot.stop) == "function" then 
-                CaveBot.stop() 
-                cavebotPausadoPeloLure = true
-                print("[UI Anti-Lure]: CaveBot TRAVADO por atingir o limite de " .. limiteMonstrosEspeciais .. " especiais.")
-            end
-        end
+        -- Força a trava direto no motor interno do Candy/vBot
+        local tempoDeTrava = agora + 1500
+        if cavebotMacro and type(cavebotMacro) == "table" then cavebotMacro.delay = tempoDeTrava
+        elseif CaveBot and type(CaveBot.macro) == "table" then CaveBot.macro.delay = tempoDeTrava
+        elseif CaveBot and type(CaveBot.delay) == "function" then CaveBot.delay(1500) end
+        
+        -- Garante a parada física imediata dos passos para não lurar mais
+        if type(g_game.stop) == "function" then g_game.stop() end
+        if type(g_game.cancelWalk) == "function" then g_game.cancelWalk() end
+        
+        cavebotPausadoPeloLure = true
     else
         if cavebotPausadoPeloLure then
-            if CaveBot and type(CaveBot.isOn) == "function" and not CaveBot.isOn() then
-                if type(CaveBot.start) == "function" then
-                    CaveBot.start()
-                    cavebotPausadoPeloLure = false
-                    print("[UI Anti-Lure]: Perigo reduzido. CaveBot liberado automaticamente.")
-                end
-            else
-                cavebotPausadoPeloLure = false
-            end
+            cavebotPausadoPeloLure = false
         end
     end
 end)
 
--- PARTE 3: Injeção de prioridade baseada em alvo
+-- PARTE 3: Injeção de prioridade baseada em alvo (Versão Anti-Slow TargetBot)
 if TargetBot and TargetBot.Creature then
     TargetBot.Creature.calculatePriority = function(creature, config, path)
         local priority = 0
         local path_length = #path
 
-        if g_game.getAttackingCreature() == creature then
-            priority = priority + 1
+        local atacandoAtual = g_game.getAttackingCreature()
+        if atacandoAtual == creature then
+            priority = priority + 500
+            if path_length <= 1 then
+                return priority + 1000 
+            end
         end
 
         local creatureName = string.lower(creature:getName() or "")
@@ -4066,13 +4003,13 @@ if TargetBot and TargetBot.Creature then
 
         local hp = creature:getHealthPercent() or 100
         if hp < 20 then priority = priority + 5
-        elseif hp < 40 then priority = priority + 2.5
-        elseif hp < 60 then priority = priority + 1.5
+        elseif hp < 50 then priority = priority + 2
         elseif hp < 80 then priority = priority + 0.5 end
 
         return priority
     end
 end
+
 
 -- CaveBot
 if CaveBot and type(CaveBot.delay) == "function" then
