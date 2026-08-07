@@ -842,7 +842,7 @@ end)
 
 
 -- ============================================================================
--- AUTO-ESCADAS ULTIMATE EDITION (Versão Segura com Botão Pressionado)
+-- AUTO-ESCADAS ULTIMATE EDITION (Versão Definitiva Widescreen Otimizada)
 -- ============================================================================
 Stairs = {}
 Stairs.saveStatus = {}
@@ -850,6 +850,7 @@ Stairs.pos = nil
 Stairs.bestTile = nil
 Stairs.lastPos = ""
 
+-- Estrutura de armazenamento interno encapsulado para evitar estouro do limite de variáveis do Lua
 Stairs.config = {
     ids = {
         1666, 6207, 1948, 435, 7771, 5542, 8657, 6264, 1646, 1648,
@@ -865,6 +866,7 @@ Stairs.config = {
     ultimoSucessoRadar = 0
 }
 
+-- Montagem automatizada das tabelas hash na memória RAM para buscas a 0ms
 for i = 1, #Stairs.config.ids do 
     Stairs.config.stairsHash[Stairs.config.ids[i]] = true 
 end
@@ -967,27 +969,43 @@ Stairs.goUse = function(pos)
     end
 end
 
-Stairs.checkAll = function(n)
-    n = n and n + 1 or 1
-    if n > 9 then return end
-    local currentPos = pos()
-    local tiles = {}
-    for x = -n, n do
-        for y = -n, n do
-            local stairPos = {x = currentPos.x + x, y = currentPos.y + y, z = currentPos.z}
+-- ============================================================================
+-- FUNÇÃO DE BUSCA ULTRA PERFORMANCE (Filtro Antecipado Widescreen 13x7)
+-- ============================================================================
+Stairs.checkAll = function()
+    local playerObj = g_game.getLocalPlayer()
+    if not playerObj then return nil end
+    local pPos = playerObj:getPosition()
+    if not pPos then return nil end
+
+    local bestTileFound = nil
+    local bestDistance = 9999
+
+    -- Realiza o mapeamento completo da proporção do monitor sem gerar picos de lag
+    for x = -13, 13 do
+        for y = -7, 7 do
+            local stairPos = {x = pPos.x + x, y = pPos.y + y, z = pPos.z}
             local tile = g_map.getTile(stairPos)
-            if Stairs.checkTile(tile) and findPath(stairPos, currentPos) then
-                table.insert(tiles, {tile = tile, distance = Stairs.accurateDistance(currentPos, stairPos)})
+            
+            -- FILTRO ANTECIPADO: Avalia o tipo de piso antes de tentar traçar rotas
+            if tile and Stairs.checkTile(tile) then
+                local dist = Stairs.accurateDistance(pPos, stairPos)
+                
+                -- OTIMIZAÇÃO CRÍTICA: Poupa o processador descartando caminhos de escadas mais distantes
+                if dist < bestDistance then
+                    if findPath(stairPos, pPos) then
+                        bestDistance = dist
+                        bestTileFound = tile
+                    end
+                end
             end
         end
     end
-    if #tiles == 0 then
-        return Stairs.checkAll(n)
+
+    if bestTileFound then
+        Stairs.config.ultimoSucessoRadar = now
     end
-    table.sort(tiles, function(a, b) return a.distance < b.distance end)
-    
-    Stairs.config.ultimoSucessoRadar = now
-    return tiles[1].tile
+    return bestTileFound
 end
 
 onPlayerPositionChange(function(newPos, oldPos)
@@ -1027,10 +1045,10 @@ function markOnThing(thing, color)
 end
 
 -- ============================================================================
--- MACROS ORIGINAIS MODIFICADAS COM INTERRUPÇÃO DE SEGURANÇA
+-- MACRO DE MOVIMENTAÇÃO (40ms - Exige manter a tecla Espaço pressionada)
 -- ============================================================================
 Stairs.walk = macro(40, function()
-    -- SEGURANÇA ABSOLUTA: Se soltar a barra de Espaço, cancela a subida na mesma hora!
+    -- INTERRUPÇÃO DE SEGURANÇA: Cancela a corrida instantaneamente caso o Espaço seja solto
     if modules.corelib and modules.corelib.g_keyboard and type(modules.corelib.g_keyboard.isKeyPressed) == "function" then
         if not modules.corelib.g_keyboard.isKeyPressed("Space") then
             return Stairs.walk.setOff()
@@ -1040,9 +1058,11 @@ Stairs.walk = macro(40, function()
     if modules.corelib.g_keyboard.isKeyPressed("Escape") then
         return Stairs.walk.setOff()
     end
+    
     player:lockWalk(300)
     if Stairs.config.tryWalk then return end
 
+    -- Utiliza a leitura estocada na memória RAM para não causar concorrência de processamento
     markOnThing(Stairs.bestTile, "#00FF00")
     if Stairs.bestTile and Stairs.bestTile:isWalkable() then
         if not Stairs.bestTile:isPathable() then
@@ -1056,10 +1076,20 @@ Stairs.walk = macro(40, function()
 end)
 Stairs.walk.setOff()
 
-macro(40, "Auto Escadas", function()
+-- ============================================================================
+-- MACRO PRINCIPAL DO RADAR (Suave a 150ms - Nome Limpo na UI)
+-- ============================================================================
+macro(150, "Auto Escadas", function()
+    local espacoPressionado = false
+    
+    if modules.corelib and modules.corelib.g_keyboard and type(modules.corelib.g_keyboard.isKeyPressed) == "function" then
+        if modules.corelib.g_keyboard.isKeyPressed("Space") and modules.game_console and not modules.game_console:isChatEnabled() then
+            espacoPressionado = true
+        end
+    end
+
     if Stairs.walk.isOn() then 
-        -- SEGURANÇA NA CORRIDA: Se a macro de andar estiver ativa mas você soltou o Espaço, desliga ela aqui também!
-        if modules.corelib.g_keyboard and not modules.corelib.g_keyboard.isKeyPressed("Space") then
+        if not espacoPressionado then
             Stairs.walk.setOff()
         end
         return 
@@ -1074,13 +1104,14 @@ macro(40, "Auto Escadas", function()
             Stairs.pos = Stairs.bestTile and Stairs.bestTile:getPosition()
             Stairs.lastPos = currentPos
         elseif now - Stairs.config.ultimoSucessoRadar > 500 then
+            -- Sistema de persistência: Evita falhas de clique mantendo o alvo por 500ms caso o radar oscile na corrida
             markOnThing(Stairs.bestTile, "")
             Stairs.bestTile = nil
             Stairs.pos = nil
         end
     end
     
-    if modules.corelib.g_keyboard.isKeyPressed("Space") and Stairs.bestTile and modules.game_console and not modules.game_console:isChatEnabled() then
+    if espacoPressionado and Stairs.bestTile then
         Stairs.walk.setOn()
         return
     else
@@ -1088,7 +1119,7 @@ macro(40, "Auto Escadas", function()
     end
 end)
 
--- Enter Rift (Versão Inteligente Ultra Performance - smkmain.lua)
+-- Enter Rift (Versão Inteligente com Loop de Alarme Sem Alteração de Título)
 local PORTAL_ID = 11843
 local RANGE_X = 13       -- Limita a busca à largura real da tela do monitor
 local RANGE_Y = 7        -- Limita a busca à altura real da tela do monitor
@@ -1098,17 +1129,36 @@ local getTile = g_map.getTile
 local g_game_use = g_game.use
 
 local ultimoTickRift = 0
+local ultimoTickSom = 0 -- Controla o loop rápido do áudio do Magnum
 
 macro(250, "Enter Rift", function()
     if not g_game.isOnline() then return end
     
     local agoraRift = os.clock() * 1000
-    if agoraRift - ultimoTickRift < 250 then return end
 
-    -- Procura o item de forma global e instantânea na memória visual do cliente.
-    -- Se o portal NÃO existir na tela atual, mata a execução IMEDIATAMENTE sem rodar os loops pesados.
+    -- FILTRO DE VARREDURA POR AMOSTRAGEM (0ms CPU)
     if not findItem(PORTAL_ID) then return end
+
+    -- LOOP DE ÁUDIO E PRINT (Roda a cada 400ms enquanto o portal estiver visível)
+    if agoraRift - ultimoTickSom >= 400 then
+        ultimoTickSom = agoraRift
+        
+        -- Mantém o seu print limpo no terminal
+        print("[Dungeon] Rift encontrada.")
+        
+        pcall(function()
+            -- CORREÇÃO: Força o uso do g_sound nativo primeiro para não mudar o título do cliente.
+            -- Caso use a função alarm, passa o texto vazio "" para manter a barra intocada!
+            if g_sound and type(g_sound.play) == "function" then
+                g_sound.play("/sounds/magnum.ogg")
+            elseif type(alarm) == "function" then
+                alarm("/sounds/magnum.ogg", "") -- Texto em branco garante que o título do Windows não muda
+            end
+        end)
+    end
     
+    -- Controla o intervalo de cliques físicos para não dar spam de "use" no servidor
+    if agoraRift - ultimoTickRift < 250 then return end
     ultimoTickRift = agoraRift
 
     local player = getLocalPlayer()
@@ -1117,7 +1167,7 @@ macro(250, "Enter Rift", function()
     local playerPos = player:getPosition()
     if not playerPos then return end
 
-    -- RADAR GEOMÉTRICO RESTRITO: Só roda se o portal REALMENTE foi detectado na tela pelo findItem
+    -- RADAR GEOMÉTRICO RESTRITO: Executa o rastreamento para o clique
     local searchPos = {x = 0, y = 0, z = playerPos.z}
     
     for x = -RANGE_X, RANGE_X do
@@ -1132,16 +1182,13 @@ macro(250, "Enter Rift", function()
                     for i = 1, #items do
                         local item = items[i]
                         if item and item:getId() == PORTAL_ID then
-                            -- LOG DE SEGURANÇA
-                            print("[Dungeon] Rift encontrada.")
-                            
                             -- Executa a ação nativa perfeita do jogo
                             g_game_use(item)
                             
                             -- Encaminha o Cavebot imediatamente para gerenciar o Rift
                             CaveBot.gotoLabel("Rift")
                             
-                            -- Delay de segurança de 1.5 segundos para o mapa carregar e evitar cliques repetidos
+                            -- Delay de segurança de 1.5 segundos para o clique físico
                             ultimoTickRift = agoraRift + 1500 
                             return 
                         end
