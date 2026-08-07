@@ -2041,6 +2041,10 @@ macro(200, function()
 end)
 
 UI.Label("-----------------------------------"):setColor('#C39BD3')
+-- ====================================================================
+-- SPELL CASTER / PAINEL DE BOTÕES (Versão Unificada Blindada Anti-Falhas)
+-- ====================================================================
+
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
 if storage.painelSalvo.selfSpecial == nil then storage.painelSalvo.selfSpecial = false end
@@ -2171,10 +2175,11 @@ MainWindow
       margin-left: 4
 ]]
 
--- Função auxiliar rápida para ler estado real da macro
+-- Função auxiliar rápida para ler estado real da macro com proteção anti-nil
 local function isMacroActive(macroRef)
     if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
-        return macroRef.isOn()
+        local status, resultado = pcall(macroRef.isOn)
+        if status then return resultado end
     end
     return false
 end
@@ -2186,7 +2191,7 @@ local function pintarBotaoSeguro(container, idBotao, condicaoVerde)
     if btn and btn.setColor then
         local corAlvo = condicaoVerde and "green" or "red"
         if coresCache[idBotao] ~= corAlvo then
-            btn:setColor(corAlvo)
+            pcall(function() btn:setColor(corAlvo) end)
             coresCache[idBotao] = corAlvo
         end
     end
@@ -2209,15 +2214,17 @@ local conectarComponentesPainel -- Declaração antecipada para o botão Girar u
 
 local function alternarEstadoMacro(macroRef, storageKey)
     if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
-        if macroRef.isOn() then
-            macroRef.setOff()
-            storage.painelSalvo[storageKey] = false
+        if isMacroActive(macroRef) then
+            pcall(function() macroRef.setOff() end)
+            if storage and storage.painelSalvo then storage.painelSalvo[storageKey] = false end
         else
-            macroRef.setOn()
-            storage.painelSalvo[storageKey] = true
+            pcall(function() macroRef.setOn() end)
+            if storage and storage.painelSalvo then storage.painelSalvo[storageKey] = true end
         end
     else
-        storage.painelSalvo[storageKey] = not storage.painelSalvo[storageKey]
+        if storage and storage.painelSalvo then
+            storage.painelSalvo[storageKey] = not storage.painelSalvo[storageKey]
+        end
     end
     atualizarCoresPainelCompleto()
 end
@@ -2245,23 +2252,26 @@ conectarComponentesPainel = function()
     
     if btnGirar then
         btnGirar.onClick = function()
-            storage.painelSalvo.horizontal = not storage.painelSalvo.horizontal
-            painelIconesUI:destroy()
-            coresCache = {} 
-            local layout = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
-            painelIconesUI = setupUI(layout, modules.game_interface.getMapPanel())
-            conectarComponentesPainel()
+            if storage and storage.painelSalvo then
+                storage.painelSalvo.horizontal = not storage.painelSalvo.horizontal
+                painelIconesUI:destroy()
+                coresCache = {} 
+                local layout = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
+                painelIconesUI = setupUI(layout, modules.game_interface.getMapPanel())
+                conectarComponentesPainel()
+            end
         end
     end
     atualizarCoresPainelCompleto()
 end
 
 -- INICIALIZAÇÃO CORRETA E SEGURA DO LAYOUT
-local layoutInicial = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
-painelIconesUI = setupUI(layoutInicial, modules.game_interface.getMapPanel())
-
--- Ativa as conexões após o painel e as funções estarem totalmente criados na memória
-conectarComponentesPainel()
+local mapPanel = modules.game_interface and modules.game_interface.getMapPanel and modules.game_interface.getMapPanel()
+if mapPanel and storage and storage.painelSalvo then
+    local layoutInicial = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
+    painelIconesUI = setupUI(layoutInicial, mapPanel)
+    conectarComponentesPainel()
+end
 
 -- Loop estendido para 600ms (Sincronia secundária passiva com cache de CPU)
 local jaSincronizou = false
@@ -2269,18 +2279,20 @@ macro(600, function()
     if not g_game.isOnline() or not painelIconesUI then return end
     
     if not jaSincronizou then
-        if lowhp and type(lowhp) == "table" and type(lowhp.setOn) == "function" then 
-            if storage.painelSalvo.special then lowhp.setOn() else lowhp.setOff() end 
-        end
-        if selflowhp and type(selflowhp) == "table" and type(selflowhp.setOn) == "function" then 
-            if storage.painelSalvo.selfSpecial then selflowhp.setOn() else selflowhp.setOff() end 
-        end
-        if combo and type(combo) == "table" and type(combo.setOn) == "function" then 
-            if storage.painelSalvo.spells then combo.setOn() else combo.setOff() end 
-        end
-        if turnCombo and type(turnCombo) == "table" and type(turnCombo.setOn) == "function" then 
-            if storage.painelSalvo.wave then turnCombo.setOn() else turnCombo.setOff() end 
-        end
+        pcall(function()
+            if lowhp and type(lowhp) == "table" and type(lowhp.setOn) == "function" then 
+                if storage.painelSalvo.special then lowhp.setOn() else lowhp.setOff() end 
+            end
+            if selflowhp and type(selflowhp) == "table" and type(selflowhp.setOn) == "function" then 
+                if storage.painelSalvo.selfSpecial then selflowhp.setOn() else selflowhp.setOff() end 
+            end
+            if combo and type(combo) == "table" and type(combo.setOn) == "function" then 
+                if storage.painelSalvo.spells then combo.setOn() else combo.setOff() end 
+            end
+            if turnCombo and type(turnCombo) == "table" and type(turnCombo.setOn) == "function" then 
+                if storage.painelSalvo.wave then turnCombo.setOn() else turnCombo.setOff() end 
+            end
+        end)
         jaSincronizou = true
     end
     
@@ -4329,48 +4341,54 @@ local oldCaveBotGotoLabel = CaveBot and CaveBot.gotoLabel
 local ultimoTempoTrocaLabelGlobal = 0
 local ultimaLabelTentada = ""
 
+-- CORREÇÃO: Variável de controle local no escopo do arquivo (Totalmente aceito pela Sandbox)
+local SMK_MudandoDeMapaMute = false
+
 local function filtrarChamadaLabelSeguro(labelName, funcaoOriginal, ...)
     if not labelName or not funcaoOriginal then return end
 
     local agoraLabel = os.clock() * 1000
     local labelAlvo = tostring(labelName):lower()
 
-    -- 1. FILTRO ANTI-LOOP: Bloqueia chamadas frenéticas repetidas do check_pos
-    if labelAlvo == ultimaLabelTentada and (agoraLabel - ultimoTempoTrocaLabelGlobal < 10000) then
+    -- 1. FILTRO ANTI-LOOP: Impede o check_pos de flodar o comando em loop
+    if labelAlvo == ultimaLabelTentada and (agoraLabel - ultimoTempoTrocaLabelGlobal < 8000) then
         return 
     end
 
     ultimaLabelTentada = labelAlvo
     ultimoTempoTrocaLabelGlobal = agoraLabel
     
-    -- 2. VACINA DE TRANSIÇÃO DE MAPA: Se o bot estiver alternando labels entre mapas,
-    -- atrasa a execução em 300ms usando o agendador nativo do jogo (scheduleEvent).
-    -- Isso dá o tempo para o C++ limpar a memória gráfica antes do Lua tentar ler o waypoint 1!
+    -- Ativa a trava local para o TargetBot não calcular rotas pesadas durante a troca
+    SMK_MudandoDeMapaMute = true
+
+    -- 2. TRANSIÇÃO CIRÚRGICA DE 80MS: Tempo perfeito para o motor gráfico organizar o mapa
     if type(scheduleEvent) == "function" then
         scheduleEvent(function()
-            if not g_game.isOnline() then return end
+            if not g_game.isOnline() then SMK_MudandoDeMapaMute = false return end
             
-            -- Força o reset do índice para a linha 1 da nova label após o delay
+            -- Reseta o índice para o waypoint 1 da nova label de forma limpa
             if CaveBot and CaveBot.currentWaypoint then
                 CaveBot.currentWaypoint = 1
             end
             
-            -- Executa a troca de label de forma limpa e segura
+            -- Executa o carregamento original dos novos pontos
             pcall(funcaoOriginal, labelName)
             
-            -- Dá um pulso para a caminhada iniciar sem travar
-            if CaveBot and type(CaveBot.preNext) == "function" then
-                CaveBot.preNext()
-            end
-        end, 500) -- 500 milissegundos de folga para a thread respirar
+            -- Libera o TargetBot para voltar a combater após 150ms do mapa carregado
+            scheduleEvent(function()
+                SMK_MudandoDeMapaMute = false
+                if CaveBot and type(CaveBot.preNext) == "function" then
+                    CaveBot.preNext()
+                end
+            end, 150)
+        end, 80) -- 80ms de folga para a thread respirar
         return
     else
-        -- Fallback caso o servidor não tenha a função scheduleEvent
+        SMK_MudandoDeMapaMute = false
         return funcaoOriginal(labelName, ...)
     end
 end
 
--- Injeta a nova inteligência nos ponteiros do jogo
 if type(oldGotoLabelGlobal) == "function" then
     gotoLabel = function(labelName, ...)
         return filtrarChamadaLabelSeguro(labelName, oldGotoLabelGlobal, ...)
@@ -4382,4 +4400,17 @@ if CaveBot and type(oldCaveBotGotoLabel) == "function" then
         return filtrarChamadaLabelSeguro(labelName, oldCaveBotGotoLabel, ...)
     end
 end
-print("[Loader] Função gotoLabel blindada contra loops.")
+
+-- 3. INTEGRAÇÃO COM O FINDPATH DO TARGETBOT
+local oldFindPathSMK = findPath
+if type(oldFindPathSMK) == "function" then
+    findPath = function(startPos, endPos, maxDist, options, ...)
+        -- Se o CaveBot estiver no meio da transição do check_pos, cancela o pathfinding!
+        -- CORREÇÃO: Lendo a variável local livre do erro de indexar nil
+        if SMK_MudandoDeMapaMute then
+            return nil
+        end
+        return oldFindPathSMK(startPos, endPos, maxDist, options, ...)
+    end
+end
+print("[Loader] Funcao gotoLabel blindada contra loops.")
