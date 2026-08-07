@@ -1,42 +1,3 @@
--- GOVERNOR DE EVENTOS GLOBAL (Proteção Extra contra Slow editor.lua:157)
-local temposPassosIndividuais = {}
-
-if type(onCreaturePositionChange) == "function" then
-    local oldOnCreaturePositionChange = onCreaturePositionChange
-    
-    onCreaturePositionChange = function(callback, ...)
-        if type(callback) == "function" then
-            return oldOnCreaturePositionChange(function(creature, newPos, oldPos, ...)
-                if not g_game.isOnline() or not creature or not newPos then return end
-                
-                local localPlayer = g_game.getLocalPlayer()
-                local myId = localPlayer and localPlayer:getId() or 0
-                local cid = creature:getId()
-
-                -- IMUNIDADE ABSOLUTA: Se for o SEU personagem andando, passa direto!
-                -- Isso garante que a "Position", o gravador de passos e a cura funcionem instantaneamente.
-                if cid == myId then
-                    return callback(creature, newPos, oldPos, ...)
-                end
-                
-                -- FILTRO DE FLUÍDEZ PARA MONSTROS: Se os bichos da hunt andarem na velocidade da luz,
-                -- segura o processamento do evento para a thread de UI do editor.lua:157 respirar!
-                local agoraPassoGlobal = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-                local ultimoPassoDaCriatura = temposPassosIndividuais[cid] or 0
-                
-                if agoraPassoGlobal - ultimoPassoDaCriatura < 60 then -- Ajustado para 60ms para dar mais fôlego à UI
-                    return 
-                end
-                
-                temposPassosIndividuais[cid] = agoraPassoGlobal
-                return callback(creature, newPos, oldPos, ...)
-            end, ...)
-        end
-        return oldOnCreaturePositionChange(callback, ...)
-    end
-end
-print("[Loader] Governor de eventos globais carregado com sucesso.")
-
 -- 1. HIGIENIZAÇÃO DE STORAGE AUTOMÁTICA VIA REPOSITÓRIO ONLINE (HTTP)
 local URL_REPOSITORIO_ONLINE = "https://raw.githubusercontent.com/mrtz3112/Smk-RTS/refs/heads/main/scripts_nuvem.lua"
 
@@ -571,15 +532,20 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
 end)
 
 UI.Separator()
--- Deposit Gold & Stack Items (Versão Definitiva Sem Custo de CPU - smkmain.lua)
+-- Deposit Gold & Stack Items (Versão Definitiva Direto para o Maior Bolo - smkmain.lua)
 local ultimoMovimentoStack = 0
-local cachedPosicao = {x = 0, y = 0, z = 0, slot = 0} 
+
+-- Tabelas de memória RAM para ignorar itens que o servidor rejeitou empilhar
+local itensRejeitadosPeloServidor = {}
+local ultimoSlotTentado = nil
+local ultimaQuantidadeTentada = 0
+local ultimoTempoTentativa = 0
 
 macro(1500, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
   
   local agora = os.clock() * 1000
-  if agora - ultimoMovimentoStack < 600 then return end
+  if agora - ultimoMovimentoStack < 700 then return end
 
   -- 1. CHECAGEM RÁPIDA DE DINHEIRO
   local coinIds = { 3031, 3035, 3043, 10137 } 
@@ -592,41 +558,66 @@ macro(1500, "DepositGold & StackItems", function()
     end
   end
 
-  -- 2. MAPEAMENTO DOS MAIORES BOLOS (LOOP ÚNICO HISTÓRICO)
+  -- VACINA DE LISTA NEGRA: Detecta se o servidor rejeitou o movimento e bloqueia o item único
+  if ultimoSlotTentado and ultimoTempoTentativa > 0 and (agora - ultimoTempoTentativa < 2000) then
+      local containerVerificar = g_game.getContainer(ultimoSlotTentado.containerId)
+      if containerVerificar then
+          local itemVerificar = containerVerificar:getItem(ultimoSlotTentado.slotIndex)
+          if itemVerificar and itemVerificar:getCount() == ultimaQuantidadeTentada then
+              local chaveLixo = ultimoSlotTentado.containerId .. "_" .. ultimoSlotTentado.slotIndex .. "_" .. itemVerificar:getId()
+              itensRejeitadosPeloServidor[chaveLixo] = true
+          end
+      end
+  end
+  ultimoSlotTentado = nil
+  ultimoTempoTentativa = 0
+
+  -- 2. ETAPA DE MAPEAMENTO: Localiza o MAIOR BOLO absoluto do inventário primeiro
   local containers = g_game.getContainers()
   local itensMapeados = {}
-  local itensParaMover = {}
-  local totalParaMover = 0
+  local todosOsItensAgrupaveis = {}
+  local totalAgrupaveis = 0
 
   for _, container in pairs(containers) do
-    if container then
-      local items = container:getItems() -- Roda apenas UMA vez por ciclo
-      for index = 1, #items do
-        local item = items[index]
-        if item and item:isStackable() then 
-          local itemId = item:getId()
-          local count = item:getCount()
-          local posicaoAtual = container:getSlotPosition(index - 1)
+    if container and container:getId() <= 15 then
+      local items = container:getItems()
+      
+      if items and #items <= 36 then
+        for index = 1, #items do
+          local item = items[index]
+          
+          if item and item:isStackable() and item:getCount() < 10000 then 
+            local itemId = item:getId()
+            local count = item:getCount()
+            local slotIndex = index - 1
+            local containerId = container:getId()
+            
+            local chaveChecar = containerId .. "_" .. slotIndex .. "_" .. itemId
 
-          if posicaoAtual then
-            -- Armazena a referência de todos os agrupáveis mapeados
-            totalParaMover = totalParaMover + 1
-            itensParaMover[totalParaMover] = {
-              itemObj = item,
-              itemId = itemId,
-              count = count,
-              containerId = container:getId(),
-              slotIndex = index - 1
-            }
+            -- Só analisa se o item não estiver na lista negra de itens únicos rejeitados
+            if not itensRejeitadosPeloServidor[chaveChecar] then
+              local posicaoAtual = container:getSlotPosition(slotIndex)
 
-            -- Lógica matemática estrita: Elege a maior pilha como o destino final absoluto
-            if not itensMapeados[itemId] or count > itensMapeados[itemId].count then
-              itensMapeados[itemId] = {
-                posicao = {x = posicaoAtual.x, y = posicaoAtual.y, z = posicaoAtual.z, slot = posicaoAtual.slot},
-                count = count,
-                containerId = container:getId(),
-                slotIndex = index - 1
-              }
+              if posicaoAtual then
+                totalAgrupaveis = totalAgrupaveis + 1
+                todosOsItensAgrupaveis[totalAgrupaveis] = {
+                  itemObj = item,
+                  itemId = itemId,
+                  count = count,
+                  containerId = containerId,
+                  slotIndex = slotIndex
+                }
+
+                -- COMPARAÇÃO ABSOLUTA: Varre todo o inventário e elege o MAIOR bolo real como destino final
+                if not itensMapeados[itemId] or count > itensMapeados[itemId].count then
+                  itensMapeados[itemId] = {
+                    posicao = posicaoAtual,
+                    count = count,
+                    containerId = containerId,
+                    slotIndex = slotIndex
+                  }
+                end
+              end
             end
           end
         end
@@ -634,29 +625,38 @@ macro(1500, "DepositGold & StackItems", function()
     end
   end
 
-  -- 3. MOVIMENTAÇÃO DIRETA EM MEMÓRIA (0ms CPU - Sem reler mochilas)
-  for i = 1, totalParaMover do
-    local itemDados = itensParaMover[i]
-    local destino = itensMapeados[itemDados.itemId]
+  -- 3. ETAPA DE MOVIMENTAÇÃO CRÍTICA: Arraste Direto para o Maior Bolo
+  for i = 1, totalAgrupaveis do
+    local dadosItem = todosOsItensAgrupaveis[i]
+    local destinoFinal = itensMapeados[dadosItem.itemId]
 
-    if destino then
-      local mesmoContainer = (itemDados.containerId == destino.containerId)
-      local mesmoSlot = (itemDados.slotIndex == destino.slotIndex)
+    if destinoFinal then
+      local mesmoContainer = (dadosItem.containerId == destinoFinal.containerId)
+      local mesmoSlot = (dadosItem.slotIndex == destinoFinal.slotIndex)
 
-      -- Se for uma parte separada fora do maior bolo, arrasta e mata o macro na hora
+      -- Se for uma pilha menor e separada do Maior Bolo Absoluto, joga DIRETO nele!
       if not (mesmoContainer and mesmoSlot) then
-        cachedPosicao.x = destino.posicao.x
-        cachedPosicao.y = destino.posicao.y
-        cachedPosicao.z = destino.posicao.z
-        cachedPosicao.slot = destino.posicao.slot
+        local bckpack = g_game.getContainer(dadosItem.containerId)
+        if bckpack then
+          local itemReal = bckpack:getItem(dadosItem.slotIndex)
+          
+          if itemReal and itemReal:getId() == dadosItem.itemId then
+            -- Prepara o fail-safe da vacina anti-trava
+            ultimoSlotTentado = { containerId = dadosItem.containerId, slotIndex = dadosItem.slotIndex }
+            ultimaQuantidadeTentada = itemReal:getCount()
+            ultimoTempoTentativa = agora
 
-        g_game.move(itemDados.itemObj, cachedPosicao, itemDados.count)
-        ultimoMovimentoStack = agora 
-        return -- Alívio total de CPU: Evita qualquer repetição ou gargalo no frame
+            -- Executa o movimento direto usando o ponteiro nativo perfeito do bolo maior
+            g_game.move(itemReal, destinoFinal.posicao, itemReal:getCount())
+            ultimoMovimentoStack = agora 
+            return -- Encerra o frame aqui: Mantém 0ms de uso de CPU e evita conflitos
+          end
+        end
       end
     end
   end
 end)
+
 
 -- Auto Dodge Ultra-Otimizado (Anti-Lag / Lazy Pathfinding)
 local effectIdToAvoid = 237
@@ -1198,10 +1198,10 @@ function getDash(dir)
     end
 end
 
--- Enter Rift (Versão Definitiva Ultra-Otimizada - 0ms CPU / Anti-Lag 8.54)
+-- Enter Rift (Versão Corrigida sem isContainer - smkmain.lua)
 local PORTAL_ID = 11843
-local RANGE_X = 13       -- Mantém a largura total widescreen do monitor
-local RANGE_Y = 7        -- Mantém a altura total widescreen do monitor
+local RANGE_X = 13       
+local RANGE_Y = 7        
 
 local getLocalPlayer = g_game.getLocalPlayer
 local getTile = g_map.getTile
@@ -1220,7 +1220,7 @@ macro(400, "Enter Rift", function()
     local playerPos = player:getPosition()
     if not playerPos then return end
 
-    -- SEGREDO DA PERFORMANCE: Se o boneco estiver parado batendo nos bicos, aborta em 0ms!
+    -- Aborta em 0ms se o boneco estiver parado
     if playerPos.x == ultimaPosX and playerPos.y == ultimaPosY then
         return
     end
@@ -1232,25 +1232,31 @@ macro(400, "Enter Rift", function()
     ultimaPosX = playerPos.x
     ultimaPosY = playerPos.y
 
-    -- OTIMIZAÇÃO CRÍTICA: Busca os blocos nativos carregados ao redor em memória (Evita loop de 378 tiles)
     local specs = g_map.getSpectatorsInRange(playerPos, false, RANGE_X, RANGE_Y)
     if specs then
         for i = 1, #specs do
             local creature = specs[i]
             if creature then
                 local tile = creature:getTile()
+                
                 if tile then
                     local topThing = tile:getTopUseThing()
                     if topThing and topThing:getId() == PORTAL_ID then
-                        g_game_use(topThing)
-                        return
+                        -- PROTEÇÃO DO MOTOR GRÁFICO: Checa a posição real do item através do Tile.
+                        -- Se o item estiver no chão do mapa do jogo, as coordenadas X e Y serão maiores que zero.
+                        -- Se o item estiver dentro do painel do Market, a posição será inválida para o mapa.
+                        local tilePos = tile:getPosition()
+                        if tilePos and tilePos.x > 0 and tilePos.y > 0 and tilePos.z == playerPos.z then
+                            g_game_use(topThing)
+                            return
+                        end
                     end
                 end
             end
         end
     end
     
-    -- Fallback ultra leve (Apenas 2 SQMs ao redor para não travar o cliente)
+    -- Fallback ultra leve limitado ao chão ao redor do personagem
     local searchPos = {x = 0, y = 0, z = playerPos.z}
     for x = -2, 2 do
         searchPos.x = playerPos.x + x
@@ -1268,8 +1274,7 @@ macro(400, "Enter Rift", function()
     end
 end)
 
-
--- Gestor Unificado de Acesso (Versão Limpa via Ponteiros Diretos - 0ms CPU)
+-- Gestor Unificado de Acesso (Versão Definitiva Protegida - smkmain.lua)
 local IDs_JANELAS_CONHECIDAS = { "dungeonwindow", "dungeonpanel", "riftwindow", "riftpanel" }
 
 macro(2000, "Enter Dungeon", function()
@@ -1278,34 +1283,37 @@ macro(2000, "Enter Dungeon", function()
     local rootWidget = g_ui.getRootWidget()
     if not rootWidget then return end
 
-    -- OTIMIZAÇÃO HISTÓRICA: Em vez de usar getChildren() e varrer tudo, tenta capturar a janela direto pelo ID
+    -- 1. PONTEIROS DIRETOS: Busca instantânea na árvore de UI (0ms CPU)
     for w = 1, #IDs_JANELAS_CONHECIDAS do
         local window = rootWidget:getChildById(IDs_JANELAS_CONHECIDAS[w])
         
-        -- Se a janela estiver aberta e visível na tela do player
+        -- Garante estritamente que a janela está ativa e visível para o jogador
         if window and window:isVisible() then
-            -- Tenta puxar o botão sem loops ou varreduras pesadas
             local btnStart = window:getChildById('startButton') or window:getChildById('start')
             
-            if btnStart and btnStart:isEnabled() then
+            if btnStart and btnStart:isVisible() and btnStart:isEnabled() then
                 btnStart:onClick()
-                return -- Janela resolvida em 0ms. Para o macro imediatamente.
+                return -- Janela resolvida. Interrompe a execução na hora.
             end
         end
     end
 
-    -- FALLBACK PROTEGIDO: Só roda o loop em janelas filhas reais caso a janela use um ID genérico/aleatório
+    -- 2. FALLBACK SEGURO ANTI-MARKET: Só analisa janelas filhas por ID, sem ler textos ou strings
     local janelas = rootWidget:getChildren()
     if not janelas then return end
     
     for i = 1, #janelas do
         local window = janelas[i]
-        if window and window:isVisible() and window.getText then
-            local texto = tostring(window:getText()):lower()
-            if string.find(texto, "dungeon") or string.find(texto, "rift") then
-                -- Busca não recursiva (Apenas no primeiro nível do Widget para não dar lag)
+        -- PROTEÇÃO EXTREMA: Ignora na hora a janela se ela for do Market, Trade ou Loja
+        if window and window:isVisible() and window.getId and window:getId() then
+            local idJanela = tostring(window:getId()):lower()
+            
+            if not string.find(idJanela, "market") and not string.find(idJanela, "trade") and not string.find(idJanela, "shop") then
+                -- Busca o botão de confirmação direto sem loops recursivos pesados
                 local btnStart = window:getChildById('startButton') or window:getChildById('start')
-                if btnStart then
+                
+                -- Se a janela misteriosa tiver um botão de "Start" visível e clicável, executa
+                if btnStart and btnStart:isVisible() and btnStart:isEnabled() then
                     btnStart:onClick()
                     return
                 end
@@ -1313,6 +1321,7 @@ macro(2000, "Enter Dungeon", function()
         end
     end
 end)
+
 --Auto Attack House Trainer
 if not storage.trainerMacroPauseUntil then
   storage.trainerMacroPauseUntil = 0
@@ -4285,32 +4294,3 @@ macro(5000, function()
     end
 end)
 print("[Loader] Estabilizador de performace carregado com sucesso.")
-
-
--- GOVERNOR DE INVENTÁRIO (Zerar o Slow do DepositGold & StackItems:589)
-if g_game and type(g_game.move) == "function" then
-    if not g_game.oldMoveOriginalPointer then
-        g_game.oldMoveOriginalPointer = g_game.move
-    end
-
-    local originalMove = g_game.oldMoveOriginalPointer
-    local ultimoItemMovidoTempo = 0
-
-    g_game.move = function(item, toPos, count, ...)
-        local agoraMove = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-
-        -- FREIO DE RAJADA DE ITENS: Se o bot tentar arrastar moedas/itens 
-        -- em uma velocidade menor que 45ms, força um mini-espaçamento.
-        -- Isso evita que o DepositGold entupa a thread do jogo de uma vez só!
-        if agoraMove - ultimoItemMovidoTempo < 45 then
-            -- Adiciona um atraso artificial pequeno no agendador nativo para pulverizar o lag
-            if CaveBot and type(CaveBot.delay) == "function" then
-                CaveBot.delay(30)
-            end
-        end
-        
-        ultimoItemMovidoTempo = agoraMove
-        return originalMove(item, toPos, count, ...)
-    end
-end
-print("[Loader] Governor de movimentacao de itens carregado com sucesso.")
