@@ -841,107 +841,32 @@ macro(30, "Dodge Red SQM Spells", function()
 end)
 
 
---AutoEscadas
+-- ============================================================================
+-- AUTO-ESCADAS ULTIMATE EDITION (Versão Segura com Botão Pressionado)
+-- ============================================================================
 Stairs = {}
+Stairs.saveStatus = {}
+Stairs.pos = nil
+Stairs.bestTile = nil
+Stairs.lastPos = ""
 
-excludeIds = {}
-
-stairsIds = {
-    1666,
-    6207,
-    1948,
-    435,
-    7771,
-    5542,
-    8657,
-    6264,
-    1646,
-    1648,
-    1678,
-    5291,
-    1680,
-    6905,
-    6262,
-    1664,
-    13296,
-    1067,
-    13861,
-    11931,
-    1949,
-    6896,
-    6205,
-    13926,
-    1947,
-    1968,
-    5111,
-    5102,
-    7725,
-    7727,
-    5229,
+Stairs.config = {
+    ids = {
+        1666, 6207, 1948, 435, 7771, 5542, 8657, 6264, 1646, 1648,
+        1678, 5291, 1680, 6905, 6262, 1664, 13296, 1067, 13861,
+        11931, 1949, 6896, 6205, 13926, 1947, 1968, 5111, 5102,
+        7725, 7727, 5229
+    },
+    stairsHash = {},
+    excludeHash = {},
+    stand = now,
+    tryWalk = nil,
+    checked = nil,
+    ultimoSucessoRadar = 0
 }
 
-
-for index, id in ipairs(stairsIds) do
-    stairsIds[tostring(id)] = true
-    stairsIds[index] = nil
-end
-
-for index, id in ipairs(excludeIds) do
-    excludeIds[tostring(id)] = true
-    excludeIds[index] = nil
-end
-
-Stairs = {}
-
-Stairs.saveStatus = {}
-
-Stairs.checkTile = function(tile)
-    if not tile then
-        return false
-    end
-
-    local tilePos = tile:getPosition()
-
-    if not tilePos then
-        return
-    end
-
-    local onString = Stairs.postostring(tilePos)
-
-    local checkStatus = Stairs.saveStatus[onString]
-
-    local itemsOnTile = tile:getItems()
-
-    if checkStatus and ((type(checkStatus[1]) == "number" and #itemsOnTile == checkStatus[1]) or checkStatus[1] == true) then
-        return checkStatus[2]
-    end
-
-    local topThing = tile:getTopUseThing()
-
-    if not topThing then
-        return false
-    end
-
-    for _, x in ipairs(itemsOnTile) do
-        if excludeIds[tostring(x:getId())] then
-            Stairs.saveStatus[onString] = {#itemsOnTile, false}
-            return false
-        end
-    end
-
-    if stairsIds[tostring(topThing:getId())] then
-        Stairs.saveStatus[onString] = {true, true}
-        return true
-    end
-
-    local cor = g_map.getMinimapColor(tile:getPosition())
-    if cor >= 210 and cor <= 213 and not tile:isPathable() and tile:isWalkable() then
-        Stairs.saveStatus[onString] = {true, true}
-        return true
-    else
-        Stairs.saveStatus[onString] = {#itemsOnTile, false}
-        return false
-    end
+for i = 1, #Stairs.config.ids do 
+    Stairs.config.stairsHash[Stairs.config.ids[i]] = true 
 end
 
 Stairs.postostring = function(pos)
@@ -958,275 +883,212 @@ function Stairs.accurateDistance(p1, p2)
     return math.abs(p1.x - p2.x) + math.abs(p1.y - p2.y)
 end
 
-Stairs.getPosition = function(pos, dir)
-    if dir == 0 then
-        pos.y = pos.y - 1
-    elseif dir == 1 then
-        pos.x = pos.x + 1
-    elseif dir == 2 then
-        pos.y = pos.y + 1
-    else
-        pos.x = pos.x - 1
+Stairs.checkTile = function(tile)
+    if not tile then return false end
+    local tilePos = tile:getPosition()
+    if not tilePos then return end
+
+    local onString = Stairs.postostring(tilePos)
+    local checkStatus = Stairs.saveStatus[onString]
+    local itemsOnTile = tile:getItems()
+
+    if checkStatus and ((type(checkStatus) == "number" and #itemsOnTile == checkStatus) or checkStatus == true) then
+        return checkStatus
     end
 
+    local topThing = tile:getTopUseThing()
+    if not topThing then return false end
+
+    for i = 1, #itemsOnTile do
+        if Stairs.config.excludeHash[itemsOnTile[i]:getId()] then
+            Stairs.saveStatus[onString] = {#itemsOnTile, false}
+            return false
+        end
+    end
+
+    if Stairs.config.stairsHash[topThing:getId()] then
+        Stairs.saveStatus[onString] = {true, true}
+        return true
+    end
+
+    local cor = g_map.getMinimapColor(tile:getPosition())
+    if cor >= 210 and cor <= 213 and not tile:isPathable() and tile:isWalkable() then
+        Stairs.saveStatus[onString] = {true, true}
+        return true
+    else
+        Stairs.saveStatus[onString] = {#itemsOnTile, false}
+        return false
+    end
+end
+
+Stairs.getPosition = function(pos, dir)
+    if dir == 0 then pos.y = pos.y - 1
+    elseif dir == 1 then pos.x = pos.x + 1
+    elseif dir == 2 then pos.y = pos.y + 1
+    else pos.x = pos.x - 1 end
     return pos
 end
 
 function table.reverse(t)
-  local newTable = {}
-  local j = 0
-  for i = #t, 1, -1 do
-    j = j + 1
-    newTable[j] = t[i]
-  end
-  return newTable
+    local newTable = {}
+    local j = 0
+    for i = #t, 1, -1 do
+        j = j + 1
+        newTable[j] = t[i]
+    end
+    return newTable
 end
 
 function reverseDirection(dir)
-  if dir == 0 then
-    return 2
-  elseif dir == 1 then
-    return 3
-  elseif dir == 2 then
-    return 0
-  elseif dir == 3 then
-    return 1
-  end
+    if dir == 0 then return 2
+    elseif dir == 1 then return 3
+    elseif dir == 2 then return 0
+    elseif dir == 3 then return 1 end
 end
 
 Stairs.goUse = function(pos)
     local playerPos = player:getPosition()
     local path = findPath(pos, playerPos)
-    if not path then
-        return
-    end
-  path = table.reverse(path)
+    if not path then return end
+    
+    path = table.reverse(path)
     for i, v in ipairs(path) do
-        if i > 5 then
-            break
-        end
+        if i > 5 then break end
         playerPos = Stairs.getPosition(playerPos, reverseDirection(v))
     end
+    
     local tile = g_map.getTile(playerPos)
     local topThing = tile and tile:getTopUseThing()
     if topThing then
-    g_game.use(topThing)
-    if table.equals(tile:getPosition(), pos) then
-      return delay(300)
+        g_game.use(topThing)
+        if table.equals(tile:getPosition(), pos) then
+            return delay(300)
+        end
     end
-  end
 end
 
 Stairs.checkAll = function(n)
     n = n and n + 1 or 1
-    if n > 9 then
-        return
-    end
-    local pos = pos()
+    if n > 9 then return end
+    local currentPos = pos()
     local tiles = {}
     for x = -n, n do
         for y = -n, n do
-            local stairPos = {x = pos.x + x, y = pos.y + y, z = pos.z}
+            local stairPos = {x = currentPos.x + x, y = currentPos.y + y, z = currentPos.z}
             local tile = g_map.getTile(stairPos)
-            if Stairs.checkTile(tile) and findPath(stairPos, pos) then
-                table.insert(tiles, {tile = tile, distance = Stairs.accurateDistance(pos, stairPos)})
+            if Stairs.checkTile(tile) and findPath(stairPos, currentPos) then
+                table.insert(tiles, {tile = tile, distance = Stairs.accurateDistance(currentPos, stairPos)})
             end
         end
     end
     if #tiles == 0 then
         return Stairs.checkAll(n)
     end
-    table.sort(
-        tiles,
-        function(a, b)
-            return a.distance < b.distance
-        end
-    )
+    table.sort(tiles, function(a, b) return a.distance < b.distance end)
+    
+    Stairs.config.ultimoSucessoRadar = now
     return tiles[1].tile
 end
 
-stand = now
-onPlayerPositionChange(
-    function(newPos, oldPos)
-        stand = now
-        tryWalk = nil
-        if newPos.z ~= oldPos.z or getDistanceBetween(oldPos, newPos) > 1 or table.equals(Stairs.pos, newPos) then
-            Stairs.walk.setOff()
-        end
-        if Stairs.walk.isOff() then
-            checked = nil
-        end
+onPlayerPositionChange(function(newPos, oldPos)
+    Stairs.config.stand = now
+    Stairs.config.tryWalk = nil
+    if newPos.z ~= oldPos.z or getDistanceBetween(oldPos, newPos) > 1 or table.equals(Stairs.pos, newPos) then
+        Stairs.walk.setOff()
     end
-)
-
-timeInPos = function()
-    return now - stand
-end
-
-onAddThing(
-    function(tile, thing)
-        if type(Stairs.pos) == "table" then
-            if table.equals(tile:getPosition(), Stairs.pos) then
-                Stairs.bestTile = tile
-            end
-        end
+    if Stairs.walk.isOff() then
+        Stairs.config.checked = nil
     end
-)
+end)
 
-markOnThing = function(thing, color)
+onAddThing(function(tile, thing)
+    if type(Stairs.pos) == "table" and tile and table.equals(tile:getPosition(), Stairs.pos) then
+        Stairs.bestTile = tile
+    end
+end)
+
+function markOnThing(thing, color)
     if thing then
         if thing:getPosition() then
-            local useThing = thing:getTopUseThing()
-            if color == "#00FF00" then
-                thing:setText("AQUI", "green")
-            elseif color == "#FF0000" then
-                thing:setText("AQUI", "red")
-            else
-                thing:setText("")
+            local topThing = thing:getTopUseThing()
+            if topThing and type(topThing.setText) == "function" then
+                if color == "#00FF00" then
+                    topThing:setText("AQUI", "green")
+                elseif color == "#FF0000" then
+                    topThing:setText("AQUI", "red")
+                else
+                    topThing:setText("")
+                end
+                return true
             end
-            return true
         end
     end
     return false
 end
 
+-- ============================================================================
+-- MACROS ORIGINAIS MODIFICADAS COM INTERRUPÇÃO DE SEGURANÇA
+-- ============================================================================
 Stairs.walk = macro(40, function()
-        if modules.corelib.g_keyboard.isKeyPressed("Escape") then
+    -- SEGURANÇA ABSOLUTA: Se soltar a barra de Espaço, cancela a subida na mesma hora!
+    if modules.corelib and modules.corelib.g_keyboard and type(modules.corelib.g_keyboard.isKeyPressed) == "function" then
+        if not modules.corelib.g_keyboard.isKeyPressed("Space") then
             return Stairs.walk.setOff()
         end
-        player:lockWalk(300)
-        if tryWalk then
-            return
-        end
-        markOnThing(Stairs.bestTile, "#00FF00")
-        if Stairs.bestTile:isWalkable() then
-            if not Stairs.bestTile:isPathable() then
-                if autoWalk(Stairs.pos, 1) then
-                    tryWalk = true
-                    return
-                end
+    end
+
+    if modules.corelib.g_keyboard.isKeyPressed("Escape") then
+        return Stairs.walk.setOff()
+    end
+    player:lockWalk(300)
+    if Stairs.config.tryWalk then return end
+
+    markOnThing(Stairs.bestTile, "#00FF00")
+    if Stairs.bestTile and Stairs.bestTile:isWalkable() then
+        if not Stairs.bestTile:isPathable() then
+            if autoWalk(Stairs.pos, 1) then
+                Stairs.config.tryWalk = true
+                return
             end
         end
-        return Stairs.goUse(Stairs.pos)
-    end)
-
+    end
+    return Stairs.goUse(Stairs.pos)
+end)
 Stairs.walk.setOff()
 
-macro(40,"Auto-Escadas", function()
-        if Stairs.walk.isOn() then
-            return
+macro(40, "Auto Escadas", function()
+    if Stairs.walk.isOn() then 
+        -- SEGURANÇA NA CORRIDA: Se a macro de andar estiver ativa mas você soltou o Espaço, desliga ela aqui também!
+        if modules.corelib.g_keyboard and not modules.corelib.g_keyboard.isKeyPressed("Space") then
+            Stairs.walk.setOff()
         end
-        local pos = Stairs.postostring(pos())
-        if pos ~= Stairs.lastPos then
+        return 
+    end
+    
+    local currentPos = Stairs.postostring(pos())
+    if currentPos ~= Stairs.lastPos then
+        local resultadoProvisorio = Stairs.checkAll()
+        if resultadoProvisorio then
             markOnThing(Stairs.bestTile, "")
-            Stairs.bestTile = Stairs.checkAll()
+            Stairs.bestTile = resultadoProvisorio
             Stairs.pos = Stairs.bestTile and Stairs.bestTile:getPosition()
-            markOnThing(Stairs.bestTile, "#FF0000")
-            Stairs.lastPos = pos
+            Stairs.lastPos = currentPos
+        elseif now - Stairs.config.ultimoSucessoRadar > 500 then
+            markOnThing(Stairs.bestTile, "")
+            Stairs.bestTile = nil
+            Stairs.pos = nil
         end
-        if
-            modules.corelib.g_keyboard.isKeyPressed("Space") and Stairs.bestTile and
-                not modules.game_console:isChatEnabled()
-         then
-            Stairs.walk.setOn()
-            return
-        else
-            return markOnThing(Stairs.bestTile, "#FF0000")
-        end
-    end)
-
-function checkPos(x, y)
-    local xyz = g_game.getLocalPlayer():getPosition()
-    xyz.x = xyz.x + x
-    xyz.y = xyz.y + y
-    local tile = g_map.getTile(xyz)
-    return tile and g_game.use(tile:getTopUseThing())
-end
-
-function getClosest(table)
-    local closest
-    if type(table) ~= "table" then
+    end
+    
+    if modules.corelib.g_keyboard.isKeyPressed("Space") and Stairs.bestTile and modules.game_console and not modules.game_console:isChatEnabled() then
+        Stairs.walk.setOn()
         return
-    end
-    for v, x in pairs(table) do
-        if not closest or Stairs.accurateDistance(closest) > Stairs.accurateDistance(x:getPosition()) then
-            closest = x
-        end
-    end
-    return closest and Stairs.accurateDistance(closest) or false
-end
-
-function hasNonWalkable(direc)
-    local tabela = {}
-    for i = 1, #direc do
-        local tile =
-            g_map.getTile(
-            {
-                x = player:getPosition().x + direc[i][1],
-                y = player:getPosition().y + direc[i][2],
-                z = player:getPosition().z
-            }
-        )
-        if tile and not tile:isWalkable(false) and tile:canShoot() then
-            table.insert(tabela, tile)
-        end
-    end
-    return tabela
-end
-
-function getClosestBetween(x, y)
-    if not x and not y then
-        return false
-    end
-    if x and not y then
-        return 1
-    elseif y and not x then
-        return 2
-    end
-    if x < y then
-        return 1
     else
-        return 2
+        return markOnThing(Stairs.bestTile, "#FF0000")
     end
-end
+end)
 
-function getDash(dir)
-    if not dir then
-        return false
-    end
-    local dirs = {}
-    local tiles = {}
-    local dirs = {}
-    if dir == "n" then
-        dirs = {{0, -1}, {0, -2}, {0, -3}, {0, -4}, {0, -5}, {0, -6}, {0, -7}, {0, -8}}
-    elseif dir == "s" then
-        dirs = {{0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5}, {0, 6}, {0, 7}, {0, 8}}
-    elseif dir == "w" then
-        dirs = {{-1, 0}, {-2, 0}, {-3, 0}, {-4, 0}, {-5, 0}, {-6, 0}}
-    elseif dir == "e" then
-        dirs = {{1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}, {6, 0}}
-    end
-    for i = 1, #dirs do
-        local tile =
-            g_map.getTile(
-            {
-                x = player:getPosition().x + dirs[i][1],
-                y = player:getPosition().y + dirs[i][2],
-                z = player:getPosition().z
-            }
-        )
-        if tile and Stairs.checkTile(tile) and tile:canShoot() then
-            table.insert(tiles, tile)
-        end
-    end
-    if not tiles[1] or getClosestBetween(getClosest(hasNonWalkable(dirs)), getClosest(tiles)) == 1 then
-        return false
-    else
-        return true
-    end
-end
-
--- Enter Rift (Versão Definitiva - Otimizada e Direcionada ao Label - smkmain.lua)
+-- Enter Rift (Versão Inteligente Ultra Performance - smkmain.lua)
 local PORTAL_ID = 11843
 local RANGE_X = 13       -- Limita a busca à largura real da tela do monitor
 local RANGE_Y = 7        -- Limita a busca à altura real da tela do monitor
@@ -1237,20 +1099,25 @@ local g_game_use = g_game.use
 
 local ultimoTickRift = 0
 
-macro(250, "Enter Rift", function() -- 250ms para pescar o portal instantaneamente
+macro(250, "Enter Rift", function()
     if not g_game.isOnline() then return end
     
+    local agoraRift = os.clock() * 1000
+    if agoraRift - ultimoTickRift < 250 then return end
+
+    -- Procura o item de forma global e instantânea na memória visual do cliente.
+    -- Se o portal NÃO existir na tela atual, mata a execução IMEDIATAMENTE sem rodar os loops pesados.
+    if not findItem(PORTAL_ID) then return end
+    
+    ultimoTickRift = agoraRift
+
     local player = getLocalPlayer()
     if not player then return end
 
     local playerPos = player:getPosition()
     if not playerPos then return end
 
-    local agoraRift = os.clock() * 1000
-    if agoraRift - ultimoTickRift < 250 then return end
-    ultimoTickRift = agoraRift
-
-    -- RADAR GEOMÉTRICO RESTRITO: Procura apenas nos tiles visíveis (Reduz de ~2000 tiles para apenas ~370)
+    -- RADAR GEOMÉTRICO RESTRITO: Só roda se o portal REALMENTE foi detectado na tela pelo findItem
     local searchPos = {x = 0, y = 0, z = playerPos.z}
     
     for x = -RANGE_X, RANGE_X do
@@ -1260,13 +1127,12 @@ macro(250, "Enter Rift", function() -- 250ms para pescar o portal instantaneamen
             
             local tile = getTile(searchPos)
             if tile then
-                -- BUSCA PROFUNDA (Sua lógica funcional de varrer os itens do piso)
                 local items = tile:getItems()
                 if items then
                     for i = 1, #items do
                         local item = items[i]
                         if item and item:getId() == PORTAL_ID then
-                            -- LOG DE SEGURANÇA: Mostra no terminal (Ctrl + T) que a macro funcionou
+                            -- LOG DE SEGURANÇA
                             print("[Dungeon] Rift encontrada.")
                             
                             -- Executa a ação nativa perfeita do jogo
