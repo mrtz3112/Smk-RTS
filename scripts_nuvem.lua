@@ -1199,66 +1199,30 @@ macro(250, "Enter Rift", function()
     end
 end)
 
--- Enter Dungeons
-local IDs_JANELAS_CONHECIDAS = { "dungeonwindow", "dungeonpanel", "riftwindow", "riftpanel" }
+--Enter Dungeons
+local window_name = "Dungeons"
+macro(2000, "Enter Dungeons", function()
+  if not g_game.isOnline() then return end
+  -- Se você NÃO estiver em Protection Zone (na hunt correndo risco), para a execução na hora.
+  if not isInPz() then 
+    return 
+  end
 
-macro(2000, "Enter Dungeon", function()
-    if not g_game.isOnline() then return end
-
-    -- TRAVA CIRÚRGICA DE ZONE: Só funciona se o jogador estiver dentro da Protection Zone (PZ)
-    -- Se você estiver fora de PZ (na hunt batendo nos bichos), aborta a macro em 0ms de CPU!
-    local localPlayer = g_game.getLocalPlayer()
-    if not localPlayer or not localPlayer:isProtectionZone() then
-        return
+  -- SUA LÓGICA ORIGINAL 100% FUNCIONAL RESTAURADA:
+  for i, rootW in pairs(g_ui.getRootWidget():getChildren()) do
+    if string.find(rootW:getText():lower(), window_name:lower()) then
+      for i, child in pairs(rootW:getChildren()) do
+          if child:getText() == "Start" then
+             child:onClick()
+ 
+             delay(1000)
+             break
+           end
+      end
+ 
+      break
     end
-
-    local rootWidget = g_ui.getRootWidget()
-    if not rootWidget then return end
-
-    -- 1. PONTEIROS DIRETOS: Busca instantânea na árvore de UI (0ms CPU)
-    for w = 1, #IDs_JANELAS_CONHECIDAS do
-        local window = rootWidget:getChildById(IDs_JANELAS_CONHECIDAS[w])
-        
-        -- Garante estritamente que a janela principal da Dungeon está ativa e visível
-        if window and window:isVisible() then
-            local btnStart = window:getChildById('startButton') or window:getChildById('start')
-            
-            if btnStart and btnStart:isEnabled() then
-                btnStart:onClick()
-                return -- Janela resolvida. Interrompe a execução na hora.
-            end
-        end
-    end
-
-    -- 2. FALLBACK SEGURO ANTI-MARKET: Corrigido contra erros de sintaxe (0ms CPU)
-    local janelas = rootWidget:getChildren()
-    if not janelas then return end
-    
-    for i = 1, #janelas do
-        local window = janelas[i]
-        
-        if window and window:isVisible() then
-            -- Captura o ID de forma totalmente segura e protegida contra funções nulas
-            local idJanelaRaw = ""
-            if type(window.getid) == "function" then 
-                idJanelaRaw = window:getid() 
-            elseif type(window.getId) == "function" then 
-                idJanelaRaw = window:getId() 
-            end
-            
-            local idJanela = tostring(idJanelaRaw or ""):lower()
-            
-            -- PROTEÇÃO EXTREMA: Passa longe do Market, do Trade e de Lojas do servidor
-            if idJanela ~= "" and not string.find(idJanela, "market") and not string.find(idJanela, "trade") and not string.find(idJanela, "shop") then
-                local btnStart = window:getChildById('startButton') or window:getChildById('start')
-                
-                if btnStart and btnStart:isEnabled() then
-                    btnStart:onClick()
-                    return
-                end
-            end
-        end
-    end
+  end
 end)
 
 --Auto Attack House Trainer
