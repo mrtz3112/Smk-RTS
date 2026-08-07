@@ -1198,7 +1198,7 @@ function getDash(dir)
     end
 end
 
--- Enter Rift (Versão Corrigida sem isContainer - smkmain.lua)
+-- Enter Rift (Versão Definitiva - Sem Trava de Posição Parada)
 local PORTAL_ID = 11843
 local RANGE_X = 13       
 local RANGE_Y = 7        
@@ -1207,8 +1207,6 @@ local getLocalPlayer = g_game.getLocalPlayer
 local getTile = g_map.getTile
 local g_game_use = g_game.use
 
-local ultimaPosX = 0
-local ultimaPosY = 0
 local ultimoTickRift = 0
 
 macro(400, "Enter Rift", function()
@@ -1220,33 +1218,34 @@ macro(400, "Enter Rift", function()
     local playerPos = player:getPosition()
     if not playerPos then return end
 
-    -- Aborta em 0ms se o boneco estiver parado
-    if playerPos.x == ultimaPosX and playerPos.y == ultimaPosY then
-        return
-    end
-    
+    -- Cooldown de 400ms para poupar processamento
     local agoraRift = os.clock() * 1000
     if agoraRift - ultimoTickRift < 400 then return end
     ultimoTickRift = agoraRift
 
-    ultimaPosX = playerPos.x
-    ultimaPosY = playerPos.y
+    -- PROTEÇÃO ABSOLUTA ANTI-MARKET: Se a janela do Market estiver aberta na UI,
+    -- aborta a macro na hora. Isso impede 100% o loop de reabrir a janela sozinho!
+    local rootWidget = g_ui.getRootWidget()
+    if rootWidget then
+        local marketWin = rootWidget:recursiveGetChildById("marketwindow") or rootWidget:recursiveGetChildById("marketpanel")
+        if marketWin and marketWin:isVisible() then
+            return 
+        end
+    end
 
+    -- Busca nativa do portal nos espectadores da tela
     local specs = g_map.getSpectatorsInRange(playerPos, false, RANGE_X, RANGE_Y)
     if specs then
         for i = 1, #specs do
             local creature = specs[i]
             if creature then
                 local tile = creature:getTile()
-                
                 if tile then
                     local topThing = tile:getTopUseThing()
                     if topThing and topThing:getId() == PORTAL_ID then
-                        -- PROTEÇÃO DO MOTOR GRÁFICO: Checa a posição real do item através do Tile.
-                        -- Se o item estiver no chão do mapa do jogo, as coordenadas X e Y serão maiores que zero.
-                        -- Se o item estiver dentro do painel do Market, a posição será inválida para o mapa.
                         local tilePos = tile:getPosition()
-                        if tilePos and tilePos.x > 0 and tilePos.y > 0 and tilePos.z == playerPos.z then
+                        -- Verifica se o portal está no mesmo andar que você
+                        if tilePos and tilePos.z == playerPos.z then
                             g_game_use(topThing)
                             return
                         end
@@ -1256,7 +1255,7 @@ macro(400, "Enter Rift", function()
         end
     end
     
-    -- Fallback ultra leve limitado ao chão ao redor do personagem
+    -- Fallback de curto alcance (Até 2 SQMs ao seu redor) caso o portal surja do seu lado
     local searchPos = {x = 0, y = 0, z = playerPos.z}
     for x = -2, 2 do
         searchPos.x = playerPos.x + x
@@ -1274,7 +1273,7 @@ macro(400, "Enter Rift", function()
     end
 end)
 
--- Gestor Unificado de Acesso (Versão Definitiva Protegida - smkmain.lua)
+-- Enter Dungeons
 local IDs_JANELAS_CONHECIDAS = { "dungeonwindow", "dungeonpanel", "riftwindow", "riftpanel" }
 
 macro(2000, "Enter Dungeon", function()
@@ -1287,33 +1286,40 @@ macro(2000, "Enter Dungeon", function()
     for w = 1, #IDs_JANELAS_CONHECIDAS do
         local window = rootWidget:getChildById(IDs_JANELAS_CONHECIDAS[w])
         
-        -- Garante estritamente que a janela está ativa e visível para o jogador
+        -- Garante estritamente que a janela principal da Dungeon está ativa e visível
         if window and window:isVisible() then
             local btnStart = window:getChildById('startButton') or window:getChildById('start')
             
-            if btnStart and btnStart:isVisible() and btnStart:isEnabled() then
+            if btnStart and btnStart:isEnabled() then
                 btnStart:onClick()
                 return -- Janela resolvida. Interrompe a execução na hora.
             end
         end
     end
 
-    -- 2. FALLBACK SEGURO ANTI-MARKET: Só analisa janelas filhas por ID, sem ler textos ou strings
+    -- 2. FALLBACK SEGURO ANTI-MARKET: Corrigido contra erros de sintaxe (0ms CPU)
     local janelas = rootWidget:getChildren()
     if not janelas then return end
     
     for i = 1, #janelas do
         local window = janelas[i]
-        -- PROTEÇÃO EXTREMA: Ignora na hora a janela se ela for do Market, Trade ou Loja
-        if window and window:isVisible() and window.getId and window:getId() then
-            local idJanela = tostring(window:getId()):lower()
+        
+        if window and window:isVisible() then
+            -- Captura o ID de forma totalmente segura e protegida contra funções nulas
+            local idJanelaRaw = ""
+            if type(window.getid) == "function" then 
+                idJanelaRaw = window:getid() 
+            elseif type(window.getId) == "function" then 
+                idJanelaRaw = window:getId() 
+            end
             
-            if not string.find(idJanela, "market") and not string.find(idJanela, "trade") and not string.find(idJanela, "shop") then
-                -- Busca o botão de confirmação direto sem loops recursivos pesados
+            local idJanela = tostring(idJanelaRaw or ""):lower()
+            
+            -- PROTEÇÃO EXTREMA: Passa longe do Market, do Trade e de Lojas do servidor
+            if idJanela ~= "" and not string.find(idJanela, "market") and not string.find(idJanela, "trade") and not string.find(idJanela, "shop") then
                 local btnStart = window:getChildById('startButton') or window:getChildById('start')
                 
-                -- Se a janela misteriosa tiver um botão de "Start" visível e clicável, executa
-                if btnStart and btnStart:isVisible() and btnStart:isEnabled() then
+                if btnStart and btnStart:isEnabled() then
                     btnStart:onClick()
                     return
                 end
@@ -1321,6 +1327,7 @@ macro(2000, "Enter Dungeon", function()
         end
     end
 end)
+
 
 --Auto Attack House Trainer
 if not storage.trainerMacroPauseUntil then
