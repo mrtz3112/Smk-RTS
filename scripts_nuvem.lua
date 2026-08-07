@@ -2385,7 +2385,7 @@ macro(100, function()
   if storage[panelName].setting and cacheHealSpell ~= "" then
     if hppercent() <= storage[panelName].hp then
         say(cacheHealSpell)
-		delay(500)
+		delay(250)
     end
   end
 end)
@@ -2421,7 +2421,7 @@ if not storage[panelName] then
   storage[panelName] = {
       enabled = false,
       setting = true,
-      hp = 70
+      hp = 60
   }
 end
 
