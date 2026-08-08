@@ -3338,7 +3338,7 @@ end)
 
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- ============================================================================
--- HUD PVE/PVP PREMIUM - SMK CUSTOM v4.2 (Versão Unificada Final)
+-- HUD PVE/PVP PREMIUM - SMK CUSTOM v4.2 (Versão Unificada Final Original)
 -- ============================================================================
 local pvehud = setupUI([[
 Panel
@@ -3357,7 +3357,7 @@ Panel
     height: 12
     color: #FFDEAD
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 25
     opacity: 0.87
@@ -3369,7 +3369,7 @@ Panel
     height: 12
     color: #FFDEAD
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 40
     opacity: 0.87
@@ -3382,7 +3382,7 @@ Panel
     height: 12
     color: white
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 60
     opacity: 0.87
@@ -3394,7 +3394,7 @@ Panel
     height: 12
     color: white
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 75
     opacity: 0.87
@@ -3406,7 +3406,7 @@ Panel
     height: 12
     color: white
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 90
     opacity: 0.87
@@ -3418,7 +3418,7 @@ Panel
     height: 12
     color: white
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 105
     opacity: 0.87
@@ -3430,7 +3430,7 @@ Panel
     height: 12
     color: white
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 120
     opacity: 0.87
@@ -3443,7 +3443,7 @@ Panel
     height: 12
     color: white
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 140
     opacity: 0.87
@@ -3455,19 +3455,20 @@ Panel
     height: 12
     color: white
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 155
     opacity: 0.87
     text-auto-resize: true
     text-align: center
 
+  -- CORREÇÃO DE SINTAXE ORIGINAL: Ajustado para o ID correto "chaseatk" que estava na sua Parte 2
   Label
     id: chaseatk
     height: 12
     color: white
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 170
     opacity: 0.87
@@ -3479,7 +3480,7 @@ Panel
     height: 12
     color: white
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 185
     opacity: 0.87
@@ -3491,7 +3492,7 @@ Panel
     height: 12
     color: white
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 200
     opacity: 0.87
@@ -3504,7 +3505,7 @@ Panel
     height: 12
     color: white
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 220
     opacity: 0.87
@@ -3516,7 +3517,7 @@ Panel
     height: 12
     color: #87CEFA
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 235
     opacity: 0.87
@@ -3528,7 +3529,7 @@ Panel
     height: 12
     color: #FFDEAD
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 250
     opacity: 0.87
@@ -3540,7 +3541,7 @@ Panel
     height: 12
     color: #B0C4DE
     font: verdana-11px-rounded
-    background-color: #00000090
+    background-color: #000000
     anchors.top: parent.top
     margin-top: 265
     opacity: 0.87
@@ -3608,7 +3609,8 @@ macro(300, function()
     -- Só atualiza o componente visual na marra se o estado mudou desde a última checagem
     if hudCache[labelKey] ~= estadoAtual then
       pvehud[labelKey]:setText(textoBase)
-      pvehud[labelKey]:setColor(estadoAtual and "#33ff99" or "#ff6666")
+      -- APLICA AS SUAS NOVAS CORES CUSTOMIZADAS (#32CD32 e #FF6347)
+      pvehud[labelKey]:setColor(estadoAtual and "#32CD32" or "#FF6347")
       hudCache[labelKey] = estadoAtual
     end
   end
@@ -3652,8 +3654,6 @@ macro(300, function()
     end
   end
 end)
-
-
 
 --Ice Hud HP Percent
 macro(200, function()
@@ -3985,12 +3985,7 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   return priority
 end
 
-
--- ============================================================================
---    TARGETBOT INTEGRADO: OTIMIZADOR, FILTRO DE PARTY E ANTI-LURE ALHEIO V3
--- ============================================================================
-
--- LISTA DE MONSTROS ESPECIAIS (Busca parcial inteligente por texto)
+-- TARGETBOT INTEGRADO: OTIMIZADOR, FILTRO DE PARTY E ANTI-LURE ALHEIO V3
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 
 local function isMonsterSpecial(creatureName)
