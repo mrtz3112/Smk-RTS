@@ -823,40 +823,29 @@ end)
 macro(300, "Enter Rift", function()
     local player = g_game.getLocalPlayer()
     if not player then return end
-    
     local playerPos = player:getPosition()
     if not playerPos then return end
-
-    local portalId = 11843 -- ID do seu portal da Rift
-    local raioBusca = 7    -- Varre um quadrante de 9x9 ao redor do boneco
-
+    local portalId = 11843
+    local raioBusca = 7
     for x = -raioBusca, raioBusca do
         for y = -raioBusca, raioBusca do
             local targetPos = {x = playerPos.x + x, y = playerPos.y + y, z = playerPos.z}
             local tile = g_map.getTile(targetPos)
-            
-            -- PROTEÇÃO CRÍTICA INTERNA: Valida o objeto e o tipo antes da chamada
             if tile and type(tile) == "userdata" and type(tile.getItems) == "function" then
-                -- Chamada estática segura que não quebra a Engine em C++ se o tile falhar
-                local success, items = pcall(tile.getItems, tile)
-                
+                local success, items = pcall(tile.getItems, tile)         
                 if success and items then
                     for i = 1, #items do
                         local item = items[i]
                         if item and item:getId() == portalId then
                             print("[Dungeon] Rift encontrada na coordenada X:"..targetPos.x.." Y:"..targetPos.y)
-                            playSound("/sounds/magnum.ogg")
-                            
-                            -- Interage com o portal (Dá Use/Clique)
+                            playSound("/sounds/magnum.ogg")                        
                             g_game.use(item)
-                            
-                            -- Altera a label para o início da rota do portal de forma limpa
                             if CaveBot and type(CaveBot.gotoLabel) == "function" then
                                 CaveBot.gotoLabel("Rift")
                                 if type(CaveBot.preNext) == "function" then CaveBot.preNext()
                                 elseif type(CaveBot.reload) == "function" then CaveBot.reload() end
                             end
-                            return -- Encontrou e usou, encerra o frame imediatamente
+                            return
                         end
                     end
                 end
@@ -864,7 +853,6 @@ macro(300, "Enter Rift", function()
         end
     end
 end)
-
 
 -- Auto Subir/Descer Escadas
 Stairs = {}
@@ -1198,142 +1186,6 @@ local trainerMacro = macro(100, "House Trainer", function(macroObj)
     g_game.attack(closestTrainer)
   end
 end)
-
--- Revide PK (Versão Otimizada - Sincronizada com SafeFightSync)
-local botsDesligadosPVP = false
-local ultimoModoAtaque = nil
-local ultimoTempoTrocaEstado = 0 
-local ultimoTempoTentativaAtaque = 0
-
-local ultimaPosX = 0
-local ultimaPosY = 0
-local ultimoTickRadar = 0
-
-local function definirModoAtaque(modo)
-    if ultimoModoAtaque == modo then return end
-    local rootWidget = g_ui.getRootWidget()
-    if not rootWidget then return end
-    local idBotao = (modo == "balanced") and "fightBalancedBox" or "fightOffensiveBox"
-    local targetButton = rootWidget:recursiveGetChildById(idBotao)
-    if targetButton then
-        pcall(function() targetButton:onClick() end)
-        ultimoModoAtaque = modo
-    end
-end
-
-macro(250, 'Revide PK', function()
-    if not g_game.isOnline() then return end
-    
-    local localPlayer = g_game.getLocalPlayer()
-    if not localPlayer then return end
-
-    local myPos = localPlayer:getPosition()
-    if not myPos then return end
-
-    local tempoAtual = os.clock() * 1000
-
-    -- FREIO DE PROCESSAMENTO: Janela adaptativa se o boneco estiver parado
-    local andou = (myPos.x ~= ultimaPosX or myPos.y ~= ultimaPosY)
-    if not andou and (tempoAtual - ultimoTickRadar < 400) then
-        return
-    end
-    ultimoTickRadar = tempoAtual
-    ultimaPosX, ultimaPosY = myPos.x, myPos.y
-
-    local agressorTarget = nil
-    local agressorHp = 101
-    local agressorDist = 100
-
-    local spectators = getSpectators(myPos)
-    for i = 1, #spectators do
-        local creature = spectators[i]
-        
-        if creature and creature:isPlayer() and creature ~= localPlayer then
-            local targetPos = creature:getPosition()
-            
-            local dx = math.abs(myPos.x - targetPos.x)
-            local dy = math.abs(myPos.y - targetPos.y)
-            
-            if dx <= 13 and dy <= 7 and targetPos.z == myPos.z then
-                local estaMeAtacando = false
-                if creature.isAttacking then
-                    estaMeAtacando = creature:isAttacking()
-                else
-                    estaMeAtacando = (g_game.getAttackingCreature() == creature or creature:isTimedSquareVisible())
-                end
-
-                if estaMeAtacando then
-                    local specHp = creature:getHealthPercent()
-                    local specDist = dx + dy
-                    
-                    if specHp and specHp > 0 and creature:canShoot() then
-                        if not agressorTarget or specHp < agressorHp or (specHp == agressorHp and specDist < agressorDist) then
-                            agressorTarget = creature
-                            agressorHp = specHp
-                            agressorDist = specDist
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    if agressorTarget then
-        if not botsDesligadosPVP then
-            if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
-                if CaveBot and CaveBot.setOff then CaveBot.setOff() end
-                if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
-                definirModoAtaque("balanced") -- Ao mudar para balanced, sua macro SafeFightSync desativa o SafeFight automaticamente
-                botsDesligadosPVP = true
-                ultimoTempoTrocaEstado = tempoAtual 
-            end
-        end
-        
-        if g_game.getAttackingCreature() ~= agressorTarget and (tempoAtual - ultimoTempoTentativaAtaque >= 1000) then
-            g_game.attack(agressorTarget) 
-            ultimoTempoTentativaAtaque = tempoAtual
-        end
-    else
-        if botsDesligadosPVP then
-            local alvoAtualJogo = g_game.getAttackingCreature()
-            if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
-                if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
-                    definirModoAtaque("offensive") -- Ao mudar para offensive, sua macro SafeFightSync ativa o SafeFight automaticamente
-                    if CaveBot and CaveBot.setOn then CaveBot.setOn() end
-                    if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
-                    botsDesligadosPVP = false
-                    ultimoTempoTrocaEstado = tempoAtual 
-                end
-            end
-        end
-    end
-end)
-
---SafeFightSync
-local ultimoEstadoSeguro = nil
-macro(100, function()
-    local rootWidget = g_ui.getRootWidget()
-    if not rootWidget then return end
-    local bBalanced = rootWidget:recursiveGetChildById("fightBalancedBox")
-    local estaNoBalanced = bBalanced and (bBalanced:isOn() or bBalanced:isChecked())
-
-    if estaNoBalanced then
-        if ultimoEstadoSeguro ~= true then
-            if g_game.setSafeFight then 
-                pcall(function() g_game.setSafeFight(false) end) 
-            end
-            ultimoEstadoSeguro = true
-        end
-    else
-        if ultimoEstadoSeguro ~= false then
-            if g_game.setSafeFight then 
-                pcall(function() g_game.setSafeFight(true) end) 
-            end
-            ultimoEstadoSeguro = false
-        end
-    end
-end)
-
 UI.Separator()
 --Eat Food
 local panelName = "AutoFood"
@@ -1530,7 +1382,17 @@ setDefaultTab("Fight")
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 UI.Label("~ Spell Caster ~"):setColor('#DEB887')
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
--- Smart Cast (Versão Ultra-Otimizada Anti-Lag com Lazy Scanning)
+-- ============================================================================
+--    SMART CAST INTEGRADO (VERSÃO ULTRA-CALIBRADA COM MODO ABSOLUTO PVP)
+-- ============================================================================
+
+-- OBJETO FANTASMA DE SEGURANÇA: Mantém o Painel de Botões estável
+lowhp = {
+    isOn = function() return false end,
+    setOn = function() end,
+    setOff = function() end
+}
+
 local alcanceMaximoTarget = 4 
 local raioDeAreaDoMonstro = 3 
 local amountOfMonsters = 2
@@ -1538,7 +1400,12 @@ local amountOfMonsters = 2
 local indexArea, indexSingle = 1, 1
 local cacheAreaSpells = {}
 local cacheSingleSpells = {}
+local cacheHpSpell = ""
 local ultimoTempoCombo = 0
+
+-- Configuração do painel de HP integrado
+local panelNameTarget = "hpbelowconfig"
+if storage[panelNameTarget] == nil then storage[panelNameTarget] = { hp = 80 } end
 
 local function atualizarCacheSpells()
     cacheAreaSpells = {}
@@ -1549,15 +1416,39 @@ local function atualizarCacheSpells()
     if storage.spell01 and storage.spell01 ~= "" then table.insert(cacheSingleSpells, storage.spell01) end
     if storage.spell02 and storage.spell02 ~= "" then table.insert(cacheSingleSpells, storage.spell02) end
     if storage.spell03 and storage.spell03 ~= "" then table.insert(cacheSingleSpells, storage.spell03) end
+
+    cacheHpSpell = storage.hpspell or ""
 end
 
--- Mantido a 200ms para varredura, mas protegido por barreira de execução e tempo
+-- CONTADOR DE MONSTROS LEVE
+local function contarMonstrosAoRedor(targetPos)
+    local total = 0
+    local mobsAoRedorDoAlvo = g_map.getSpectatorsInRange(targetPos, false, raioDeAreaDoMonstro, raioDeAreaDoMonstro)
+    if mobsAoRedorDoAlvo then
+        local totalMobs = #mobsAoRedorDoAlvo
+        for i = 1, totalMobs do
+            local mob = mobsAoRedorDoAlvo[i]
+            if mob and mob:isMonster() and mob:getHealthPercent() > 0 then
+                local mobPos = mob:getPosition()
+                if mobPos and mobPos.z == targetPos.z then
+                    if math.abs(targetPos.x - mobPos.x) <= raioDeAreaDoMonstro and math.abs(targetPos.y - mobPos.y) <= raioDeAreaDoMonstro then
+                        total = total + 1
+                        if total >= amountOfMonsters then break end
+                    end
+                end
+            end
+        end
+    end
+    return total
+end
+
+-- MACRO UNIFICADA: Tudo roda síncrono sob o comando do "Smart Cast"
 combo = macro(200, "Smart Cast", function()
     if not g_game.isOnline() or not g_game.isAttacking() then return end     
     
     local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
     
-    -- FREIO DE PROCESSAMENTO E COOLDOWN: Pulula o ciclo se a thread enviou pacote recentemente
+    -- FREIO DE PROCESSAMENTO CONTRA FLOOD
     if agora - ultimoTempoCombo < 200 then
         return
     end
@@ -1572,44 +1463,58 @@ combo = macro(200, "Smart Cast", function()
     local minhaPos = localPlayer:getPosition()
     if not minhaPos or minhaPos.z ~= targetPos.z then return end
 
-    local distToTargetX = math.abs(minhaPos.x - targetPos.x)
-    local distToTargetY = math.abs(minhaPos.y - targetPos.y)
-    if distToTargetX > alcanceMaximoTarget or distToTargetY > alcanceMaximoTarget then return end
-
-    local atacandoPlayer = target:isPlayer()
-    local specAmount = 0  
-    
-    -- LAZY SCANNING: Se for PvP, ignora completamente a contagem de monstros (Poupe 100% de CPU)
-    if not atacandoPlayer then
-        local mobsAoRedorDoAlvo = g_map.getSpectatorsInRange(targetPos, false, raioDeAreaDoMonstro, raioDeAreaDoMonstro)
-        if mobsAoRedorDoAlvo then
-            local totalMobs = #mobsAoRedorDoAlvo
-            for i = 1, totalMobs do
-                local mob = mobsAoRedorDoAlvo[i]
-                if mob and mob:isMonster() and mob:getHealthPercent() > 0 then
-                    local mobPos = mob:getPosition()
-                    if mobPos and mobPos.z == targetPos.z then
-                        local distX = math.abs(targetPos.x - mobPos.x)
-                        local distY = math.abs(targetPos.y - mobPos.y)
-                        
-                        if distX <= raioDeAreaDoMonstro and distY <= raioDeAreaDoMonstro then
-                            specAmount = specAmount + 1
-                            if specAmount >= amountOfMonsters then break end
-                        end
-                    end
-                end
-            end
-        end
+    -- VALIDAÇÃO DE DISTÂNCIA
+    if math.abs(minhaPos.x - targetPos.x) > alcanceMaximoTarget or math.abs(minhaPos.y - targetPos.y) > alcanceMaximoTarget then 
+        return 
     end
+
+    local targetHp = target:getHealthPercent()
+    local atacandoPlayer = target:isPlayer()
+
+    -- ========================================================================
+    -- [MODO PVP REGRA ABSOLUTA]: INTERCEPTAÇÃO SE O ALVO FOR UM PLAYER
+    -- Se estiver atacando um jogador, usa APENAS a Spell at Target HP ou a Single!
+    -- ========================================================================
+    if atacandoPlayer then
+        -- 1. Executa a Spell at Target HP se a vida do Player estiver abaixo do limite
+        if targetHp <= storage[panelNameTarget].hp and cacheHpSpell ~= "" then
+            say(cacheHpSpell)
+            ultimoTempoCombo = agora
+            return
+        end
+
+        -- 2. Se a vida do Player estiver alta, força estritamente a rotação Single (Ignora Área totalmente)
+        local totalSingle = #cacheSingleSpells
+        if totalSingle > 0 then
+            if indexSingle > totalSingle then indexSingle = 1 end
+            say(cacheSingleSpells[indexSingle])
+            indexSingle = indexSingle + 1
+            ultimoTempoCombo = agora
+        end
+        return -- Encerra o frame aqui para garantir que nenhuma lógica de monstros seja processada
+    end
+
+    -- ========================================================================
+    -- [MODO PVE PADRÃO]: EXECUÇÃO SE O ALVO FOR UM MONSTRO/ELITE
+    -- ========================================================================
     
-    -- PROCESSAMENTO DO COMBO COM FORMATO BLINDADO
-    if specAmount >= amountOfMonsters and not atacandoPlayer then
+    -- 1. Executa a Spell at Target HP contra o monstro se a vida dele estiver baixa
+    if targetHp <= storage[panelNameTarget].hp and cacheHpSpell ~= "" then
+        say(cacheHpSpell)
+        ultimoTempoCombo = agora
+        return
+    end
+
+    -- 2. Varre o chão para saber se usa Área ou Single contra o monstro
+    local specAmount = contarMonstrosAoRedor(targetPos)
+    
+    if specAmount >= amountOfMonsters then
         local totalArea = #cacheAreaSpells
         if totalArea > 0 then
             if indexArea > totalArea then indexArea = 1 end
             say(cacheAreaSpells[indexArea])
             indexArea = indexArea + 1
-            ultimoTempoCombo = agora -- Ativa a trava de tempo contra flood
+            ultimoTempoCombo = agora
         end
     else
         local totalSingle = #cacheSingleSpells
@@ -1617,64 +1522,32 @@ combo = macro(200, "Smart Cast", function()
             if indexSingle > totalSingle then indexSingle = 1 end
             say(cacheSingleSpells[indexSingle])
             indexSingle = indexSingle + 1
-            ultimoTempoCombo = agora -- Ativa a trava de tempo contra flood
+            ultimoTempoCombo = agora
         end
     end
 end)
--- Interface Gráfica (UI)
+
+-- ============================================================================
+--    DESIGN GRÁFICO DA INTERFACE UNIFICADA (UI)
+-- ============================================================================
 UI.Separator()
 UI.Label("Area (2+ Mobs)"):setColor('#F5F5DC')
 UI.Separator()
 UI.TextEdit(storage.areaspell01 or "", function(widget, text) storage.areaspell01 = text; atualizarCacheSpells() end)
 UI.TextEdit(storage.areaspell02 or "", function(widget, text) storage.areaspell02 = text; atualizarCacheSpells() end)
+
 UI.Separator()
 UI.Label("Single"):setColor('#F5F5DC')
 UI.Separator()
 UI.TextEdit(storage.spell01 or "", function(widget, text) storage.spell01 = text; atualizarCacheSpells() end)
 UI.TextEdit(storage.spell02 or "", function(widget, text) storage.spell02 = text; atualizarCacheSpells() end)
 UI.TextEdit(storage.spell03 or "", function(widget, text) storage.spell03 = text; atualizarCacheSpells() end)
-atualizarCacheSpells()
-UI.Label("-----------------------------------"):setColor('#FFDEAD')
-UI.Label("~ Others ~"):setColor('#DEB887')
-UI.Label("-----------------------------------"):setColor('#FFDEAD')
--- [INICIALIZAÇÃO] CONFIGURAÇÃO DE MEMÓRIA DO PAINEL FIGHT
-if storage.painelSalvo == nil then storage.painelSalvo = {} end
-if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
-if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 
--- SPELL AT TARGET HP (Apenas em Players - Versão Ultra-Otimizada)
-local panelNameTarget = "hpbelowconfig"
+UI.Separator()
+UI.Label("Spell at Target HP"):setColor('#F5F5DC')
+UI.Separator()
 
--- Garante que as tabelas de armazenamento existam com segurança
-if storage[panelNameTarget] == nil then storage[panelNameTarget] = { hp = 80 } end
-if storage.painelSalvo == nil then storage.painelSalvo = { special = false } end
-
--- Cache da magia para evitar leitura de disco/storage a cada 100ms
-local cacheHpSpell = storage.hpspell or ""
-local ultimoTempoAtaque = 0
-
--- [PADRÃO SMART CAST]: Registro nativo. Cria o botão verde automático sincronizado com o painel
-lowhp = macro(100, "Spell at Target HP", function()
-    if not g_game.isOnline() or not g_game.isAttacking() then return end  
-    
-    local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-    
-    -- FREIO DE SPAM DE ATAQUE: Se já enviou o comando nos últimos 250ms, segura a rajada lixo
-    if agora - ultimoTempoAtaque < 200 then
-        return
-    end
-
-    local target = g_game.getAttackingCreature()
-    if not target or not target:isPlayer() then return end
-    
-    -- Executa se a vida do alvo for menor ou igual e o cache da magia não estiver vazio
-    if target:getHealthPercent() <= storage[panelNameTarget].hp and cacheHpSpell ~= "" then
-        say(cacheHpSpell)
-        ultimoTempoAtaque = agora -- Atualiza a trava de tempo
-    end
-end)
-
--- Interface Gráfica (UI) - Contém APENAS a barra de rolagem (Sem o botão duplicado)
+-- Injeção nativa da Barra de Rolagem de HP
 local uiHP = setupUI([[
 Panel
   height: 20
@@ -1703,14 +1576,17 @@ end
 uiHP.HP:setValue(storage[panelNameTarget].hp)
 updateHpTextTarget()
 
--- Atualiza o cache imediatamente quando você digita a magia
+-- Caixa de texto da magia de Target HP posicionada embaixo da barra
 UI.TextEdit(storage.hpspell or "", function(widget, text) 
     storage.hpspell = text 
-    cacheHpSpell = text
+    atualizarCacheSpells()
 end)
 
-UI.Separator()
-
+-- Inicializa os caches ao carregar o script
+atualizarCacheSpells()
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
+UI.Label("~ Others ~"):setColor('#DEB887')
+UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- [SINCRONIZADOR NATÍVO OTIMIZADO]: Monitora sem estressar a memória RAM contínua
 local ultimoEstadoSalvo = nil
 macro(400, function()
@@ -1867,27 +1743,26 @@ end)
 
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- ============================================================================
---    SPELL CASTER PANEL COMPLETO (VERSÃO UNIFICADA - BOTÃO BRANCO "TROCAR SET")
+--    SPELL CASTER PANEL - PARTE 1 (LAYOUTS COM NOMES SMART CAST / CHANGE SET)
 -- ============================================================================
 
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
-if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
-if storage.painelSalvo.selfSpecial == nil then storage.painelSalvo.selfSpecial = false end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
+if storage.painelSalvo.revideAtivo == nil then storage.painelSalvo.revideAtivo = false end
 if storage.painelSalvo.horizontal == nil then storage.painelSalvo.horizontal = false end
 if storage.painelSalvo.modoPvP == nil then storage.painelSalvo.modoPvP = false end
 
 local painelIconesUI = nil
 local ultimoIdPlayerPainel = 0
 
--- LAYOUT MODO VERTICAL
+-- LAYOUT MODO VERTICAL (Largura confortável de 114 pixels)
 local layoutVertical = [[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Spell Caster')
   color: #FFDEAD
-  size: 92 208
+  size: 114 208
   focusable: false
   draggable: true
   phantom: false
@@ -1899,44 +1774,44 @@ MainWindow
 
     Button
       id: botaoSpells
-      !text: tr('Area/Single')
-      size: 78 24
+      !text: tr('Smart Cast')
+      size: 100 24
       anchors.top: parent.top
       anchors.horizontalCenter: parent.horizontalCenter
       margin-left: 1
 
     Button
-      id: botaoSpecial
-      !text: tr('Target HP')
-      size: 78 24
+      id: botaoWave
+      !text: tr('Wave (Reta)')
+      size: 100 24
       anchors.top: botaoSpells.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 4
       margin-left: 1
 
     Button
-      id: botaoSelfSpecial
-      !text: tr('Self HP')
-      size: 78 24
-      anchors.top: botaoSpecial.bottom
+      id: botaoRevidePK
+      !text: tr('Revide PK')
+      size: 100 24
+      anchors.top: botaoWave.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 4
       margin-left: 1
 
     Button
-      id: botaoWave
-      !text: tr('Wave (Reta)')
-      size: 78 24
-      anchors.top: botaoSelfSpecial.bottom
+      id: botaoCaveTarget
+      !text: tr('Stop Bot')
+      size: 100 24
+      anchors.top: botaoRevidePK.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 4
       margin-left: 1
 
     Button
       id: botaoSetEquip
-      !text: tr('Trocar Set')
-      size: 78 24
-      anchors.top: botaoWave.bottom
+      !text: tr('Change Set')
+      size: 100 24
+      anchors.top: botaoCaveTarget.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 4
       margin-left: 1
@@ -1944,20 +1819,20 @@ MainWindow
     Button
       id: botaoGirar
       !text: tr('Girar')
-      size: 78 18
+      size: 100 18
       anchors.top: botaoSetEquip.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 10
       margin-left: 1
 ]]
 
--- LAYOUT MODO HORIZONTAL
+-- LAYOUT MODO HORIZONTAL (Largura de 578 pixels)
 local layoutHorizontal = [[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Spell Caster')
   color: #FFDEAD
-  size: 494 75
+  size: 578 75
   focusable: false
   draggable: true
   phantom: false
@@ -1969,46 +1844,46 @@ MainWindow
 
     Button
       id: botaoSpells
-      !text: tr('Area/Single')
-      size: 80 24
+      !text: tr('Smart Cast')
+      size: 94 24
       anchors.top: parent.top
       anchors.left: parent.left
       margin-top: 0
       margin-left: 2
 
     Button
-      id: botaoSpecial
-      !text: tr('Target HP')
-      size: 80 24
+      id: botaoWave
+      !text: tr('Wave (Reta)')
+      size: 94 24
       anchors.top: parent.top
       anchors.left: botaoSpells.right
       margin-top: 0
       margin-left: 4
 
     Button
-      id: botaoSelfSpecial
-      !text: tr('Self HP')
-      size: 80 24
+      id: botaoRevidePK
+      !text: tr('Revide PK')
+      size: 94 24
       anchors.top: parent.top
-      anchors.left: botaoSpecial.right
+      anchors.left: botaoWave.right
       margin-top: 0
       margin-left: 4
 
     Button
-      id: botaoWave
-      !text: tr('Wave (Reta)')
-      size: 80 24
+      id: botaoCaveTarget
+      !text: tr('Stop Bot')
+      size: 94 24
       anchors.top: parent.top
-      anchors.left: botaoSelfSpecial.right
+      anchors.left: botaoRevidePK.right
       margin-top: 0
       margin-left: 4
 
     Button
       id: botaoSetEquip
-      !text: tr('Trocar Set')
-      size: 80 24
+      !text: tr('Change Set')
+      size: 94 24
       anchors.top: parent.top
-      anchors.left: botaoWave.right
+      anchors.left: botaoCaveTarget.right
       margin-top: 0
       margin-left: 4
 
@@ -2021,6 +1896,9 @@ MainWindow
       margin-top: 0
       margin-left: 4
 ]]
+-- ============================================================================
+--    SPELL CASTER PANEL - PARTE 2 (VERSÃO ESTABILIZADA DIRETAMENTE PARA REVIDEPKMACRO)
+-- ============================================================================
 
 local function isMacroActive(macroRef)
     if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
@@ -2036,12 +1914,10 @@ local function forcarModoAtaquePeloBotao(modo)
     if not rootWidget then return end
     local idBotao = (modo == "balanced") and "fightBalancedBox" or "fightOffensiveBox"
     local targetButton = rootWidget:recursiveGetChildById(idBotao)
-    if targetButton then
-        pcall(function() targetButton:onClick() end)
-    end
+    if targetButton then pcall(function() targetButton:onClick() end) end
 end
 
--- Aplica as cores hexadecimais de forma contínua
+-- Aplica as cores hexadecimais de forma contínua para os botões coloridos
 local function pintarBotaoSeguro(container, idBotao, condicaoVerde)
     local btn = container:getChildById(idBotao)
     if btn and type(btn.setColor) == "function" then
@@ -2055,24 +1931,22 @@ local function atualizarCoresPainelCompleto()
     local container = painelIconesUI:getChildById("containerIcones")
     if not container then return end
 
-    pintarBotaoSeguro(container, "botaoSpecial", isMacroActive(lowhp))
-    pintarBotaoSeguro(container, "botaoSelfSpecial", isMacroActive(selflowhp))
+    -- Sincroniza as cores das macros operacionais (Verde para ON / Vermelho para OFF)
     pintarBotaoSeguro(container, "botaoSpells", isMacroActive(combo))
     pintarBotaoSeguro(container, "botaoWave", isMacroActive(turnCombo))
+    
+    -- CONEXÃO REMOTA DIRETA: Lê o status REAL e síncrono da macro 'revidePKMacro' na memória RAM
+    pintarBotaoSeguro(container, "botaoRevidePK", isMacroActive(revidePKMacro))
+    
+    -- FORÇA A COR BRANCA FIXA (#FFFFFF) NOS BOTÕES DE UTILITÁRIOS ESTÁTICOS
+    local btnCaveTarget = container:getChildById("botaoCaveTarget")
+    if btnCaveTarget and type(btnCaveTarget.setColor) == "function" then
+        pcall(function() btnCaveTarget:setColor("#FFFFFF") end)
+    end
 
-    -- SINCRONIZAÇÃO E COR BRANCA FIXA PARA O BOTÃO "TROCAR SET"
-    local rootWidget = g_ui.getRootWidget()
-    if rootWidget and storage and storage.painelSalvo then
-        local bBalanced = rootWidget:recursiveGetChildById("fightBalancedBox")
-        local estaNoModoPvP = bBalanced and (bBalanced:isOn() or bBalanced:isChecked())
-        
-        storage.painelSalvo.modoPvP = estaNoModoPvP
-
-        local btnSet = container:getChildById("botaoSetEquip")
-        if btnSet and type(btnSet.setColor) == "function" then
-            -- Força a cor branca (#FFFFFF) de forma estática, ignorando o estado PvE/PvP
-            pcall(function() btnSet:setColor("#FFFFFF") end)
-        end
+    local btnSet = container:getChildById("botaoSetEquip")
+    if btnSet and type(btnSet.setColor) == "function" then 
+        pcall(function() btnSet:setColor("#FFFFFF") end) 
     end
 end
 
@@ -2082,10 +1956,10 @@ local function alternarEstadoMacro(macroRef, storageKey)
     if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
         if isMacroActive(macroRef) then
             pcall(function() macroRef.setOff() end)
-            if storage and storage.painelSalvo then storage.painelSalvo[storageKey] = false end
+            if storage.painelSalvo then storage.painelSalvo[storageKey] = false end
         else
             pcall(function() macroRef.setOn() end)
-            if storage and storage.painelSalvo then storage.painelSalvo[storageKey] = true end
+            if storage.painelSalvo then storage.painelSalvo[storageKey] = true end
         end
     else
         if storage and storage.painelSalvo then
@@ -2097,34 +1971,54 @@ end
 
 conectarComponentesPainel = function()
     if not painelIconesUI then return end
-    
-    painelIconesUI.onMousePress = function(widget, mousePos, button) return true end
-    painelIconesUI.onMouseRelease = function(widget, mousePos, button) return true end
+    painelIconesUI.onMousePress = function() return true end
+    painelIconesUI.onMouseRelease = function() return true end
     
     local container = painelIconesUI:getChildById("containerIcones")
     if not container then return end
     
-    local btnSpecial = container:getChildById("botaoSpecial")
-    local btnSelfSpecial = container:getChildById("botaoSelfSpecial")
     local btnSpells = container:getChildById("botaoSpells")
     local btnWave = container:getChildById("botaoWave")
+    local btnRevidePK = container:getChildById("botaoRevidePK")
+    local btnCaveTarget = container:getChildById("botaoCaveTarget")
     local btnSetEquip = container:getChildById("botaoSetEquip")
     local btnGirar = container:getChildById("botaoGirar")
     
-    if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
-    if btnSelfSpecial then btnSelfSpecial.onClick = function() alternarEstadoMacro(selflowhp, "selfSpecial") end end
     if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
     if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
     
-    -- LÓGICA DE CLIQUE: Alterna clicando nas caixas reais da interface do jogo
+    -- CONEXÃO CORRIGIDA DO CLIQUE: Alterna diretamente a macro nativa vinculada ao ponteiro correto
+    if btnRevidePK then 
+        btnRevidePK.onClick = function() 
+            alternarEstadoMacro(revidePKMacro, "revideAtivo") 
+        end 
+    end
+    
+    -- LÓGICA DE PÂNICO STOP BOT
+    if btnCaveTarget then
+        btnCaveTarget.onClick = function()
+            local caveLigado = CaveBot and type(CaveBot.isOn) == "function" and CaveBot.isOn()
+            local targetLigado = TargetBot and type(TargetBot.isOn) == "function" and TargetBot.isOn()
+            
+            if caveLigado or targetLigado then
+                if CaveBot and type(CaveBot.setOff) == "function" then CaveBot.setOff()
+                elseif CaveBot and type(CaveBot.stop) == "function" then CaveBot.stop() end
+
+                if TargetBot and type(TargetBot.setOff) == "function" then TargetBot.setOff()
+                elseif TargetBot and type(TargetBot.stop) == "function" then TargetBot.stop() end
+            end
+            atualizarCoresPainelCompleto()
+        end
+    end
+
+    -- LÓGICA DE CLIQUE CHANGE SET
     if btnSetEquip then
         btnSetEquip.onClick = function()
-            if storage and storage.painelSalvo and g_game.isOnline() then
-                if storage.painelSalvo.modoPvP then
-                    forcarModoAtaquePeloBotao("offensive")
-                else
-                    forcarModoAtaquePeloBotao("balanced")
-                end
+            if storage.painelSalvo and g_game.isOnline() then
+                local rootWidget = g_ui.getRootWidget()
+                local bBalanced = rootWidget and rootWidget:recursiveGetChildById("fightBalancedBox")
+                local modoPvP = bBalanced and (bBalanced:isOn() or bBalanced:isChecked())
+                forcarModoAtaquePeloBotao(modoPvP and "offensive" or "balanced")
                 atualizarCoresPainelCompleto()
             end
         end
@@ -2144,31 +2038,28 @@ conectarComponentesPainel = function()
     atualizarCoresPainelCompleto()
 end
 
--- INITIALIZAÇÃO INDESTRUTÍVEL
+-- INITIALIZAÇÃO INDESTRUTÍVEL (Limpa clones antigos antes de criar)
 local mapPanel = modules.game_interface and modules.game_interface.getMapPanel and modules.game_interface.getMapPanel()
 if mapPanel and storage and storage.painelSalvo then
     local janelasNoPainel = mapPanel:getChildren()
     if janelasNoPainel then
         for i = 1, #janelasNoPainel do
             local j = janelasNoPainel[i]
-            if j and j:getId() == "painelMacrosJanela" then
-                j:destroy()
-            end
+            if j and j:getId() == "painelMacrosJanela" then j:destroy() end
         end
     end
-
     local layoutInicial = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
     painelIconesUI = setupUI(layoutInicial, mapPanel)
     conectarComponentesPainel()
 end
 
--- LOOP DE ATUALIZAÇÃO CONTÍNUA RECALIBRADO
-local jaSincronizou = false
+-- LOOP DE ATUALIZAÇÃO CONTÍNUA RECALIBRADO (Removido loops redundantes que causavam o "pula-pula" de status)
 macro(400, function() 
     if not g_game.isOnline() or not painelIconesUI then return end
-    
-    local player = g_game.getLocalPlayer()
+    atualizarCoresPainelCompleto()
 end)
+
+
 
 setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
@@ -2978,16 +2869,40 @@ end)
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 UI.Label("~ HUD Hotkeys ~"):setColor('#DEB887')
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
--- 1. START/STOP CAVEBOT (Otimizado com Anti-Spam e Filtro de Estado)
+-- ============================================================================
+--    CONTROLE CAVE/TARGET (VERSÃO INTEGRADA AO PAINEL SPELL CASTER - 8.54)
+-- ============================================================================
+
 local ultimoApertoCave = 0
+local ultimoApertoTarget = 0
+
+-- FUNÇÃO GLOBAL DE SINCRONIZAÇÃO: Garante que os dois botões liguem/desliguem juntos
+local function alternarMotoresHunt(forcarLigar)
+    if forcarLigar then
+        if CaveBot and type(CaveBot.setOn) == "function" then CaveBot.setOn()
+        elseif CaveBot and type(CaveBot.start) == "function" then CaveBot.start() end
+
+        if TargetBot and type(TargetBot.setOn) == "function" then TargetBot.setOn()
+        elseif TargetBot and type(TargetBot.start) == "function" then TargetBot.start() end
+    else
+        if CaveBot and type(CaveBot.setOff) == "function" then CaveBot.setOff()
+        elseif CaveBot and type(CaveBot.stop) == "function" then CaveBot.stop() end
+
+        if TargetBot and type(TargetBot.setOff) == "function" then TargetBot.setOff()
+        elseif TargetBot and type(TargetBot.stop) == "function" then TargetBot.stop() end
+    end
+end
+
+-- ============================================================================
+-- 1. START/STOP CAVEBOT (HOTKEY CTRL+1)
+-- ============================================================================
 hotkey("CTRL+1", function()
     local agora = os.clock() * 1000
-    if agora - ultimoApertoCave < 300 then return end -- Bloqueia spam de cliques em 300ms
+    if agora - ultimoApertoCave < 300 then return end 
     if SMK_MudandoDeMapaMute then return end
     ultimoApertoCave = agora
 
     if CaveBot and type(CaveBot.isOn) == "function" then
-        -- Usa diretamente as funções nativas de parada/início sem loops redundantes
         if CaveBot.isOn() then
             if type(CaveBot.stop) == "function" then CaveBot.stop() 
             elseif type(CaveBot.setOff) == "function" then CaveBot.setOff() end
@@ -2998,11 +2913,12 @@ hotkey("CTRL+1", function()
     end
 end)
 
--- 2. START/STOP TARGETBOT (Otimizado com Anti-Spam e Filtro de Estado)
-local ultimoApertoTarget = 0
+-- ============================================================================
+-- 2. START/STOP TARGETBOT (HOTKEY CTRL+2)
+-- ============================================================================
 hotkey("CTRL+2", function()
     local agora = os.clock() * 1000
-    if agora - ultimoApertoTarget < 300 then return end -- Bloqueia spam de cliques em 300ms
+    if agora - ultimoApertoTarget < 300 then return end 
     if SMK_MudandoDeMapaMute then return end
     ultimoApertoTarget = agora
 
@@ -3016,6 +2932,33 @@ hotkey("CTRL+2", function()
         end
     end
 end)
+
+-- ============================================================================
+-- 3. GANCHO OPERACIONAL DO PAINEL (CONECTA O BOTÃO DA INTERFACE AOS MOTORES)
+-- ============================================================================
+-- Esta função substitui a lógica interna do painel antiga, fazendo com que o clique
+-- no botão gerencie os dois sistemas de forma síncrona e impecável.
+if CaveBot and TargetBot then
+    -- Registra na memória global a função para o painel poder acionar remotamente
+    if type(CaveBot.setWaypoint) == "function" or type(CaveBot.isOn) == "function" then
+        -- Interceptador injetado com segurança em C++
+        pcall(function()
+            -- Cria uma ponte para que o clique do botão use a nossa função alternarMotoresHunt
+            CaveBot.Extensions = CaveBot.Extensions or {}
+            CaveBot.Extensions.MasterControl = function()
+                local caveLigado = CaveBot.isOn()
+                local targetLigado = TargetBot.isOn()
+                
+                -- Se qualquer um dos dois estiver ativo, desliga os dois juntos. Caso contrário, liga ambos.
+                if caveLigado or targetLigado then
+                    alternarMotoresHunt(false)
+                else
+                    alternarMotoresHunt(true)
+                end
+            end
+        end)
+    end
+end
 
 -- BugMap AWSD/Setas/NumPad (Versão Definitiva Purificada e Sem Lag)
 local consoleModule = modules.game_console
@@ -3358,7 +3301,146 @@ onTalk(function(...)
     say('sense "' .. storage.Sense)
     return true
 end)
+-- ============================================================================
+--    REVIDE PK NATIVO V10 (CONECTADO AO PONTEIRO OFICIAL DO PAINEL)
+-- ============================================================================
 
+local botsDesligadosPVP = false
+local ultimoModoAtaque = nil
+local ultimoTempoTrocaEstado = 0 
+local ultimoTempoTentativaAtaque = 0
+
+local ultimaPosX = 0
+local ultimaPosY = 0
+local ultimoTickRadar = 0
+
+local function definirModoAtaque(modo)
+    if ultimoModoAtaque == modo then return end
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end
+    local idBotao = (modo == "balanced") and "fightBalancedBox" or "fightOffensiveBox"
+    local targetButton = rootWidget:recursiveGetChildById(idBotao)
+    if targetButton then
+        pcall(function() targetButton:onClick() end)
+        ultimoModoAtaque = modo
+    end
+end
+
+-- CORREÇÃO DA PONTE DE MEMÓRIA: Atrelando a macro ao ponteiro global 'revidePKMacro'
+-- Agora o painel consegue dar .setOn(), .setOff() e ler o .isOn() real do processo!
+revidePKMacro = macro(250, 'Revide PK', function()
+    if not g_game.isOnline() then return end
+    
+    local localPlayer = g_game.getLocalPlayer()
+    if not localPlayer then return end
+
+    local myPos = localPlayer:getPosition()
+    if not myPos then return end
+
+    local tempoAtual = os.clock() * 1000
+
+    -- FREIO DE PROCESSAMENTO: Janela adaptativa se o boneco estiver parado
+    local andou = (myPos.x ~= ultimaPosX or myPos.y ~= ultimaPosY)
+    if not andou and (tempoAtual - ultimoTickRadar < 400) then
+        return
+    end
+    ultimoTickRadar = tempoAtual
+    ultimaPosX, ultimaPosY = myPos.x, myPos.y
+
+    local agressorTarget = nil
+    local agressorHp = 101
+    local agressorDist = 100
+
+    local spectators = getSpectators(myPos)
+    for i = 1, #spectators do
+        local creature = spectators[i]
+        
+        if creature and creature:isPlayer() and creature ~= localPlayer then
+            local targetPos = creature:getPosition()
+            
+            local dx = math.abs(myPos.x - targetPos.x)
+            local dy = math.abs(myPos.y - targetPos.y)
+            
+            if dx <= 13 and dy <= 7 and targetPos.z == myPos.z then
+                local estaMeAtacando = false
+                if creature.isAttacking then
+                    estaMeAtacando = creature:isAttacking()
+                else
+                    estaMeAtacando = (g_game.getAttackingCreature() == creature or creature:isTimedSquareVisible())
+                end
+
+                if estaMeAtacando then
+                    local specHp = creature:getHealthPercent()
+                    local specDist = dx + dy
+                    
+                    if specHp and specHp > 0 and creature:canShoot() then
+                        if not agressorTarget or specHp < agressorHp or (specHp == agressorHp and specDist < agressorDist) then
+                            agressorTarget = creature
+                            agressorHp = specHp
+                            agressorDist = specDist
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if agressorTarget then
+        if not botsDesligadosPVP then
+            if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
+                if CaveBot and CaveBot.setOff then CaveBot.setOff() end
+                if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
+                definirModoAtaque("balanced") -- Ao mudar para balanced, sua macro SafeFightSync desativa o SafeFight automaticamente
+                botsDesligadosPVP = true
+                ultimoTempoTrocaEstado = tempoAtual 
+            end
+        end
+        
+        if g_game.getAttackingCreature() ~= agressorTarget and (tempoAtual - ultimoTempoTentativaAtaque >= 1000) then
+            g_game.attack(agressorTarget) 
+            ultimoTempoTentativaAtaque = tempoAtual
+        end
+    else
+        if botsDesligadosPVP then
+            local alvoAtualJogo = g_game.getAttackingCreature()
+            if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
+                if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
+                    definirModoAtaque("offensive") -- Ao mudar para offensive, sua macro SafeFightSync ativa o SafeFight automaticamente
+                    if CaveBot and CaveBot.setOn then CaveBot.setOn() end
+                    if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
+                    botsDesligadosPVP = false
+                    ultimoTempoTrocaEstado = tempoAtual 
+                end
+            end
+        end
+    end
+end)
+
+
+--SafeFightSync
+local ultimoEstadoSeguro = nil
+macro(100, function()
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end
+    local bBalanced = rootWidget:recursiveGetChildById("fightBalancedBox")
+    local estaNoBalanced = bBalanced and (bBalanced:isOn() or bBalanced:isChecked())
+
+    if estaNoBalanced then
+        if ultimoEstadoSeguro ~= true then
+            if g_game.setSafeFight then 
+                pcall(function() g_game.setSafeFight(false) end) 
+            end
+            ultimoEstadoSeguro = true
+        end
+    else
+        if ultimoEstadoSeguro ~= false then
+            if g_game.setSafeFight then 
+                pcall(function() g_game.setSafeFight(true) end) 
+            end
+            ultimoEstadoSeguro = false
+        end
+    end
+end)
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- ============================================================================
 -- HUD PVE/PVP PREMIUM - SMK CUSTOM v4.2 (Versão Unificada Final Original)
