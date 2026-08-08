@@ -826,7 +826,7 @@ macro(300, "Enter Rift", function()
     local playerPos = player:getPosition()
     if not playerPos then return end
     local portalId = 11843
-    local raioBusca = 7
+    local raioBusca = 6
     for x = -raioBusca, raioBusca do
         for y = -raioBusca, raioBusca do
             local targetPos = {x = playerPos.x + x, y = playerPos.y + y, z = playerPos.z}
