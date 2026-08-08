@@ -1812,8 +1812,8 @@ MainWindow
 
     Button
       id: botaoGirar
-      !text: tr('Girar')
-      size: 100 18
+      !text: tr('Switch')
+      size: 80 18
       anchors.top: botaoSetEquip.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 10
@@ -1883,12 +1883,12 @@ MainWindow
 
     Button
       id: botaoGirar
-      !text: tr('Girar')
-      size: 44 24
+      !text: tr('Switch')
+      size: 56 24
       anchors.top: parent.top
       anchors.left: botaoSetEquip.right
       margin-top: 0
-      margin-left: 4
+      margin-left: 10
 ]]
 -- ============================================================================
 --    SPELL CASTER PANEL - PARTE 2 (VERSÃO ESTABILIZADA DIRETAMENTE PARA REVIDEPKMACRO)
@@ -4234,4 +4234,4 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
         return oldCalculateParams(creature, path, ...)
     end
 end
-print("[Loader] TargetBot otimizado com sucesso com Regra de Guild.")
+print("[Loader] TargetBot otimizado com sucesso.")
