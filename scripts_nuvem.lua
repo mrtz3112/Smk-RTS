@@ -544,7 +544,7 @@ local ultimaQuantidadeTentada = 0
 local ultimoTempoTentativa = 0
 
 -- MACRO PRINCIPAL
-macro(500, "DepositGold & StackItems", function()
+macro(100, "DepositGold & StackItems", function()
   if not g_game.isOnline() then return end
   
   local agora = os.clock() * 1000
@@ -3462,7 +3462,6 @@ Panel
     text-auto-resize: true
     text-align: center
 
-  -- CORREÇÃO DE SINTAXE ORIGINAL: Ajustado para o ID correto "chaseatk" que estava na sua Parte 2
   Label
     id: chaseatk
     height: 12
@@ -3594,9 +3593,11 @@ macro(300, function()
     hudCache.estaticos = true
   end
 
-  -- Função interna rápida para atualizar cor e texto apenas se houver mudança de estado
+  -- FUNÇÃO DE ATUALIZAÇÃO CONTÍNUA:
+  -- Garante que as suas cores customizadas (#32CD32 e #FF6347) fiquem cravadas a cada frame
   local function atualizarBotaoHUD(labelKey, macroRef, textoBase)
     if not pvehud[labelKey] then return end
+    
     local estadoAtual = false
     if macroRef and type(macroRef.isOn) == "function" then
       estadoAtual = macroRef.isOn()
@@ -3606,13 +3607,17 @@ macro(300, function()
       estadoAtual = TargetBot.isOn()
     end
 
-    -- Só atualiza o componente visual na marra se o estado mudou desde a última checagem
+    -- Atualiza a string de texto apenas se houver mudança física
     if hudCache[labelKey] ~= estadoAtual then
       pvehud[labelKey]:setText(textoBase)
-      -- APLICA AS SUAS NOVAS CORES CUSTOMIZADAS (#32CD32 e #FF6347)
-      pvehud[labelKey]:setColor(estadoAtual and "#32CD32" or "#FF6347")
       hudCache[labelKey] = estadoAtual
     end
+
+    -- INJEÇÃO DE OPACIDADE E PINTURA DE TEXTO RETIDA DO RESET:
+    -- Restaura a opacidade escura perfeita (0.87) e aplica as cores a cada frame
+    pvehud[labelKey]:setOpacity(0.87)
+    local corAlvo = estadoAtual and "#32CD32" or "#FF6347"
+    pvehud[labelKey]:setColor(corAlvo)
   end
 
   -- 2. ATUALIZAÇÃO RESTRITA DOS ESTADOS DOS BOTÕES
@@ -3625,33 +3630,32 @@ macro(300, function()
   atualizarBotaoHUD("enemy", enemy, "~ Enemy: [Alt+3]")
   atualizarBotaoHUD("xsense", xsense, "~ Auto xSense: [Alt+4]")
 
-  -- 3. MONITORAMENTO DE SKILLS INTELIGENTE (Mantém as cores gravadas mesmo mudando porcentagem)
+  -- 3. MONITORAMENTO DE SKILLS INTELIGENTE (Opacidade 0.87 fixada)
   local lvl, lvlPct = player:getLevel(), player:getLevelPercent()
   local ml, mlPct = player:getMagicLevel(), player:getMagicLevelPercent()
   local sk, skPct = player:getSkillLevel(2), player:getSkillLevelPercent(2)
 
-  -- Ignora a renderização se os dados de nível retornarem corrompidos/zerados no frame exato da morte
   if lvl and lvl > 0 then
     local txtLvl = "~ Level: " .. lvl .. " - (" .. lvlPct .. "%)"
     if pvehud.skills1 and hudCache.txtLvl ~= txtLvl then
       pvehud.skills1:setText(txtLvl)
-      pvehud.skills1:setColor("#8FBC8F") 
       hudCache.txtLvl = txtLvl
     end
+    if pvehud.skills1 then pvehud.skills1:setColor("#8FBC8F") pvehud.skills1:setOpacity(0.87) end
 
     local txtMl = "~ Reiatsu: " .. ml .. " - (" .. mlPct .. "%)"
     if pvehud.skills3 and hudCache.txtMl ~= txtMl then
       pvehud.skills3:setText(txtMl)
-      pvehud.skills3:setColor("#DDA0DD") 
       hudCache.txtMl = txtMl
     end
+    if pvehud.skills3 then pvehud.skills3:setColor("#DDA0DD") pvehud.skills3:setOpacity(0.87) end
 
     local txtSk = "~ Weapon: " .. sk .. " - (" .. skPct .. "%)"
     if pvehud.skills8 and hudCache.txtSk ~= txtSk then
       pvehud.skills8:setText(txtSk)
-      pvehud.skills8:setColor("#B0E0E6") 
       hudCache.txtSk = txtSk
     end
+    if pvehud.skills8 then pvehud.skills8:setColor("#B0E0E6") pvehud.skills8:setOpacity(0.87) end
   end
 end)
 
