@@ -3840,7 +3840,10 @@ onRemoveThing(function(tile, thing)
   end
 end)
 
--- Target Health Bar (Versão Definitiva Especial para Engine 8.54 - Zero Lag)
+-- ============================================================================
+--    TARGET HEALTH BAR (VERSÃO CENTRO DA GAME WINDOW AUTOMÁTICO - ZERO LAG)
+-- ============================================================================
+
 local lifeColors = {
     { percent = 35, color = 'red' },
     { percent = 75, color = 'yellow' },
@@ -3892,7 +3895,8 @@ local function getColorByPercent(percent, colorList)
     return colorList[#colorList].color
 end
 
-local targetCache = { name = "", percent = -1, visible = false, lastRootWidth = 0 }
+-- Resetando os caches de posição para recalcular com base no mapa
+local targetCache = { name = "", percent = -1, visible = false, lastMapWidth = 0, lastMapX = 0 }
 
 local function updateTargetWidget(targetNameText, percent, hasTarget)
     local target = panel['targetWidget']
@@ -3905,16 +3909,25 @@ local function updateTargetWidget(targetNameText, percent, hasTarget)
     
     if not hasTarget then return end
     
-    -- Só calcula a posição se a largura da sua janela mudar
-    local currentRootWidth = g_ui.getRootWidget():getWidth()
-    if targetCache.lastRootWidth ~= currentRootWidth then
-        local posX = (currentRootWidth / 2) - (target:getWidth() / 2) + 90
-        local posY = 80 
-        target:setPosition({ x = posX, y = posY })
-        targetCache.lastRootWidth = currentRootWidth
+    -- ENGENHARIA DE CENTRALIZAÇÃO NA GAME WINDOW (MAP PANEL)
+    local mapPanel = modules.game_interface and modules.game_interface.getMapPanel and modules.game_interface.getMapPanel()
+    if mapPanel then
+        local mapWidth = mapPanel:getWidth()
+        local mapX = mapPanel:getX()
+        
+        -- Só refaz a matemática se você mover a janela do Tibia ou mudar a resolução
+        if targetCache.lastMapWidth ~= mapWidth or targetCache.lastMapX ~= mapX then
+            -- Calcula o centro exato baseado nos limites da tela onde o jogo acontece
+            local posX = mapX + (mapWidth / 2) - (target:getWidth() / 2)
+            local posY = 150 -- Distância perfeita do topo (ajuste se quiser mais alto ou mais baixo)
+            
+            target:setPosition({ x = posX, y = posY })
+            targetCache.lastMapWidth = mapWidth
+            targetCache.lastMapX = mapX
+        end
     end
     
-    -- O SEGREDO DO 8.54: Só atualiza os componentes visuais na tela se o HP ou o Nome mudarem
+    -- Sincronização visual contínua de frames
     if targetCache.percent ~= percent or targetCache.name ~= targetNameText then
         target.targetTitle:setText(targetNameText)    
         target.progressBar:setText(string.format("%d%%", percent))
@@ -3926,7 +3939,7 @@ local function updateTargetWidget(targetNameText, percent, hasTarget)
     end
 end
 
--- OTIMIZAÇÃO CRÍTICA: Ciclo ajustado para 400ms remove qualquer conflito de CPU com o target.lua:50
+-- OTIMIZAÇÃO CRÍTICA: Mantido a 400ms para estabilidade e zero lag
 macro(400, function()
     if not g_game.isOnline() then return end
     
@@ -3942,6 +3955,7 @@ macro(400, function()
     
     updateTargetWidget(name, percent, hasTarget)
 end)
+
 
 
 --CaveBotConfigs
@@ -4039,7 +4053,7 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   return priority
 end
 
--- TARGETBOT INTEGRADO: OTIMIZADOR, FILTRO DE PARTY E ANTI-LURE ALHEIO V3
+--    TARGETBOT INTEGRADO: FILTRO DE PARTY, ANTI-LURE ALHEIO E REGRA DE GUILD V4
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 
 local function isMonsterSpecial(creatureName)
@@ -4091,6 +4105,28 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
         local player = getLocalPlayer()
         if not player or not creature then return { danger = 0, priority = 0 } end
 
+        local cName = creature:getName()
+        if not cName then return { danger = 0, priority = 0 } end
+        local nomeLimpoCreature = string.lower(cName)
+
+        -- ========================================================================
+        -- [REGRA SUPREMA DE GUILD]: SE HOUVER "GUILD" NO NOME, ATACA NA HORA!
+        -- Passa por cima de qualquer trava de party, anti-lure alheio e distância.
+        -- ========================================================================
+        if string.find(nomeLimpoCreature, "guild", 1, true) then
+            local res = oldCalculateParams(creature, path, ...)
+            if res then
+                -- Injeta valores máximos para o TargetBot focar nele imediatamente
+                res.danger = 10
+                res.priority = 10000 
+                return res
+            end
+            return { danger = 10, priority = 10000 }
+        end
+
+        -- ========================================================================
+        -- [MODO PADRÃO]: RESTO DA LOGICA PARA MONSTROS COMUNS E ELITES
+        -- ========================================================================
         local agora = os.clock() * 1000
         if agora - ultimoTickCiclo > 50 then
             monstrosProcessadosNoCiclo = 0
@@ -4121,7 +4157,6 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
             ultimoTempoCheckParty = agora
         end
 
-        local cName = creature:getName()
         local ehElite = isMonsterSpecial(cName)
         local deveIgnorarMonstro = false
 
@@ -4164,7 +4199,7 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
             end
         end
 
-        -- CORREÇÃO CRÍTICA: Se deve ignorar o monstro, roda a função original para atualizar os waypoints, mas zera a relevância dele no target
+        -- CORREÇÃO CRÍTICA: Se deve ignorar o monstro, zera a relevância dele no target
         if deveIgnorarMonstro then
             local res = oldCalculateParams(creature, path, ...)
             if res then
@@ -4199,4 +4234,4 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
         return oldCalculateParams(creature, path, ...)
     end
 end
-print("[Loader] TargetBot otimizado com sucesso.")
+print("[Loader] TargetBot otimizado com sucesso com Regra de Guild.")
