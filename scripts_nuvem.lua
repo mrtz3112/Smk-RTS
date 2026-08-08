@@ -532,36 +532,39 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
 end)
 
 UI.Separator()
--- Deposit Gold & Stack Items
-macro(1000, "Stack & Deposit", function()
-  if not g_game.isOnline() then return end
-  
+
+--Deposit & Stack
+local processandoAgora = false
+local hashInventarioAnterior = ""
+
+-- FUNÇÃO PRINCIPAL: Executa o fluxo de depósito e empilhamento inteligente
+local function executarFluxoStackEDeposit()
+  if not g_game.isOnline() or processandoAgora then return end
+  processandoAgora = true
+
   -- 1. CHECAGEM RÁPIDA E DEPOSIT DE DINHEIRO
   local coinIds = { 3031, 3035, 3043, 10137 } 
   for i = 1, #coinIds do
     local itemCoin = findItem(coinIds[i])
     if itemCoin and itemCoin:getCount() >= 1 then
       say("!deposit all")
-      -- Encerra o ciclo atual dando tempo para o servidor processar o depósito
+      processandoAgora = false
       return
     end
   end
 
   -- 2. SISTEMA DE EMPILETAMENTO INTELIGENTE (Até 10.000 itens)
   local containers = g_game.getContainers()
-  local itemGroups = {} -- Tabela para agrupar posições por "Assinatura Única" do item
+  local itemGroups = {}
 
-  -- Varredura: Agrupa os slots gerando uma assinatura para isolar itens únicos de itens comuns
+  -- Varredura isolada por assinatura para blindar itens únicos contra travamentos
   for index, container in pairs(containers) do
-    if not container.lootContainer then -- ignora recipientes de monstros
+    if not container.lootContainer then
       for i, item in ipairs(container:getItems()) do
-        -- Aceita empilhar se for stackable e estiver abaixo do limite de 10.000 do servidor
         if item:isStackable() and item:getCount() < 10000 then
-          
           local itemId = item:getId()
           
-          -- Filtro Anti-Travamento: Cria uma assinatura combinando ID + Nome + Descrição
-          -- Isso garante que itens únicos/especiais NUNCA tenham a mesma assinatura de itens normais!
+          -- Filtro Anti-Travamento de Itens Únicos
           local itemDescription = type(item.getDescription) == "function" and item:getDescription() or ""
           local itemName = type(item.getName) == "function" and item:getName() or ""
           local assinaturaUnica = itemId .. "_" .. itemName .. "_" .. itemDescription
@@ -570,7 +573,6 @@ macro(1000, "Stack & Deposit", function()
             itemGroups[assinaturaUnica] = {}
           end
           
-          -- Guarda a posição do slot e a quantidade atual dele
           table.insert(itemGroups[assinaturaUnica], {
             pos = container:getSlotPosition(i - 1),
             count = item:getCount(),
@@ -581,43 +583,62 @@ macro(1000, "Stack & Deposit", function()
     end
   end
 
-  -- Processamento: Encontra o maior e o menor slot de cada assinatura idêntica para fundi-los
+  -- Processamento das assinaturas idênticas
   for assinatura, slots in pairs(itemGroups) do
-    if #slots > 1 then -- Só funde se houver mais de 1 slot com a assinatura EXATAMENTE idêntica
+    if #slots > 1 then
       local maiorSlot = nil
       local menorSlot = nil
 
-      -- Procura o maior slot válido (menor que 10000) e o menor slot de origem para esvaziar primeiro
       for s = 1, #slots do
         local slotAtual = slots[s]
-        
-        -- Encontra o maior destino válido
         if slotAtual.count < 10000 then
           if not maiorSlot or slotAtual.count > maiorSlot.count then
             maiorSlot = slotAtual
           end
         end
-
-        -- Encontra o menor slot de origem
         if not menorSlot or slotAtual.count < menorSlot.count then
           menorSlot = slotAtual
         end
       end
 
-      -- Se encontrou uma combinação válida e não é o mesmo espaço físico na bolsa
       if maiorSlot and menorSlot and maiorSlot.pos ~= menorSlot.pos then
-        -- Calcula o espaço disponível até o limite de 10k do seu servidor
         local espacoDisponivel = 10000 - maiorSlot.count
         local quantidadeParaMover = math.min(espacoDisponivel, menorSlot.count)
 
         if quantidadeParaMover > 0 then
-          -- Move os itens com segurança total
           g_game.move(menorSlot.itemObj, maiorSlot.pos, quantidadeParaMover)
-          return -- Executa apenas 1 ação por segundo para o C++ e a rede respirarem sem lag
+          processandoAgora = false
+          return 
         end
       end
     end
   end
+  processandoAgora = false
+end
+
+macro(1000, "Stack & Deposit", function()
+    if not g_game.isOnline() then return end
+
+    local containers = g_game.getContainers()
+    local hashAtual = ""
+
+    -- Gera uma string rápida combinando o número de itens e slots abertos.
+    -- Essa checagem roda na velocidade da luz sem causar queda de FPS!
+    for index, container in pairs(containers) do
+        if not container.lootContainer then
+            hashAtual = hashAtual .. index .. "_" .. container:getItemsCount() .. "_"
+            local primeiroItem = container:getItem(0)
+            if primeiroItem then
+                hashAtual = hashAtual .. primeiroItem:getId() .. "_" .. primeiroItem:getCount() .. "|"
+            end
+        end
+    end
+
+    -- SÓ ATIVA O EMPILHAMENTO SE ALGO MUDOU NAS SUAS MOCHILAS!
+    if hashAtual ~= hashInventarioAnterior then
+        hashInventarioAnterior = hashAtual
+        executarFluxoStackEDeposit()
+    end
 end)
 
 -- Auto Dodge Ultra-Otimizado (Anti-Lag / Lazy Pathfinding)
@@ -797,20 +818,53 @@ macro(2000, "Enter Dungeon", function()
   end
 end)
 
--- Enter Rift
-macro(500, "Enter Rift",  function()
-  for i, tile in ipairs(g_map.getTiles(posz())) do
-    for u,item in ipairs(tile:getItems()) do
-      if (item and item:getId() == 11843) then
-	    print("[Dungeon] Rift encontrada.")
-	    playSound("/sounds/magnum.ogg")
-        g_game.use(item)
-        CaveBot.gotoLabel("Rift")
-        return
-      end
+
+--Enter Rift
+macro(300, "Enter Rift", function()
+    local player = g_game.getLocalPlayer()
+    if not player then return end
+    
+    local playerPos = player:getPosition()
+    if not playerPos then return end
+
+    local portalId = 11843 -- ID do seu portal da Rift
+    local raioBusca = 7    -- Varre um quadrante de 9x9 ao redor do boneco
+
+    for x = -raioBusca, raioBusca do
+        for y = -raioBusca, raioBusca do
+            local targetPos = {x = playerPos.x + x, y = playerPos.y + y, z = playerPos.z}
+            local tile = g_map.getTile(targetPos)
+            
+            -- PROTEÇÃO CRÍTICA INTERNA: Valida o objeto e o tipo antes da chamada
+            if tile and type(tile) == "userdata" and type(tile.getItems) == "function" then
+                -- Chamada estática segura que não quebra a Engine em C++ se o tile falhar
+                local success, items = pcall(tile.getItems, tile)
+                
+                if success and items then
+                    for i = 1, #items do
+                        local item = items[i]
+                        if item and item:getId() == portalId then
+                            print("[Dungeon] Rift encontrada na coordenada X:"..targetPos.x.." Y:"..targetPos.y)
+                            playSound("/sounds/magnum.ogg")
+                            
+                            -- Interage com o portal (Dá Use/Clique)
+                            g_game.use(item)
+                            
+                            -- Altera a label para o início da rota do portal de forma limpa
+                            if CaveBot and type(CaveBot.gotoLabel) == "function" then
+                                CaveBot.gotoLabel("Rift")
+                                if type(CaveBot.preNext) == "function" then CaveBot.preNext()
+                                elseif type(CaveBot.reload) == "function" then CaveBot.reload() end
+                            end
+                            return -- Encontrou e usou, encerra o frame imediatamente
+                        end
+                    end
+                end
+            end
+        end
     end
-  end
 end)
+
 
 -- Auto Subir/Descer Escadas
 Stairs = {}
@@ -1145,9 +1199,8 @@ local trainerMacro = macro(100, "House Trainer", function(macroObj)
   end
 end)
 
--- Revide PK (Versão Otimizada e Segura - Pure Engine 8.54)
+-- Revide PK (Versão Otimizada - Sincronizada com SafeFightSync)
 local botsDesligadosPVP = false
-local ultimoEstadoSafeFight = nil
 local ultimoModoAtaque = nil
 local ultimoTempoTrocaEstado = 0 
 local ultimoTempoTentativaAtaque = 0
@@ -1155,22 +1208,6 @@ local ultimoTempoTentativaAtaque = 0
 local ultimaPosX = 0
 local ultimaPosY = 0
 local ultimoTickRadar = 0
-
-local function definirSafeFightBox(deveAtivar)
-    if ultimoEstadoSafeFight == deveAtivar then return end
-    local mapPanel = modules.game_interface and modules.game_interface.gameMapPanel
-    local root = mapPanel and mapPanel:getParent()
-    if root then
-        local pvpButton = root:recursiveGetChildById('safeFightBox')
-        if pvpButton then
-            local estaAtivo = pvpButton:isOn()
-            if (deveAtivar and not estaAtivo) or (not deveAtivar and estaAtivo) then
-                pcall(function() pvpButton:onClick() end)
-                ultimoEstadoSafeFight = deveAtivar
-            end
-        end
-    end
-end
 
 local function definirModoAtaque(modo)
     if ultimoModoAtaque == modo then return end
@@ -1193,10 +1230,9 @@ macro(250, 'Revide PK', function()
     local myPos = localPlayer:getPosition()
     if not myPos then return end
 
-    -- Uso de os.clock() convertido de forma segura para milissegundos
     local tempoAtual = os.clock() * 1000
 
-    -- FREIO DE PROCESSAMENTO: Janela adaptativa de 400ms se o boneco estiver parado
+    -- FREIO DE PROCESSAMENTO: Janela adaptativa se o boneco estiver parado
     local andou = (myPos.x ~= ultimaPosX or myPos.y ~= ultimaPosY)
     if not andou and (tempoAtual - ultimoTickRadar < 400) then
         return
@@ -1208,16 +1244,13 @@ macro(250, 'Revide PK', function()
     local agressorHp = 101
     local agressorDist = 100
 
-    -- OTIMIZAÇÃO CRÍTICA: Puxa diretamente os espectadores da tela de forma nativa e ultra rápida
     local spectators = getSpectators(myPos)
     for i = 1, #spectators do
         local creature = spectators[i]
         
-        -- Filtros imediatos na memória (0ms de custo de CPU)
         if creature and creature:isPlayer() and creature ~= localPlayer then
             local targetPos = creature:getPosition()
             
-            -- Limita a busca estrita na área widescreen clássica de 13x7
             local dx = math.abs(myPos.x - targetPos.x)
             local dy = math.abs(myPos.y - targetPos.y)
             
@@ -1250,8 +1283,7 @@ macro(250, 'Revide PK', function()
             if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
                 if CaveBot and CaveBot.setOff then CaveBot.setOff() end
                 if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
-                definirModoAtaque("balanced")
-                definirSafeFightBox(true)       
+                definirModoAtaque("balanced") -- Ao mudar para balanced, sua macro SafeFightSync desativa o SafeFight automaticamente
                 botsDesligadosPVP = true
                 ultimoTempoTrocaEstado = tempoAtual 
             end
@@ -1266,14 +1298,38 @@ macro(250, 'Revide PK', function()
             local alvoAtualJogo = g_game.getAttackingCreature()
             if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
                 if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
-                    definirSafeFightBox(false)           
-                    definirModoAtaque("offensive")
+                    definirModoAtaque("offensive") -- Ao mudar para offensive, sua macro SafeFightSync ativa o SafeFight automaticamente
                     if CaveBot and CaveBot.setOn then CaveBot.setOn() end
                     if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
                     botsDesligadosPVP = false
                     ultimoTempoTrocaEstado = tempoAtual 
                 end
             end
+        end
+    end
+end)
+
+--SafeFightSync
+local ultimoEstadoSeguro = nil
+macro(100, function()
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end
+    local bBalanced = rootWidget:recursiveGetChildById("fightBalancedBox")
+    local estaNoBalanced = bBalanced and (bBalanced:isOn() or bBalanced:isChecked())
+
+    if estaNoBalanced then
+        if ultimoEstadoSeguro ~= true then
+            if g_game.setSafeFight then 
+                pcall(function() g_game.setSafeFight(false) end) 
+            end
+            ultimoEstadoSeguro = true
+        end
+    else
+        if ultimoEstadoSeguro ~= false then
+            if g_game.setSafeFight then 
+                pcall(function() g_game.setSafeFight(true) end) 
+            end
+            ultimoEstadoSeguro = false
         end
     end
 end)
@@ -1811,25 +1867,27 @@ end)
 
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- ============================================================================
--- PAINEL DE ÍCONES SPELL CASTER
+--    SPELL CASTER PANEL COMPLETO (VERSÃO UNIFICADA - BOTÃO BRANCO "TROCAR SET")
 -- ============================================================================
+
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.special == nil then storage.painelSalvo.special = false end
 if storage.painelSalvo.selfSpecial == nil then storage.painelSalvo.selfSpecial = false end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 if storage.painelSalvo.horizontal == nil then storage.painelSalvo.horizontal = false end
+if storage.painelSalvo.modoPvP == nil then storage.painelSalvo.modoPvP = false end
 
 local painelIconesUI = nil
 local ultimoIdPlayerPainel = 0
 
--- LAYOUT MODO VERTICAL (Título alterado para #FFDEAD)
+-- LAYOUT MODO VERTICAL
 local layoutVertical = [[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Spell Caster')
   color: #FFDEAD
-  size: 92 180
+  size: 92 208
   focusable: false
   draggable: true
   phantom: false
@@ -1875,22 +1933,31 @@ MainWindow
       margin-left: 1
 
     Button
+      id: botaoSetEquip
+      !text: tr('Trocar Set')
+      size: 78 24
+      anchors.top: botaoWave.bottom
+      anchors.horizontalCenter: parent.horizontalCenter
+      margin-top: 4
+      margin-left: 1
+
+    Button
       id: botaoGirar
       !text: tr('Girar')
       size: 78 18
-      anchors.top: botaoWave.bottom
+      anchors.top: botaoSetEquip.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 10
       margin-left: 1
 ]]
 
--- LAYOUT MODO HORIZONTAL (Título alterado para #FFDEAD)
+-- LAYOUT MODO HORIZONTAL
 local layoutHorizontal = [[
 MainWindow
   id: painelMacrosJanela
   !text: tr('Spell Caster')
   color: #FFDEAD
-  size: 410 75
+  size: 494 75
   focusable: false
   draggable: true
   phantom: false
@@ -1937,11 +2004,20 @@ MainWindow
       margin-left: 4
 
     Button
+      id: botaoSetEquip
+      !text: tr('Trocar Set')
+      size: 80 24
+      anchors.top: parent.top
+      anchors.left: botaoWave.right
+      margin-top: 0
+      margin-left: 4
+
+    Button
       id: botaoGirar
       !text: tr('Girar')
       size: 44 24
       anchors.top: parent.top
-      anchors.left: botaoWave.right
+      anchors.left: botaoSetEquip.right
       margin-top: 0
       margin-left: 4
 ]]
@@ -1954,7 +2030,18 @@ local function isMacroActive(macroRef)
     return false
 end
 
--- PINTURA DIRETA FORÇADA CONTINUA: Aplica as suas cores hexadecimais customizadas a cada frame
+-- Simula o clique físico nas caixas de modo de ataque originais do jogo
+local function forcarModoAtaquePeloBotao(modo)
+    local rootWidget = g_ui.getRootWidget()
+    if not rootWidget then return end
+    local idBotao = (modo == "balanced") and "fightBalancedBox" or "fightOffensiveBox"
+    local targetButton = rootWidget:recursiveGetChildById(idBotao)
+    if targetButton then
+        pcall(function() targetButton:onClick() end)
+    end
+end
+
+-- Aplica as cores hexadecimais de forma contínua
 local function pintarBotaoSeguro(container, idBotao, condicaoVerde)
     local btn = container:getChildById(idBotao)
     if btn and type(btn.setColor) == "function" then
@@ -1972,9 +2059,24 @@ local function atualizarCoresPainelCompleto()
     pintarBotaoSeguro(container, "botaoSelfSpecial", isMacroActive(selflowhp))
     pintarBotaoSeguro(container, "botaoSpells", isMacroActive(combo))
     pintarBotaoSeguro(container, "botaoWave", isMacroActive(turnCombo))
+
+    -- SINCRONIZAÇÃO E COR BRANCA FIXA PARA O BOTÃO "TROCAR SET"
+    local rootWidget = g_ui.getRootWidget()
+    if rootWidget and storage and storage.painelSalvo then
+        local bBalanced = rootWidget:recursiveGetChildById("fightBalancedBox")
+        local estaNoModoPvP = bBalanced and (bBalanced:isOn() or bBalanced:isChecked())
+        
+        storage.painelSalvo.modoPvP = estaNoModoPvP
+
+        local btnSet = container:getChildById("botaoSetEquip")
+        if btnSet and type(btnSet.setColor) == "function" then
+            -- Força a cor branca (#FFFFFF) de forma estática, ignorando o estado PvE/PvP
+            pcall(function() btnSet:setColor("#FFFFFF") end)
+        end
+    end
 end
 
-local conectarComponentesPainel -- Declaração antecipada
+local conectarComponentesPainel
 
 local function alternarEstadoMacro(macroRef, storageKey)
     if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
@@ -2006,12 +2108,27 @@ conectarComponentesPainel = function()
     local btnSelfSpecial = container:getChildById("botaoSelfSpecial")
     local btnSpells = container:getChildById("botaoSpells")
     local btnWave = container:getChildById("botaoWave")
+    local btnSetEquip = container:getChildById("botaoSetEquip")
     local btnGirar = container:getChildById("botaoGirar")
     
     if btnSpecial then btnSpecial.onClick = function() alternarEstadoMacro(lowhp, "special") end end
     if btnSelfSpecial then btnSelfSpecial.onClick = function() alternarEstadoMacro(selflowhp, "selfSpecial") end end
     if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
     if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
+    
+    -- LÓGICA DE CLIQUE: Alterna clicando nas caixas reais da interface do jogo
+    if btnSetEquip then
+        btnSetEquip.onClick = function()
+            if storage and storage.painelSalvo and g_game.isOnline() then
+                if storage.painelSalvo.modoPvP then
+                    forcarModoAtaquePeloBotao("offensive")
+                else
+                    forcarModoAtaquePeloBotao("balanced")
+                end
+                atualizarCoresPainelCompleto()
+            end
+        end
+    end
     
     if btnGirar then
         btnGirar.onClick = function()
@@ -2027,7 +2144,7 @@ conectarComponentesPainel = function()
     atualizarCoresPainelCompleto()
 end
 
--- INITIALIZAÇÃO INDESTRUTÍVEL (Limpa clones antes de criar)
+-- INITIALIZAÇÃO INDESTRUTÍVEL
 local mapPanel = modules.game_interface and modules.game_interface.getMapPanel and modules.game_interface.getMapPanel()
 if mapPanel and storage and storage.painelSalvo then
     local janelasNoPainel = mapPanel:getChildren()
@@ -2051,34 +2168,6 @@ macro(400, function()
     if not g_game.isOnline() or not painelIconesUI then return end
     
     local player = g_game.getLocalPlayer()
-    if not player then return end 
-
-    local idAtual = player:getId() or 0
-
-    if idAtual > 0 and idAtual ~= ultimoIdPlayerPainel then
-        ultimoIdPlayerPainel = idAtual
-        jaSincronizou = false 
-    end
-
-    if not jaSincronizou then
-        pcall(function()
-            if lowhp and type(lowhp) == "table" and type(lowhp.setOn) == "function" then 
-                if storage.painelSalvo.special then lowhp.setOn() else lowhp.setOff() end 
-            end
-            if selflowhp and type(selflowhp) == "table" and type(selflowhp.setOn) == "function" then 
-                if storage.painelSalvo.selfSpecial then selflowhp.setOn() else selflowhp.setOff() end 
-            end
-            if combo and type(combo) == "table" and type(combo.setOn) == "function" then 
-                if storage.painelSalvo.spells then combo.setOn() else combo.setOff() end 
-            end
-            if turnCombo and type(turnCombo) == "table" and type(turnCombo.setOn) == "function" then 
-                if storage.painelSalvo.wave then turnCombo.setOn() else turnCombo.setOff() end 
-            end
-        end)
-        jaSincronizou = true
-    end
-    
-    atualizarCoresPainelCompleto()
 end)
 
 setDefaultTab("HEAL")
@@ -3697,31 +3786,6 @@ onRemoveThing(function(tile, thing)
   if type(tile.setTimer) == "function" then
     tile:setTimer(0) 
   end
-end)
-
---SafeFightSync
-local ultimoEstadoSeguro = nil
-macro(200, function()
-    local rootWidget = g_ui.getRootWidget()
-    if not rootWidget then return end
-    local bBalanced = rootWidget:recursiveGetChildById("fightBalancedBox")
-    local estaNoBalanced = bBalanced and (bBalanced:isOn() or bBalanced:isChecked())
-
-    if estaNoBalanced then
-        if ultimoEstadoSeguro ~= true then
-            if g_game.setSafeFight then 
-                pcall(function() g_game.setSafeFight(false) end) 
-            end
-            ultimoEstadoSeguro = true
-        end
-    else
-        if ultimoEstadoSeguro ~= false then
-            if g_game.setSafeFight then 
-                pcall(function() g_game.setSafeFight(true) end) 
-            end
-            ultimoEstadoSeguro = false
-        end
-    end
 end)
 
 -- Target Health Bar (Versão Definitiva Especial para Engine 8.54 - Zero Lag)
