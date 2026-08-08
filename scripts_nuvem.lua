@@ -3135,20 +3135,25 @@ end)
 if chaseatk and chaseatk.setOff then
     chaseatk.setOff()
 end
--- Enemy (Versão Limpa - Apenas Radar e Ataque PVP)
+-- Enemy (Versão Corrigida - Apenas Radar e Ataque PVP)
 local function definirModoAtaque(modo)
-    local rootWidget = g_ui.getRootWidget()
-    if not rootWidget then return end 
-    local idBotao = ""
-    if modo == "balanced" then
-        idBotao = "fightBalancedBox"
-    elseif modo == "offensive" then
-        idBotao = "fightOffensiveBox"
+    -- Traduz para a API nativa de combate do OTClientv8 (1 = Offensive, 2 = Balanced, 3 = Defensive)
+    local fightMode = 2
+    if modo == "offensive" then
+        fightMode = 1
     end
     
-    local targetButton = rootWidget:recursiveGetChildById(idBotao)
-    if targetButton then
-        pcall(function() targetButton:onClick() end)
+    if g_game and type(g_game.setFightMode) == "function" then
+        pcall(function() g_game.setFightMode(fightMode) end)
+    else
+        -- Fallback gráfico seguro caso o core do servidor exija clique no Widget
+        local rootWidget = g_ui.getRootWidget()
+        if not rootWidget then return end 
+        local idBotao = modo == "balanced" and "fightBalancedBox" or "fightOffensiveBox"
+        local targetButton = rootWidget:recursiveGetChildById(idBotao)
+        if targetButton then
+            pcall(function() targetButton:onClick() end)
+        end
     end
 end
 
@@ -3158,7 +3163,7 @@ local estadoAnteriorMacro = false
 enemy = macro(150, 'Enemy', "ALT+3", function()
     if not g_game.isOnline() then return end
 
-    -- CORREÇÃO CRÍTICA: Configura o modo de combate para balanced ao ativar a macro
+    -- Configura o modo de combate para balanced apenas uma vez ao ativar a macro
     if not estadoAnteriorMacro then
         definirModoAtaque("balanced")
         estadoAnteriorMacro = true
@@ -3177,7 +3182,8 @@ enemy = macro(150, 'Enemy', "ALT+3", function()
     local espectadores = g_map.getSpectators(myPos, false)
     if not espectadores then return end
 
-    for i = 1, #espektadores do
+    -- CORREÇÃO DO ERRO DO CONSOLE: Variável corrigida de 'espektadores' para 'espectadores'
+    for i = 1, #espectadores do
         local creature = espectadores[i]
         if creature and creature:isPlayer() and creature ~= localPlayer then
             local specHp = creature:getHealthPercent()
@@ -3192,6 +3198,7 @@ enemy = macro(150, 'Enemy', "ALT+3", function()
                     if type(creature.canShoot) ~= "function" or creature:canShoot() then
                         local specDist = getDistanceBetween(myPos, specPos)
                         
+                        -- Alveja o que tiver menor vida; em caso de empate, o mais próximo
                         if not actualTarget or specHp < actualTargetHp or (specHp == actualTargetHp and specDist < actualTargetDist) then
                             actualTarget = creature
                             actualTargetHp = specHp
@@ -3203,16 +3210,13 @@ enemy = macro(150, 'Enemy', "ALT+3", function()
         end
     end
     
+    -- Ataca nativamente o alvo prioritário encontrado no radar se já não estiver atacando ele
     if actualTarget and g_game.getAttackingCreature() ~= actualTarget then
-        if modules.game_interface and type(modules.game_interface.processMouseAction) == "function" then
-            modules.game_interface.processMouseAction(nil, 2, myPos, nil, actualTarget, actualTarget)
-        else
-            g_game.attack(actualTarget) 
-        end
+        pcall(function() g_game.attack(actualTarget) end)
     end
 end)
 
--- AUTO-RESET SEGURO: Monitora em segundo plano se você desligou o botão da macro.
+-- AUTO-RESET SEGURO: Monitora se você desligou o botão da macro para reiniciar as flags.
 macro(500, function()
     if enemy and type(enemy.isOn) == "function" then
         if not enemy.isOn() and estadoAnteriorMacro then
