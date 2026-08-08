@@ -1776,7 +1776,7 @@ MainWindow
 
     Button
       id: botaoWave
-      !text: tr('Wave (Reta)')
+      !text: tr('Wave')
       size: 100 24
       anchors.top: botaoSpells.bottom
       anchors.horizontalCenter: parent.horizontalCenter
@@ -1847,7 +1847,7 @@ MainWindow
 
     Button
       id: botaoWave
-      !text: tr('Wave (Reta)')
+      !text: tr('Wave')
       size: 94 24
       anchors.top: parent.top
       anchors.left: botaoSpells.right
