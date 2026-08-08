@@ -533,156 +533,90 @@ end)
 
 UI.Separator()
 -- Deposit Gold & Stack Items
-local ultimoMovimentoStack = 0
-local precisaVerificarInventario = true
-local hashUltimoInventario = ""
-
--- Tabelas de memória RAM para ignorar itens que o servidor rejeitou empilhar
-local itensRejeitadosPeloServidor = {}
-local ultimoSlotTentado = nil
-local ultimaQuantidadeTentada = 0
-local ultimoTempoTentativa = 0
-
--- MACRO PRINCIPAL
-macro(100, "DepositGold & StackItems", function()
+macro(1000, "Stack & Deposit", function()
   if not g_game.isOnline() then return end
   
-  local agora = os.clock() * 1000
-
--- VERIFICAÇÃO ULTRA LEVE DE MUDANÇA (0% CPU)
-  local containers = g_game.getContainers()
-  local hashAtual = ""
-  
-  -- Cria uma assinatura rápida baseada na quantidade de itens de cada container open
-  for id, container in pairs(containers) do
-    if container and container:getId() <= 15 then
-      hashAtual = hashAtual .. id .. "_" .. container:getItemsCount() .. "|"
-    end
-  end
-
-  -- Se a assinatura mudou (abriu BP, dropou item, gastou runa), força a checagem profunda
-  if hashAtual ~= hashUltimoInventario then
-    precisaVerificarInventario = true
-    hashUltimoInventario = hashAtual
-  end
-
-  -- Se nada mudou estruturalmente no inventário, encerra o frame IMEDIATAMENTE aqui
-  if not precisaVerificarInventario then return end
-  if agora - ultimoMovimentoStack < 700 then return end
-
-  -- 1. CHECAGEM RÁPIDA DE DINHEIRO
+  -- 1. CHECAGEM RÁPIDA E DEPOSIT DE DINHEIRO
   local coinIds = { 3031, 3035, 3043, 10137 } 
   for i = 1, #coinIds do
-    local item = findItem(coinIds[i])
-    if item and item:getCount() >= 1 then
+    local itemCoin = findItem(coinIds[i])
+    if itemCoin and itemCoin:getCount() >= 1 then
       say("!deposit all")
-      ultimoMovimentoStack = agora + 600
+      -- Encerra o ciclo atual dando tempo para o servidor processar o depósito
       return
     end
   end
 
-  -- VACINA DE LISTA NEGRA: Detecta se o servidor rejeitou o movimento e bloqueia o item único
-  if ultimoSlotTentado and ultimoTempoTentativa > 0 and (agora - ultimoTempoTentativa < 2000) then
-      local containerVerificar = g_game.getContainer(ultimoSlotTentado.containerId)
-      if containerVerificar then
-          local itemVerificar = containerVerificar:getItem(ultimoSlotTentado.slotIndex)
-          if itemVerificar and itemVerificar:getCount() == ultimaQuantidadeTentada then
-              local chaveLixo = ultimoSlotTentado.containerId .. "_" .. ultimoSlotTentado.slotIndex .. "_" .. itemVerificar:getId()
-              itensRejeitadosPeloServidor[chaveLixo] = true
-          end
-      end
-  end
-  ultimoSlotTentado = nil
-  ultimoTempoTentativa = 0
+  -- 2. SISTEMA DE EMPILETAMENTO INTELIGENTE (Até 10.000 itens)
+  local containers = g_game.getContainers()
+  local itemGroups = {} -- Tabela para agrupar posições por "Assinatura Única" do item
 
-  -- 2. ETAPA DE MAPEAMENTO: Localiza o MAIOR BOLO absoluto do inventário primeiro
-  local itensMapeados = {}
-  local todosOsItensAgrupaveis = {}
-  local totalAgrupaveis = 0
-  local houveMovimentacaoNesseFrame = false
-
-  for _, container in pairs(containers) do
-    if container and container:getId() <= 15 then
-      local items = container:getItems()
-      
-      if items and #items <= 36 then
-        for index = 1, #items do
-          local item = items[index]
+  -- Varredura: Agrupa os slots gerando uma assinatura para isolar itens únicos de itens comuns
+  for index, container in pairs(containers) do
+    if not container.lootContainer then -- ignora recipientes de monstros
+      for i, item in ipairs(container:getItems()) do
+        -- Aceita empilhar se for stackable e estiver abaixo do limite de 10.000 do servidor
+        if item:isStackable() and item:getCount() < 10000 then
           
-          if item and item:isStackable() and item:getCount() < 10000 then 
-            local itemId = item:getId()
-            local count = item:getCount()
-            local slotIndex = index - 1
-            local containerId = container:getId()
-            
-            local chaveChecar = containerId .. "_" .. slotIndex .. "_" .. itemId
+          local itemId = item:getId()
+          
+          -- Filtro Anti-Travamento: Cria uma assinatura combinando ID + Nome + Descrição
+          -- Isso garante que itens únicos/especiais NUNCA tenham a mesma assinatura de itens normais!
+          local itemDescription = type(item.getDescription) == "function" and item:getDescription() or ""
+          local itemName = type(item.getName) == "function" and item:getName() or ""
+          local assinaturaUnica = itemId .. "_" .. itemName .. "_" .. itemDescription
 
-            -- Só analisa se o item não estiver na lista negra de itens únicos rejeitados
-            if not itensRejeitadosPeloServidor[chaveChecar] then
-              local posicaoAtual = container:getSlotPosition(slotIndex)
-
-              if posicaoAtual then
-                totalAgrupaveis = totalAgrupaveis + 1
-                todosOsItensAgrupaveis[totalAgrupaveis] = {
-                  itemObj = item,
-                  itemId = itemId,
-                  count = count,
-                  containerId = containerId,
-                  slotIndex = slotIndex
-                }
-
-                -- COMPARAÇÃO ABSOLUTA: Varre todo o inventário e elege o MAIOR bolo real como destino final
-                if not itensMapeados[itemId] or count > itensMapeados[itemId].count then
-                  itensMapeados[itemId] = {
-                    posicao = posicaoAtual,
-                    count = count,
-                    containerId = containerId,
-                    slotIndex = slotIndex
-                  }
-                end
-              end
-            end
+          if not itemGroups[assinaturaUnica] then
+            itemGroups[assinaturaUnica] = {}
           end
+          
+          -- Guarda a posição do slot e a quantidade atual dele
+          table.insert(itemGroups[assinaturaUnica], {
+            pos = container:getSlotPosition(i - 1),
+            count = item:getCount(),
+            itemObj = item
+          })
         end
       end
     end
   end
 
-  -- 3. ETAPA DE MOVIMENTAÇÃO CRÍTICA: Arraste Direto para o Maior Bolo
-  for i = 1, totalAgrupaveis do
-    local dadosItem = todosOsItensAgrupaveis[i]
-    local destinoFinal = itensMapeados[dadosItem.itemId]
+  -- Processamento: Encontra o maior e o menor slot de cada assinatura idêntica para fundi-los
+  for assinatura, slots in pairs(itemGroups) do
+    if #slots > 1 then -- Só funde se houver mais de 1 slot com a assinatura EXATAMENTE idêntica
+      local maiorSlot = nil
+      local menorSlot = nil
 
-    if destinoFinal then
-      local mesmoContainer = (dadosItem.containerId == destinoFinal.containerId)
-      local mesmoSlot = (dadosItem.slotIndex == destinoFinal.slotIndex)
-
-      -- Se for uma pilha menor e separada do Maior Bolo Absoluto, joga DIRETO nele!
-      if not (mesmoContainer and mesmoSlot) then
-        local bckpack = g_game.getContainer(dadosItem.containerId)
-        if bckpack then
-          local itemReal = bckpack:getItem(dadosItem.slotIndex)
-          
-          if itemReal and itemReal:getId() == dadosItem.itemId then
-            -- Prepara o fail-safe da vacina anti-trava
-            ultimoSlotTentado = { containerId = dadosItem.containerId, slotIndex = dadosItem.slotIndex }
-            ultimaQuantidadeTentada = itemReal:getCount()
-            ultimoTempoTentativa = agora
-
-            -- Executa o movimento direto usando o ponteiro nativo perfeito do bolo maior
-            g_game.move(itemReal, destinoFinal.posicao, itemReal:getCount())
-            ultimoMovimentoStack = agora 
-            houveMovimentacaoNesseFrame = true
-            return
+      -- Procura o maior slot válido (menor que 10000) e o menor slot de origem para esvaziar primeiro
+      for s = 1, #slots do
+        local slotAtual = slots[s]
+        
+        -- Encontra o maior destino válido
+        if slotAtual.count < 10000 then
+          if not maiorSlot or slotAtual.count > maiorSlot.count then
+            maiorSlot = slotAtual
           end
+        end
+
+        -- Encontra o menor slot de origem
+        if not menorSlot or slotAtual.count < menorSlot.count then
+          menorSlot = slotAtual
+        end
+      end
+
+      -- Se encontrou uma combinação válida e não é o mesmo espaço físico na bolsa
+      if maiorSlot and menorSlot and maiorSlot.pos ~= menorSlot.pos then
+        -- Calcula o espaço disponível até o limite de 10k do seu servidor
+        local espacoDisponivel = 10000 - maiorSlot.count
+        local quantidadeParaMover = math.min(espacoDisponivel, menorSlot.count)
+
+        if quantidadeParaMover > 0 then
+          -- Move os itens com segurança total
+          g_game.move(menorSlot.itemObj, maiorSlot.pos, quantidadeParaMover)
+          return -- Executa apenas 1 ação por segundo para o C++ e a rede respirarem sem lag
         end
       end
     end
-  end
-
-  -- Se processou tudo e não moveu nenhum item, o inventário está perfeitamente organizado. Locka!
-  if not houveMovimentacaoNesseFrame then
-    precisaVerificarInventario = false
   end
 end)
 
