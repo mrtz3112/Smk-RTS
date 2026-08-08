@@ -1383,7 +1383,7 @@ UI.Label("-----------------------------------"):setColor('#FFDEAD')
 UI.Label("~ Spell Caster ~"):setColor('#DEB887')
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- ============================================================================
---    SMART CAST INTEGRADO (VERSÃO ULTRA-CALIBRADA COM MODO ABSOLUTO PVP)
+--    SMART CAST INTEGRADO (VERSÃO COM TARGET HP EXCLUSIVO PARA PVP)
 -- ============================================================================
 
 -- OBJETO FANTASMA DE SEGURANÇA: Mantém o Painel de Botões estável
@@ -1473,7 +1473,7 @@ combo = macro(200, "Smart Cast", function()
 
     -- ========================================================================
     -- [MODO PVP REGRA ABSOLUTA]: INTERCEPTAÇÃO SE O ALVO FOR UM PLAYER
-    -- Se estiver atacando um jogador, usa APENAS a Spell at Target HP ou a Single!
+    -- Usa APENAS a Spell at Target HP ou a Single!
     -- ========================================================================
     if atacandoPlayer then
         -- 1. Executa a Spell at Target HP se a vida do Player estiver abaixo do limite
@@ -1496,16 +1496,10 @@ combo = macro(200, "Smart Cast", function()
 
     -- ========================================================================
     -- [MODO PVE PADRÃO]: EXECUÇÃO SE O ALVO FOR UM MONSTRO/ELITE
+    -- CORRIGIDO: Removida a checagem de Target HP daqui. Apenas Área ou Single.
     -- ========================================================================
     
-    -- 1. Executa a Spell at Target HP contra o monstro se a vida dele estiver baixa
-    if targetHp <= storage[panelNameTarget].hp and cacheHpSpell ~= "" then
-        say(cacheHpSpell)
-        ultimoTempoCombo = agora
-        return
-    end
-
-    -- 2. Varre o chão para saber se usa Área ou Single contra o monstro
+    -- 1. Varre o chão para saber se usa Área ou Single contra o monstro
     local specAmount = contarMonstrosAoRedor(targetPos)
     
     if specAmount >= amountOfMonsters then
@@ -3141,7 +3135,7 @@ end)
 if chaseatk and chaseatk.setOff then
     chaseatk.setOff()
 end
--- Enemy (Versão Corrigida Definitiva - Sem Erros e Sem Slow)
+-- Enemy (Versão Limpa - Apenas Radar e Ataque PVP)
 local function definirModoAtaque(modo)
     local rootWidget = g_ui.getRootWidget()
     if not rootWidget then return end 
@@ -3158,39 +3152,16 @@ local function definirModoAtaque(modo)
     end
 end
 
-local function alternarBotsNativos(ligar)
-    if ligar then
-        if TargetBot then
-            if type(TargetBot.setOn) == "function" then TargetBot.setOn()
-            elseif type(TargetBot.start) == "function" then TargetBot.start()
-            end
-        end
-    else
-        if CaveBot then
-            if type(CaveBot.setOff) == "function" then CaveBot.setOff()
-            elseif type(CaveBot.stop) == "function" then CaveBot.stop()
-            end
-        end
-        if TargetBot then
-            if type(TargetBot.setOff) == "function" then TargetBot.setOff()
-            elseif type(TargetBot.stop) == "function" then TargetBot.stop()
-            end
-        end
-    end
-end
-
 local estadoAnteriorMacro = false
 
 -- Configurada em 150ms: Velocidade perfeita de PVP/Target sem travar a CPU
 enemy = macro(150, 'Enemy', "ALT+3", function()
     if not g_game.isOnline() then return end
 
-    -- CORREÇÃO CRÍTICA: Se a macro estiver ativa mas o estado ainda não foi configurado, liga a trava
+    -- CORREÇÃO CRÍTICA: Configura o modo de combate para balanced ao ativar a macro
     if not estadoAnteriorMacro then
-        alternarBotsNativos(false) 
         definirModoAtaque("balanced")
         estadoAnteriorMacro = true
-        print("[Enemy] TargetBot Desligado.")
     end
     
     local localPlayer = g_game.getLocalPlayer()
@@ -3206,7 +3177,7 @@ enemy = macro(150, 'Enemy', "ALT+3", function()
     local espectadores = g_map.getSpectators(myPos, false)
     if not espectadores then return end
 
-    for i = 1, #espectadores do
+    for i = 1, #espektadores do
         local creature = espectadores[i]
         if creature and creature:isPlayer() and creature ~= localPlayer then
             local specHp = creature:getHealthPercent()
@@ -3242,7 +3213,6 @@ enemy = macro(150, 'Enemy', "ALT+3", function()
 end)
 
 -- AUTO-RESET SEGURO: Monitora em segundo plano se você desligou o botão da macro.
--- Se desligar, reseta a variável local imediatamente sem usar funções globais inexistentes!
 macro(500, function()
     if enemy and type(enemy.isOn) == "function" then
         if not enemy.isOn() and estadoAnteriorMacro then
