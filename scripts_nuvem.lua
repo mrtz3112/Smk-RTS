@@ -616,7 +616,7 @@ local function executarFluxoStackEDeposit()
   processandoAgora = false
 end
 
-macro(1000, "Stack & Deposit", function()
+macro(800, "Stack & Deposit", function()
     if not g_game.isOnline() then return end
 
     local containers = g_game.getContainers()
@@ -659,7 +659,7 @@ local function getMillis()
     if type(g_clock) == "table" and type(g_clock.millis) == "function" then
         return g_clock.millis()
     end
-    return os.time() * 1000
+    return os.time() * 500
 end
 
 local function hasEffect(tile, effectId)
@@ -2048,12 +2048,10 @@ if mapPanel and storage and storage.painelSalvo then
 end
 
 -- LOOP DE ATUALIZAÇÃO CONTÍNUA RECALIBRADO (Removido loops redundantes que causavam o "pula-pula" de status)
-macro(400, function() 
+macro(800, function() 
     if not g_game.isOnline() or not painelIconesUI then return end
     atualizarCoresPainelCompleto()
 end)
-
-
 
 setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
