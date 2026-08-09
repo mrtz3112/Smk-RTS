@@ -171,7 +171,8 @@ ButtonT = UI.Button("Reconect", function()
 end)
 updateButtonReconectText()
 UI.Separator()
---Alarms Original Restaurado (Substitua tudo no botão Alarms)
+--Alarms Original
+--Alarms Original Otimizado (Versão Ultra-Leve - Zero Lag / Zero Slow Macro)
 local panelName = "alarms"
 local ui = setupUI([[
 Panel
@@ -231,7 +232,6 @@ local parents =
   window.settingsList
 }
 
-
 -- type
 addAlarm = function(id, title, defaultValue, alarmType, parent, tooltip)
   local widget = UI.createWidget(widgets[alarmType], parents[parent])
@@ -264,7 +264,6 @@ addAlarm = function(id, title, defaultValue, alarmType, parent, tooltip)
       config[id].value = newText
     end
   end
-
 end
 
 -- settings
@@ -289,22 +288,25 @@ addAlarm("creatureDetected", "Creature Detected", false, 1, 1)
 addAlarm("playerDetected", "Player Detected", false, 1, 1)
 addAlarm("creatureName", "Creature Name:", "", 3, 1, "You can add a name or part of it, that if found in any visible creature name will trigger alert.\nYou can add many, just separate them by comma.")
 
-
-local lastCall = now
+local lastCall = 0
 local function alarm(file, windowText)
-  if now - lastCall < 2000 then return end -- 2s delay
-  lastCall = now
+  local tempoAgora = os.clock() * 1000
+  if tempoAgora - lastCall < 2000 then return end -- 2s delay
+  lastCall = tempoAgora
 
   if not g_resources.fileExists(file) then
     file = "/sounds/alarm.ogg"
-    lastCall = now + 4000 -- alarm.ogg length is 6s
+    lastCall = tempoAgora + 4000 -- alarm.ogg length is 6s
   end
 
-  
   if modules.game_bot.g_app.getOs() == "windows" and config.flashClient.enabled then
     g_window.flash()
   end
-  g_window.setTitle(player:getName() .. " - " .. windowText)
+  
+  local localPlayer = g_game.getLocalPlayer()
+  if localPlayer then
+    g_window.setTitle(localPlayer:getName() .. " - " .. windowText)
+  end
   playSound(file)
 end
 
@@ -317,17 +319,17 @@ onTextMessage(function(mode, text)
 
   if config.customMessage.enabled then
     local alertText = config.customMessage.value
-    if alertText:len() > 0 then
+    if alertText and alertText:len() > 0 then
       text = text:lower()
       local parts = string.split(alertText, ",")
 
       for i=1,#parts do
         local part = parts[i]
-        part = part:trim()
-        part = part:lower()
-
-        if text:find(part) then
-          return alarm('/sounds/magnum.ogg', "Special Message!")
+        if part then
+          part = string.trim(part):lower()
+          if text:find(part, 1, true) then
+            return alarm('/sounds/magnum.ogg', "Special Message!")
+          end
         end
       end
     end
@@ -337,8 +339,9 @@ end)
 -- default & private message
 onTalk(function(name, level, mode, text, channelId, pos)
   if not config.enabled then return end
-  if name == player:getName() then return end -- ignore self messages
-  if config.ignoreFriends.enabled and isFriend(name) then return end -- ignore friends if enabled
+  local localPlayer = g_game.getLocalPlayer()
+  if not localPlayer or name == localPlayer:getName() then return end 
+  if config.ignoreFriends.enabled and isFriend(name) then return end 
 
   if mode == 1 and config.defaultMsg.enabled then
     return alarm("/sounds/magnum.ogg", "Default Message!")
@@ -349,9 +352,13 @@ onTalk(function(name, level, mode, text, channelId, pos)
   end
 end)
 
--- health & mana
-macro(100, function() 
+-- health, mana & radar espectador (Calibrado em 400ms para acabar com o slow macro)
+macro(400, function() 
   if not config.enabled then return end
+  
+  local localPlayer = g_game.getLocalPlayer()
+  if not localPlayer then return end
+
   if config.lowHealth.enabled then
     if hppercent() < config.lowHealth.value then
       return alarm("/sounds/Low_Health.ogg", "Low Health!")
@@ -359,19 +366,29 @@ macro(100, function()
   end
 
   if config.lowMana.enabled then
-    if hppercent() < config.lowMana.value then
+    -- Correção lógica: Corrigido de hppercent() para manapercent() nativo do bot
+    local currentMana = type(manapercent) == "function" and manapercent() or 100
+    if currentMana < config.lowMana.value then
       return alarm("/sounds/Low_Mana.ogg", "Low Mana!")
     end
   end
 
-  for i, spec in ipairs(getSpectators()) do
-    if not spec:isLocalPlayer() and not (config.ignoreFriends.enabled and isFriend(spec)) then
+  local myPos = localPlayer:getPosition()
+  if not myPos then return end
 
-      if config.creatureDetected.enabled then
+  -- Engenharia leve: getSpectators focado no radar C++ do mapa atual do andar
+  local espectadores = g_map.getSpectators(myPos, false)
+  if not espectadores then return end
+
+  for i = 1, #espectadores do
+    local spec = espectadores[i]
+    if spec and spec ~= localPlayer and not (config.ignoreFriends.enabled and isFriend(spec:getName())) then
+
+      if config.creatureDetected.enabled and spec:isMonster() and spec:getHealthPercent() > 0 then
         return alarm("/sounds/magnum.ogg", "Creature Detected!")
       end
 
-      if spec:isPlayer() then 
+      if spec:isPlayer() and spec:getHealthPercent() > 0 then 
         if spec:isTimedSquareVisible() and config.playerAttack.enabled then
           return alarm("/sounds/Player_Attack.ogg", "Player Attack!")
         end
@@ -380,15 +397,16 @@ macro(100, function()
         end
       end
 
-      if config.creatureName.enabled then
-        local name = spec:getName():lower()
+      if config.creatureName.enabled and config.creatureName.value ~= "" then
+        local name = string.lower(spec:getName())
         local fragments = string.split(config.creatureName.value, ",")
         
-        for i=1,#fragments do
-          local frag = fragments[i]:trim():lower()
-
-          if name:lower():find(frag) then
-            return alarm("/sounds/alarm.ogg", "Special Creature Detected!")
+        for f = 1, #fragments do
+          if fragments[f] then
+            local frag = string.lower(string.trim(fragments[f]))
+            if frag ~= "" and string.find(name, frag, 1, true) then
+              return alarm("/sounds/alarm.ogg", "Special Creature Detected!")
+            end
           end
         end
       end
@@ -533,10 +551,7 @@ end)
 
 UI.Separator()
 
--- ============================================================================
 --    STACK & DEPOSIT (VERSÃO COORDENADA COM SUPORTE A ITENS ÚNICOS - ZERO LAG)
--- ============================================================================
-
 local processandoAgora = false
 local hashInventarioAnterior = ""
 
@@ -658,7 +673,7 @@ end)
 
 -- Auto Dodge Ultra-Otimizado (Anti-Lag / Lazy Pathfinding)
 local effectIdToAvoid = 237
-local maxSearchRange = 13
+local maxSearchRange = 10
 local moveFlags = { ignoreNonPathable = true }
 local dangerDuration = 2500 
 
@@ -761,7 +776,7 @@ local function findMassiveSafePosition(playerPos)
     return candidates[1] -- Retorno de emergência caso o findPath falhe por preciosismo
 end
 
-macro(30, "Dodge Red SQM Spells", function()
+macro(100, "Dodge Red SQM Spells", function()
     if not g_game.isOnline() then return end
     
     local playerPos = player:getPosition()
@@ -809,6 +824,7 @@ macro(30, "Dodge Red SQM Spells", function()
         autoWalk(safePos, maxSearchRange, moveFlags)
     end
 end)
+
 
 --Enter Dungeons
 local window_name = "Dungeons"
@@ -1865,7 +1881,7 @@ UIWidget
     id: tituloPainel
     anchors.top: parent.top
     anchors.horizontalCenter: parent.horizontalCenter
-    margin-top: 2
+    margin-top: 5
     color: #FFDEAD
     font: verdana-11px-rounded
     text: Spell Caster
