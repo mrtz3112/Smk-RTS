@@ -1398,10 +1398,8 @@ UI.Label("-----------------------------------"):setColor('#FFDEAD')
 UI.Label("~ Spell Caster ~"):setColor('#DEB887')
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- ============================================================================
---    SMART CAST INTEGRADO (VERSÃO COM TARGET HP EXCLUSIVO PARA PVP)
+--    SMART CAST INTEGRADO (VERSÃO ULTRA-OTIMIZADA COM OS.CLOCK PURO - ZERO LAG)
 -- ============================================================================
-
--- OBJETO FANTASMA DE SEGURANÇA: Mantém o Painel de Botões estável
 lowhp = {
     isOn = function() return false end,
     setOn = function() end,
@@ -1416,7 +1414,7 @@ local indexArea, indexSingle = 1, 1
 local cacheAreaSpells = {}
 local cacheSingleSpells = {}
 local cacheHpSpell = ""
-local ultimoTempoCombo = 0
+local ultimoTempoCombo = 0 -- Armazena em segundos decimais puros
 
 -- Configuração do painel de HP integrado
 local panelNameTarget = "hpbelowconfig"
@@ -1435,7 +1433,7 @@ local function atualizarCacheSpells()
     cacheHpSpell = storage.hpspell or ""
 end
 
--- CONTADOR DE MONSTROS LEVE
+-- CONTADOR DE MONSTROS ULTRA-LEVE (POUPA CPU NO PVE)
 local function contarMonstrosAoRedor(targetPos)
     local total = 0
     local mobsAoRedorDoAlvo = g_map.getSpectatorsInRange(targetPos, false, raioDeAreaDoMonstro, raioDeAreaDoMonstro)
@@ -1443,12 +1441,14 @@ local function contarMonstrosAoRedor(targetPos)
         local totalMobs = #mobsAoRedorDoAlvo
         for i = 1, totalMobs do
             local mob = mobsAoRedorDoAlvo[i]
+            -- O filtro nativo do getSpectatorsInRange já limita o raio horizontal, reduzindo matemática redundante
             if mob and mob:isMonster() and mob:getHealthPercent() > 0 then
                 local mobPos = mob:getPosition()
                 if mobPos and mobPos.z == targetPos.z then
-                    if math.abs(targetPos.x - mobPos.x) <= raioDeAreaDoMonstro and math.abs(targetPos.y - mobPos.y) <= raioDeAreaDoMonstro then
-                        total = total + 1
-                        if total >= amountOfMonsters then break end
+                    total = total + 1
+                    -- PULO DO GATO: Se já atingiu a meta de monstros para usar área, encerra o loop IMEDIATAMENTE
+                    if total >= amountOfMonsters then 
+                        break 
                     end
                 end
             end
@@ -1461,10 +1461,10 @@ end
 combo = macro(200, "Smart Cast", function()
     if not g_game.isOnline() or not g_game.isAttacking() then return end     
     
-    local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
+    local agora = os.clock() -- os.clock() nativo puro rodando direto no processador
     
-    -- FREIO DE PROCESSAMENTO CONTRA FLOOD
-    if agora - ultimoTempoCombo < 200 then
+    -- FREIO DE PROCESSAMENTO (200ms = 0.2 segundos)
+    if agora - ultimoTempoCombo < 0.2 then
         return
     end
     
@@ -1478,7 +1478,7 @@ combo = macro(200, "Smart Cast", function()
     local minhaPos = localPlayer:getPosition()
     if not minhaPos or minhaPos.z ~= targetPos.z then return end
 
-    -- VALIDAÇÃO DE DISTÂNCIA
+    -- VALIDAÇÃO RÁPIDA DE DISTÂNCIA HORIZONTAL/VERTICAL
     if math.abs(minhaPos.x - targetPos.x) > alcanceMaximoTarget or math.abs(minhaPos.y - targetPos.y) > alcanceMaximoTarget then 
         return 
     end
@@ -1488,50 +1488,44 @@ combo = macro(200, "Smart Cast", function()
 
     -- ========================================================================
     -- [MODO PVP REGRA ABSOLUTA]: INTERCEPTAÇÃO SE O ALVO FOR UM PLAYER
-    -- Usa APENAS a Spell at Target HP ou a Single!
     -- ========================================================================
     if atacandoPlayer then
-        -- 1. Executa a Spell at Target HP se a vida do Player estiver abaixo do limite
         if targetHp <= storage[panelNameTarget].hp and cacheHpSpell ~= "" then
-            say(cacheHpSpell)
             ultimoTempoCombo = agora
+            say(cacheHpSpell)
             return
         end
 
-        -- 2. Se a vida do Player estiver alta, força estritamente a rotação Single (Ignora Área totalmente)
         local totalSingle = #cacheSingleSpells
         if totalSingle > 0 then
             if indexSingle > totalSingle then indexSingle = 1 end
+            ultimoTempoCombo = agora
             say(cacheSingleSpells[indexSingle])
             indexSingle = indexSingle + 1
-            ultimoTempoCombo = agora
         end
-        return -- Encerra o frame aqui para garantir que nenhuma lógica de monstros seja processada
+        return 
     end
 
     -- ========================================================================
-    -- [MODO PVE PADRÃO]: EXECUÇÃO SE O ALVO FOR UM MONSTRO/ELITE
-    -- CORRIGIDO: Removida a checagem de Target HP daqui. Apenas Área ou Single.
+    -- [MODO PVE PADRÃO]: EXECUÇÃO SE O ALVO FOR UM MONSTRO
     -- ========================================================================
-    
-    -- 1. Varre o chão para saber se usa Área ou Single contra o monstro
     local specAmount = contarMonstrosAoRedor(targetPos)
     
     if specAmount >= amountOfMonsters then
         local totalArea = #cacheAreaSpells
         if totalArea > 0 then
             if indexArea > totalArea then indexArea = 1 end
+            ultimoTempoCombo = agora
             say(cacheAreaSpells[indexArea])
             indexArea = indexArea + 1
-            ultimoTempoCombo = agora
         end
     else
         local totalSingle = #cacheSingleSpells
         if totalSingle > 0 then
             if indexSingle > totalSingle then indexSingle = 1 end
+            ultimoTempoCombo = agora
             say(cacheSingleSpells[indexSingle])
             indexSingle = indexSingle + 1
-            ultimoTempoCombo = agora
         end
     end
 end)
@@ -1556,7 +1550,6 @@ UI.Separator()
 UI.Label("Spell at Target HP"):setColor('#F5F5DC')
 UI.Separator()
 
--- Injeção nativa da Barra de Rolagem de HP
 local uiHP = setupUI([[
 Panel
   height: 20
@@ -1585,13 +1578,11 @@ end
 uiHP.HP:setValue(storage[panelNameTarget].hp)
 updateHpTextTarget()
 
--- Caixa de texto da magia de Target HP posicionada embaixo da barra
 UI.TextEdit(storage.hpspell or "", function(widget, text) 
     storage.hpspell = text 
     atualizarCacheSpells()
 end)
 
--- Inicializa os caches ao carregar o script
 atualizarCacheSpells()
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 UI.Label("~ Others ~"):setColor('#DEB887')
@@ -2121,7 +2112,7 @@ setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 UI.Label("~ Survival ~"):setColor('#DEB887')
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
--- Fast Regen (Versão Livre - Velocidade Máxima do Servidor)
+-- Fast Regen (Versão Otimizada - Velocidade PVP com Proteção de CPU)
 local panelName = "selfregen"
 local ui = setupUI([[
 Panel
@@ -2176,6 +2167,7 @@ end
 ui.HP:setValue(storage[panelName].hp)
 
 local cacheHealSpell = storage.autohealspell1 or "regeneration"
+local ultimoCastHeal = 0 -- Trava nativa estável de tempo de CPU
 
 UI.TextEdit(storage.autohealspell1 or "regeneration", function(widget, text)    
   local textoLimpo = text:trim()
@@ -2183,14 +2175,18 @@ UI.TextEdit(storage.autohealspell1 or "regeneration", function(widget, text)
   cacheHealSpell = textoLimpo
 end)
 
--- Macro disparando sem travas a cada ciclo de 100ms
+-- Macro calibrada para velocidade PvP estável sem travar os ganchos do Target/Cavebot
 macro(100, function()
   if not g_game.isOnline() or not storage[panelName].enabled then return end
 
+  local agora = os.clock()
+  -- BLINDAGEM DE ANTIFLOOD: Só tenta castar se já passou o tempo de exaustão real (250ms = 0.25s)
+  if agora - ultimoCastHeal < 0.25 then return end
+
   if storage[panelName].setting and cacheHealSpell ~= "" then
     if hppercent() <= storage[panelName].hp then
+        ultimoCastHeal = agora -- Seta o tempo do cast imediatamente antes de enviar o pacote
         say(cacheHealSpell)
-		delay(250)
     end
   end
 end)
@@ -3922,54 +3918,72 @@ macro(1000, function()
     end
 end)
 
--- Magic wall Timer (Versão Avançada Anti-Lag com Pulverização de CPU)
+-- ============================================================================
+--    MAGIC WALL TIMER (VERSÃO SUPREMA PURISTA - ZERO LAG / ZERO SLOW)
+-- ============================================================================
 local magicWallId = 10980
 local ultimoProcessoAdd = 0
 local ultimoProcessoRemove = 0
 
+-- Cacheamento global rápido dos métodos para não travar os frames com type()
+local temSetTimer = nil
+local temGetTimer = nil
+
+local function checarMetodosTile(tile)
+    if temSetTimer == nil and tile then
+        temSetTimer = (type(tile.setTimer) == "function")
+        temGetTimer = (type(tile.getTimer) == "function")
+    end
+end
+
+-- 1. MONITOR DE ADICIONAR M-WALL (PROCESSO EM 0MS)
 onAddThing(function(tile, thing)
-  -- FILTRO ULTRA RÁPIDO: Isola criaturas/efeitos visuais em 0ms
-  if not thing or not thing:isItem() or thing:getId() ~= magicWallId or not tile then 
-    return 
-  end
+    -- FILTRO DE ENTRADA BRUTO: Evita alocação de memória RAM para itens irrelevantes
+    if not thing or not tile or thing:getId() ~= magicWallId then 
+        return 
+    end
 
-  local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-  -- FREIO DE RAJADA: Se o client tentar adicionar dezenas de Mwalls no exato mesmo milissegundo,
-  -- cria um micro-espaçamento de 10ms para a thread do jogo não engasgar a tela!
-  if agora - ultimoProcessoAdd < 10 then
-    return
-  end
-  ultimoProcessoAdd = agora
+    local agora = os.clock()
+    -- FREIO DE RAJADA ATÔMICO: Descarta execuções repetidas no mesmo frame (10ms)
+    if agora - ultimoProcessoAdd < 0.01 then
+        return
+    end
+    ultimoProcessoAdd = agora
 
-  if type(tile.getTimer) == "function" and tile:getTimer() > 0 then return end
+    -- Inicializa a validação dos métodos do core uma única vez
+    checarMetodosTile(tile)
+
+    if temGetTimer and tile:getTimer() > 0 then 
+        return 
+    end
   
-  if type(tile.setTimer) == "function" then
-    tile:setTimer(20000) 
-  end
+    if temSetTimer then
+        tile:setTimer(20000) 
+    end
 end)
 
+-- 2. MONITOR DE REMOVER M-WALL (PROCESSO EM 0MS)
 onRemoveThing(function(tile, thing)
-  -- FILTRO ULTRA RÁPIDO: Isola criaturas/efeitos visuais em 0ms
-  if not thing or not thing:isItem() or thing:getId() ~= magicWallId or not tile then 
-    return 
-  end
+    -- FILTRO DE ENTRADA BRUTO
+    if not thing or not tile or thing:getId() ~= magicWallId then 
+        return 
+    end
 
-  local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
-  -- FREIO DE RAJADA: Aplica o mesmo micro-espaçamento de 10ms para pulverizar o pico de 331ms
-  if agora - ultimoProcessoRemove < 10 then
-    return
-  end
-  ultimoProcessoRemove = agora
+    local agora = os.clock()
+    -- FREIO DE RAJADA ATÔMICO (10ms)
+    if agora - ultimoProcessoRemove < 0.01 then
+        return
+    end
+    ultimoProcessoRemove = agora
   
-  if type(tile.setTimer) == "function" then
-    tile:setTimer(0) 
-  end
+    checarMetodosTile(tile)
+
+    if temSetTimer then
+        tile:setTimer(0) 
+    end
 end)
 
--- ============================================================================
 --    TARGET HEALTH BAR (VERSÃO CENTRO DA GAME WINDOW AUTOMÁTICO - ZERO LAG)
--- ============================================================================
-
 local lifeColors = {
     { percent = 35, color = 'red' },
     { percent = 75, color = 'yellow' },
