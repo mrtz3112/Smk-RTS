@@ -2077,7 +2077,7 @@ Panel
     
 ]], parent)
 ui:setId(panelName)
-local COOLDOWN_PADRAO = 120000 
+local COOLDOWN_PADRAO = 24000 
 local ultimoUsoDoPet = 0
 if not storage[panelName] then
   storage[panelName] = {
@@ -2390,12 +2390,13 @@ macro(250, function()
   end
 end)
 UI.Separator()
---AutoLegendary (Otimizado contra Lag de Mensagens Globais)
+--AutoLegendary (Versão Ultra-Otimizada - Zero Lag / Zero Slow no Chat)
 local panelName = "AutoLegendary"
 storage[panelName] = storage[panelName] or {enabled = false}
 local config = storage[panelName]
 storage.legendaryItem = storage.legendaryItem or 0
 storage.legendaryScroll = storage.legendaryScroll or 11351
+
 local ui = setupUI([[
 Panel
   height: 58
@@ -2444,11 +2445,10 @@ macro(1000, function()
     end
 end)
 onTextMessage(function(mode, text)
-    -- Se a macro de roletar estiver desligada, aborta no primeiro milissegundo
-    if not config.enabled then return end
-    if not text then return end
+    if not config.enabled or not text then return end
     if mode == 12 or mode == 20 or mode == 21 or mode == 19 then
-        if string.find(text, "Legendary") or string.find(text, "Kami") or string.find(text, "LEGENDARY") or string.find(text, "KAMI") then
+        local textoLimpo = tostring(text):lower()
+        if string.find(textoLimpo, "legendary", 1, true) or string.find(textoLimpo, "kami", 1, true) then
             config.enabled = false
             ui.title:setOn(false)
         end
