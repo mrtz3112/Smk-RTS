@@ -1168,47 +1168,6 @@ AutoEscadasMacroObjeto = macro(150, "Auto Escadas", function()
         return markOnThing(Stairs.bestTile, "#FF0000")
     end
 end)
-
---Auto Attack House Trainer
-if not storage.trainerMacroPauseUntil then
-  storage.trainerMacroPauseUntil = 0
-end
-onWalk(function(direction)
-    storage.trainerMacroPauseUntil = os.time() + 1
-end)
-local trainerMacro = macro(100, "House Trainer", function(macroObj)
-  if os.time() < storage.trainerMacroPauseUntil then
-    return
-  end
-  if modules.game_npctrade and modules.game_npctrade.isOpen and modules.game_npctrade.isOpen() then
-    return
-  end
-  local myPos = player:getPosition()
-  if not myPos then return end
-  -- Se já estiver atacando qualquer criatura, o macro apenas pausa para não interromper o combate
-  if g_game.isAttacking() then
-    return 
-  end
-  local closestTrainer = nil
-  local shortestDistance = 3 -- Filtro de raio máximo de 2 SQMs (raio menor que 3)
-  -- Varre os arredores para encontrar o Trainer mais próximo colado em você
-  for _, creature in ipairs(getSpectators()) do
-    if creature:getName():lower() == "house trainer" then
-      local trainerPos = creature:getPosition()
-      if trainerPos then
-        local distance = math.max(math.abs(myPos.x - trainerPos.x), math.abs(myPos.y - trainerPos.y))
-        -- Garante o ataque apenas se o Trainer estiver a no máximo 2 blocos de distância
-        if distance <= 2 and distance < shortestDistance then
-          shortestDistance = distance
-          closestTrainer = creature
-        end
-      end
-    end
-  end
-  if closestTrainer then
-    g_game.attack(closestTrainer)
-  end
-end)
 UI.Separator()
 --Eat Food
 local panelName = "AutoFood"
@@ -2457,7 +2416,7 @@ macro(100, function()
  if storage[panelNameNameManaPot].setting then
     if manapercent() <= storage[panelNameNameManaPot].hp then
         use(storage[panelNameNameManaPot].id)
-		delay(250)
+delay(250)
     end
  end
 end)
@@ -2531,7 +2490,7 @@ end
 local updateHpText = function()
     if storage[panelName].setting then
     ui.help:setText("Health: < " .. storage[panelName].hp .. "%")
-	end
+end
 end
 updateHpText()
 
@@ -2600,9 +2559,9 @@ macro(100, "Buffs", "CTRL+4", function()
 if isInPz() or not g_game.isAttacking() then return end
     if not hasStrengthened() then
         say(storage.buffskill01)
-	    say(storage.buffskill02)
-		delay(10000)
-	end
+    say(storage.buffskill02)
+delay(10000)
+end
 end)
 UI.TextEdit(storage.buffskill01 or "", function(widget, text)    
     storage.buffskill01 = text
@@ -2624,7 +2583,7 @@ macro(100, "Trade Channel", function()
   end
   if trade and storage.autotrademsg:len() > 0 then    
     sayChannel(trade, storage.autotrademsg)
-	delay(60000)
+delay(60000)
   end
 end)
 UI.TextEdit(storage.autotrademsg or "", function(widget, text)    
