@@ -699,31 +699,43 @@ macro(2000, "Enter Dungeon", function()
     end
   end
 end)
---Enter Rift
-macro(300, "Enter Rift", function()
+--Enter Rift Otimizado (Correção para achar em blocos vazios com Performance)
+macro(500, "Enter Rift", function()
     local player = g_game.getLocalPlayer()
     if not player then return end
     local playerPos = player:getPosition()
     if not playerPos then return end
+    
     local portalId = 11843
     local raioBusca = 6
+    local playerZ = playerPos.z
+
+    -- Varre os arredores de forma direta e limpa
     for x = -raioBusca, raioBusca do
         for y = -raioBusca, raioBusca do
-            local targetPos = {x = playerPos.x + x, y = playerPos.y + y, z = playerPos.z}
-            local tile = g_map.getTile(targetPos)
-            if tile and type(tile) == "userdata" and type(tile.getItems) == "function" then
-                local success, items = pcall(tile.getItems, tile)         
-                if success and items then
+            local tile = g_map.getTile({x = playerPos.x + x, y = playerPos.y + y, z = playerZ})
+            
+            -- Checagem nativa rápida sem pcall lento interno
+            if tile and type(tile) == "userdata" then
+                local items = type(tile.getItems) == "function" and tile:getItems()
+                if items then
                     for i = 1, #items do
                         local item = items[i]
                         if item and item:getId() == portalId then
-                            print("[Dungeon] Rift encontrada na coordenada X:"..targetPos.x.." Y:"..targetPos.y)
-                            playSound("/sounds/magnum.ogg")                        
+                            local targetPos = tile:getPosition()
+                            print("[Dungeon] Rift encontrada na coordenada X:" .. targetPos.x .. " Y:" .. targetPos.y)
+                            
+                            -- Som protegido fora do loop pesado
+                            pcall(playSound, "/sounds/magnum.ogg")
                             g_game.use(item)
+                            
                             if CaveBot and type(CaveBot.gotoLabel) == "function" then
                                 CaveBot.gotoLabel("Rift")
-                                if type(CaveBot.preNext) == "function" then CaveBot.preNext()
-                                elseif type(CaveBot.reload) == "function" then CaveBot.reload() end
+                                if type(CaveBot.preNext) == "function" then 
+                                    CaveBot.preNext()
+                                elseif type(CaveBot.reload) == "function" then 
+                                    CaveBot.reload() 
+                                end
                             end
                             return
                         end
@@ -733,6 +745,7 @@ macro(300, "Enter Rift", function()
         end
     end
 end)
+
 -- Auto Subir/Descer Escadas
 Stairs = {}
 Stairs.saveStatus = {}
@@ -3504,7 +3517,7 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   end
   return priority
 end
---TARGETBOT INTEGRADO: FILTRO DE PARTY, ANTI-LURE ALHEIO E REGRA DE GUILD V4
+--TARGETBOT INTEGRADO: FILTRO DE PARTY, ANTI-LURE ALHEIO E REGRA DE GUILD V4 CORRIGIDO SEM RETROCESSO
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 local function isMonsterSpecial(creatureName)
     if not creatureName then return false end
@@ -3516,62 +3529,56 @@ local function isMonsterSpecial(creatureName)
     end
     return false
 end
+
 local cacheIdsParty = {}
 local ultimoTempoCheckParty = 0
--- 1. INTERCEPTADOR SEGURO DE PATHFINDING
-local oldFindPath = findPath
-if type(oldFindPath) == "function" then
-    findPath = function(startPos, endPos, maxDist, options, ...)
-        if not startPos or not endPos or startPos.z ~= endPos.z then
-            return nil
-        end
-        local distX = startPos.x - endPos.x
-        if distX < 0 then distX = -distX end
-        
-        local distY = startPos.y - endPos.y
-        if distY < 0 then distY = -distY end
-        if distX > 7 or distY > 7 then
-            return nil
-        end
-        return oldFindPath(startPos, endPos, maxDist, options, ...)
-    end
-end
--- 2. GANCHO DE COMPORTAMENTO COM TRAVA DE PARTY E INIMIGOS ALHEIOS
+
+-- 2. GANCHO DE COMPORTAMENTO WITH TRAVA DE PARTY E INIMIGOS ALHEIOS
 if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams) == "function" then
     local oldCalculateParams = TargetBot.Creature.calculateParams
     local getLocalPlayer = g_game.getLocalPlayer
     local isOnline = g_game.isOnline
     local monstrosProcessadosNoCiclo = 0
     local ultimoTickCiclo = 0
+    
     TargetBot.Creature.calculateParams = function(creature, path, ...)
         local player = getLocalPlayer()
         if not player or not creature then return { danger = 0, priority = 0 } end
         local cName = creature:getName()
         if not cName then return { danger = 0, priority = 0 } end
         local nomeLimpoCreature = string.lower(cName)
+        
         -- [REGRA SUPREMA DE GUILD]: SE HOUVER "GUILD" NO NOME, ATACA NA HORA!
-        -- Passa por cima de qualquer trava de party, anti-lure alheio e distância.
         if string.find(nomeLimpoCreature, "guild", 1, true) then
             local res = oldCalculateParams(creature, path, ...)
             if res then
-                -- Injeta valores máximos para o TargetBot focar nele imediatamente
                 res.danger = 10
                 res.priority = 10000 
                 return res
             end
             return { danger = 10, priority = 10000 }
         end
+        
+        -- OTIMIZAÇÃO INTERNA DO TARGET: Se o monstro estiver fora do andar ou muito longe na tela (X ou Y > 7)
+        local pPos = player:getPosition()
+        local cPos = creature:getPosition()
+        if not pPos or not cPos or pPos.z ~= cPos.z then
+            return { danger = 0, priority = 0 }
+        end
+        
+        local distX = math.abs(pPos.x - cPos.x)
+        local distY = math.abs(pPos.y - cPos.y)
+        if distX > 7 or distY > 7 then
+            return { danger = 0, priority = 0 }
+        end
+
         -- [MODO PADRÃO]: RESTO DA LOGICA PARA MONSTROS COMUNS E ELITES
         local agora = os.clock() * 1000
         if agora - ultimoTickCiclo > 50 then
             monstrosProcessadosNoCiclo = 0
             ultimoTickCiclo = agora
         end
-        local pPos = player:getPosition()
-        local cPos = creature:getPosition()
-        if not pPos or not cPos or pPos.z ~= cPos.z then
-            return { danger = 0, priority = 0 }
-        end
+        
         -- Sincronização do cache da Party (Apenas a cada 5 segundos)
         if agora - ultimoTempoCheckParty >= 5000 then
             cacheIdsParty = {}
@@ -3588,8 +3595,10 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
             end
             ultimoTempoCheckParty = agora
         end
+        
         local ehElite = isMonsterSpecial(cName)
         local deveIgnorarMonstro = false
+        
         -- CHECAGEM DIRETA DE TARGET ID (Método Rápido em C++)
         local mTargetId = 0
         if type(creature.getTargetId) == "function" then mTargetId = creature:getTargetId() or 0
@@ -3598,34 +3607,32 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
             local tgt = creature:getTarget()
             if tgt then mTargetId = tgt:getId() or 0 end
         end
+        
         -- Se o Elite tiver um alvo definido que não seja você e não seja da Party
         if ehElite and mTargetId > 0 and mTargetId ~= player:getId() and not cacheIdsParty[mTargetId] then
             deveIgnorarMonstro = true
         end
+        
         -- IDENTIFICAÇÃO DE ALVOS ALHEIOS POR PROXIMIDADE
         if not deveIgnorarMonstro then
-            local specs = getSpectators(cPos)
+            local specs = g_map.getSpectatorsInRange(cPos, false, 1, 1)
             if specs then
                 for s = 1, #specs do
                     local spec = specs[s]
-                    if spec and spec:isPlayer() and spec ~= player then
+                    if spec and spec:isPlayer() and spec:getId() ~= player:getId() then
                         local sPos = spec:getPosition()
                         if sPos and sPos.z == cPos.z then
-                            local distMonstroParaPlayerX = math.abs(cPos.x - sPos.x)
-                            local distMonstroParaPlayerY = math.abs(cPos.y - sPos.y)
-                            
-                            if distMonstroParaPlayerX <= 1 and distMonstroParaPlayerY <= 1 then
-                                local estranhoAlvoId = spec:getId()
-                                if estranhoAlvoId and not cacheIdsParty[estranhoAlvoId] then
-                                    deveIgnorarMonstro = true
-                                    break
-                                end
+                            local estranhoAlvoId = spec:getId()
+                            if estranhoAlvoId and not cacheIdsParty[estranhoAlvoId] then
+                                deveIgnorarMonstro = true
+                                break
                             end
                         end
                     end
                 end
             end
         end
+        
         -- CORREÇÃO CRÍTICA: Se deve ignorar o monstro, zera a relevância dele no target
         if deveIgnorarMonstro then
             local res = oldCalculateParams(creature, path, ...)
@@ -3636,23 +3643,14 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
             end
             return { danger = 0, priority = 0 }
         end
-        local distX = math.abs(pPos.x - cPos.x)
-        local distY = math.abs(pPos.y - cPos.y)
-        -- Filtros de otimização de CPU originais da sua hunt
-        if distX > 3 or distY > 3 then
-            if distX <= 7 and distY <= 7 then
-                local res = oldCalculateParams(creature, path, ...)
-                if res then res.priority = 1 return res end
-            end
-            local res = oldCalculateParams(creature, path, ...)
-            if res then res.danger = 0 res.priority = 0 return res end
-            return { danger = 0, priority = 0 }
-        end
+        
+        -- OTIMIZAÇÃO DE CICLO DE CPU (Evita recalcular se a fila do frame já estiver cheia)
         if monstrosProcessadosNoCiclo >= 3 then
             local res = oldCalculateParams(creature, path, ...)
             if res then res.priority = 1 return res end
             return { danger = 0, priority = 0 }
         end
+        
         monstrosProcessadosNoCiclo = monstrosProcessadosNoCiclo + 1
         return oldCalculateParams(creature, path, ...)
     end
