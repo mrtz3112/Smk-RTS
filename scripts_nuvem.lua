@@ -1737,29 +1737,57 @@ end)
 
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- ============================================================================
---    SPELL CASTER PANEL - PARTE 1 (LAYOUTS COM NOMES SMART CAST / CHANGE SET)
+--    SPELL CASTER PANEL - PARTE 1 (RESOLUÇÃO DO CONGELAMENTO VERTICAL)
 -- ============================================================================
-
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
 if storage.painelSalvo.revideAtivo == nil then storage.painelSalvo.revideAtivo = false end
-if storage.painelSalvo.horizontal == nil then storage.painelSalvo.horizontal = false end
+if storage.painelSalvo.horizontal == nil then storage.painelSalvo.horizontal = true end 
 if storage.painelSalvo.modoPvP == nil then storage.painelSalvo.modoPvP = false end
 
-local painelIconesUI = nil
-local ultimoIdPlayerPainel = 0
+painelIconesUI = nil 
+ultimoIdPlayerPainel = 0
 
--- LAYOUT MODO VERTICAL (Largura confortável de 114 pixels)
-local layoutVertical = [[
-MainWindow
+-- MATADOR DE CLONES ANTES DE CARREGAR OS LAYOUTS
+pcall(function()
+    local root = g_ui.getRootWidget()
+    if root then
+        local antigo = root:recursiveGetChildById("painelMacrosJanela")
+        if antigo then antigo:destroy() end
+    end
+    local mapPanel = modules.game_interface and modules.game_interface.getMapPanel and modules.game_interface.getMapPanel()
+    if mapPanel then
+        local filhos = mapPanel:getChildren()
+        for i = 1, #filhos do
+            if filhos[i] and filhos[i]:getId() == "painelMacrosJanela" then
+                filhos[i]:destroy()
+            end
+        end
+    end
+end)
+
+-- LAYOUT MODO VERTICAL (Botoes amarrados direto no parent para nao congelar)
+layoutVertical = [[
+UIWidget
   id: painelMacrosJanela
-  !text: tr('Spell Caster')
-  color: #FFDEAD
-  size: 114 208
+  background-color: #1a1a1aef
+  border: 1 #3a3a3a
+  border-radius: 4
+  size: 114 178
   focusable: false
-  draggable: true
+  draggable: false
   phantom: false
+
+  UILabel
+    id: tituloPainel
+    anchors.top: parent.top
+    anchors.horizontalCenter: parent.horizontalCenter
+    margin-top: 5
+    color: #FFDEAD
+    font: verdana-11px-rounded
+    text: Spell Caster
+    text-auto-resize: true
 
   Panel
     id: containerIcones
@@ -1769,46 +1797,42 @@ MainWindow
     Button
       id: botaoSpells
       !text: tr('Smart Cast')
-      size: 100 24
+      size: 102 22
       anchors.top: parent.top
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-left: 1
+      margin-top: 24
 
     Button
       id: botaoWave
       !text: tr('Wave')
-      size: 100 24
+      size: 102 22
       anchors.top: botaoSpells.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 4
-      margin-left: 1
 
     Button
       id: botaoRevidePK
       !text: tr('Revide PK')
-      size: 100 24
+      size: 102 22
       anchors.top: botaoWave.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 4
-      margin-left: 1
 
     Button
       id: botaoCaveTarget
       !text: tr('Stop Bot')
-      size: 100 24
+      size: 102 22
       anchors.top: botaoRevidePK.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 4
-      margin-left: 1
 
     Button
       id: botaoSetEquip
       !text: tr('Change Set')
-      size: 100 24
+      size: 102 22
       anchors.top: botaoCaveTarget.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       margin-top: 4
-      margin-left: 1
 
     Button
       id: botaoGirar
@@ -1816,20 +1840,30 @@ MainWindow
       size: 80 18
       anchors.top: botaoSetEquip.bottom
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 10
-      margin-left: 1
+      margin-top: 6
 ]]
 
--- LAYOUT MODO HORIZONTAL (Largura de 578 pixels)
-local layoutHorizontal = [[
-MainWindow
+-- LAYOUT MODO HORIZONTAL FIXO
+layoutHorizontal = [[
+UIWidget
   id: painelMacrosJanela
-  !text: tr('Spell Caster')
-  color: #FFDEAD
-  size: 578 75
+  background-color: #1a1a1aef
+  border: 1 #3a3a3a
+  border-radius: 4
+  size: 537 52
   focusable: false
-  draggable: true
+  draggable: false
   phantom: false
+
+  UILabel
+    id: tituloPainel
+    anchors.top: parent.top
+    anchors.horizontalCenter: parent.horizontalCenter
+    margin-top: 2
+    color: #FFDEAD
+    font: verdana-11px-rounded
+    text: Spell Caster
+    text-auto-resize: true
 
   Panel
     id: containerIcones
@@ -1839,59 +1873,78 @@ MainWindow
     Button
       id: botaoSpells
       !text: tr('Smart Cast')
-      size: 94 24
-      anchors.top: parent.top
+      size: 88 22
+      anchors.bottom: parent.bottom
       anchors.left: parent.left
-      margin-top: 0
-      margin-left: 2
+      margin-bottom: 6
+      margin-left: 6
 
     Button
       id: botaoWave
       !text: tr('Wave')
-      size: 94 24
-      anchors.top: parent.top
+      size: 88 22
+      anchors.bottom: parent.bottom
       anchors.left: botaoSpells.right
-      margin-top: 0
-      margin-left: 4
+      margin-bottom: 6
+      margin-left: 5
 
     Button
       id: botaoRevidePK
       !text: tr('Revide PK')
-      size: 94 24
-      anchors.top: parent.top
+      size: 88 22
+      anchors.bottom: parent.bottom
       anchors.left: botaoWave.right
-      margin-top: 0
-      margin-left: 4
+      margin-bottom: 6
+      margin-left: 5
 
     Button
       id: botaoCaveTarget
       !text: tr('Stop Bot')
-      size: 94 24
-      anchors.top: parent.top
+      size: 88 22
+      anchors.bottom: parent.bottom
       anchors.left: botaoRevidePK.right
-      margin-top: 0
-      margin-left: 4
+      margin-bottom: 6
+      margin-left: 5
 
     Button
       id: botaoSetEquip
       !text: tr('Change Set')
-      size: 94 24
-      anchors.top: parent.top
+      size: 88 22
+      anchors.bottom: parent.bottom
       anchors.left: botaoCaveTarget.right
-      margin-top: 0
-      margin-left: 4
+      margin-bottom: 6
+      margin-left: 5
 
     Button
       id: botaoGirar
       !text: tr('Switch')
-      size: 56 24
-      anchors.top: parent.top
+      size: 60 22
+      anchors.bottom: parent.bottom
       anchors.left: botaoSetEquip.right
-      margin-top: 0
+      margin-bottom: 6
       margin-left: 10
 ]]
+
+-- FUNÇÃO DE ANCORAGEM FIXA GEOGRÁFICA
+function reposicionarPainelSpellCaster()
+    if not painelIconesUI then return end
+    
+    local mapPanel = modules.game_interface and modules.game_interface.getMapPanel and modules.game_interface.getMapPanel()
+    if not mapPanel then return end
+    
+    local mapHeight = mapPanel:getHeight()
+    local mapX = mapPanel:getX()
+    local mapY = mapPanel:getY()
+    
+    -- Alinhamento perfeito travado na quina inferior esquerda da Game Window
+    local posX = mapX + 5
+    local posY = mapY + mapHeight - painelIconesUI:getHeight() - 7
+    
+    painelIconesUI:setPosition({ x = posX, y = posY })
+end
+
 -- ============================================================================
---    SPELL CASTER PANEL - PARTE 2 (VERSÃO ESTABILIZADA DIRETAMENTE PARA REVIDEPKMACRO)
+--    SPELL CASTER PANEL - PARTE 2 (VERSÃO CORRIGIDA CONTRA FANTASMAS GRÁFICOS)
 -- ============================================================================
 
 local function isMacroActive(macroRef)
@@ -1902,7 +1955,6 @@ local function isMacroActive(macroRef)
     return false
 end
 
--- Simula o clique físico nas caixas de modo de ataque originais do jogo
 local function forcarModoAtaquePeloBotao(modo)
     local rootWidget = g_ui.getRootWidget()
     if not rootWidget then return end
@@ -1911,7 +1963,6 @@ local function forcarModoAtaquePeloBotao(modo)
     if targetButton then pcall(function() targetButton:onClick() end) end
 end
 
--- Aplica as cores hexadecimais de forma contínua para os botões coloridos
 local function pintarBotaoSeguro(container, idBotao, condicaoVerde)
     local btn = container:getChildById(idBotao)
     if btn and type(btn.setColor) == "function" then
@@ -1925,14 +1976,10 @@ local function atualizarCoresPainelCompleto()
     local container = painelIconesUI:getChildById("containerIcones")
     if not container then return end
 
-    -- Sincroniza as cores das macros operacionais (Verde para ON / Vermelho para OFF)
     pintarBotaoSeguro(container, "botaoSpells", isMacroActive(combo))
     pintarBotaoSeguro(container, "botaoWave", isMacroActive(turnCombo))
-    
-    -- CONEXÃO REMOTA DIRETA: Lê o status REAL e síncrono da macro 'revidePKMacro' na memória RAM
     pintarBotaoSeguro(container, "botaoRevidePK", isMacroActive(revidePKMacro))
     
-    -- FORÇA A COR BRANCA FIXA (#FFFFFF) NOS BOTÕES DE UTILITÁRIOS ESTÁTICOS
     local btnCaveTarget = container:getChildById("botaoCaveTarget")
     if btnCaveTarget and type(btnCaveTarget.setColor) == "function" then
         pcall(function() btnCaveTarget:setColor("#FFFFFF") end)
@@ -1980,15 +2027,8 @@ conectarComponentesPainel = function()
     
     if btnSpells then btnSpells.onClick = function() alternarEstadoMacro(combo, "spells") end end
     if btnWave then btnWave.onClick = function() alternarEstadoMacro(turnCombo, "wave") end end
+    if btnRevidePK then btnRevidePK.onClick = function() alternarEstadoMacro(revidePKMacro, "revideAtivo") end end
     
-    -- CONEXÃO CORRIGIDA DO CLIQUE: Alterna diretamente a macro nativa vinculada ao ponteiro correto
-    if btnRevidePK then 
-        btnRevidePK.onClick = function() 
-            alternarEstadoMacro(revidePKMacro, "revideAtivo") 
-        end 
-    end
-    
-    -- LÓGICA DE PÂNICO STOP BOT
     if btnCaveTarget then
         btnCaveTarget.onClick = function()
             local caveLigado = CaveBot and type(CaveBot.isOn) == "function" and CaveBot.isOn()
@@ -2005,7 +2045,6 @@ conectarComponentesPainel = function()
         end
     end
 
-    -- LÓGICA DE CLIQUE CHANGE SET
     if btnSetEquip then
         btnSetEquip.onClick = function()
             if storage.painelSalvo and g_game.isOnline() then
@@ -2020,21 +2059,25 @@ conectarComponentesPainel = function()
     
     if btnGirar then
         btnGirar.onClick = function()
-            if storage and storage.painelSalvo then
+            if storage and storage.painelSalvo and type(layoutHorizontal) == "string" then
                 storage.painelSalvo.horizontal = not storage.painelSalvo.horizontal
-                painelIconesUI:destroy()
+                if painelIconesUI then painelIconesUI:destroy() end
+                
                 local layout = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
                 painelIconesUI = setupUI(layout, modules.game_interface.getMapPanel())
                 conectarComponentesPainel()
+                if type(reposicionarPainelSpellCaster) == "function" then
+                    reposicionarPainelSpellCaster()
+                end
             end
         end
     end
     atualizarCoresPainelCompleto()
 end
 
--- INITIALIZAÇÃO INDESTRUTÍVEL (Limpa clones antigos antes de criar)
+-- CONSTRUTOR SEGURO COM DISCONNECT DE FANTASMAS
 local mapPanel = modules.game_interface and modules.game_interface.getMapPanel and modules.game_interface.getMapPanel()
-if mapPanel and storage and storage.painelSalvo then
+if mapPanel and storage and storage.painelSalvo and type(layoutHorizontal) == "string" then
     local janelasNoPainel = mapPanel:getChildren()
     if janelasNoPainel then
         for i = 1, #janelasNoPainel do
@@ -2045,13 +2088,21 @@ if mapPanel and storage and storage.painelSalvo then
     local layoutInicial = storage.painelSalvo.horizontal and layoutHorizontal or layoutVertical
     painelIconesUI = setupUI(layoutInicial, mapPanel)
     conectarComponentesPainel()
+    if type(reposicionarPainelSpellCaster) == "function" then
+        reposicionarPainelSpellCaster()
+    end
 end
 
--- LOOP DE ATUALIZAÇÃO CONTÍNUA RECALIBRADO (Removido loops redundantes que causavam o "pula-pula" de status)
-macro(800, function() 
+-- LOOP SÍNCRONO NATAL
+macro(400, function() 
     if not g_game.isOnline() or not painelIconesUI then return end
+    if type(reposicionarPainelSpellCaster) == "function" then
+        reposicionarPainelSpellCaster()
+    end
     atualizarCoresPainelCompleto()
 end)
+
+
 
 setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
@@ -3986,8 +4037,6 @@ macro(400, function()
     
     updateTargetWidget(name, percent, hasTarget)
 end)
-
-
 
 --CaveBotConfigs
 local cavebotTab = "Cave"
