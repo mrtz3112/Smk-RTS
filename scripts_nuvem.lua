@@ -1822,7 +1822,7 @@ UIWidget
       size: 102 22
       anchors.top: parent.top
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 24
+      margin-top: 25
 
     Button
       id: botaoWave
@@ -1862,7 +1862,7 @@ UIWidget
       size: 80 18
       anchors.top: botaoSetEquip.bottom
       anchors.horizontalCenter: parent.horizontalCenter
-      margin-top: 6
+      margin-top: 8
 ]]
 
 -- LAYOUT MODO HORIZONTAL FIXO
