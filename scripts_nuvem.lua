@@ -1011,9 +1011,7 @@ Stairs.goUse = function(pos)
     end
 end
 
--- ============================================================================
 -- FUNÇÃO DE BUSCA ULTRA PERFORMANCE (Restrita ao Limite Máximo de 3 SQMs)
--- ============================================================================
 Stairs.checkAll = function()
     local playerObj = g_game.getLocalPlayer()
     if not playerObj then return nil end
@@ -1047,9 +1045,7 @@ Stairs.checkAll = function()
     return bestTileFound
 end
 
--- ============================================================================
 -- SINAIS DE EVENTO BLINDADOS (Proteção Total Contra Inicialização Nil)
--- ============================================================================
 onPlayerPositionChange(function(newPos, oldPos)
     -- BLINDAGEM DE INICIALIZAÇÃO: Se a tabela ou a macro não existirem na memória ainda, aborta
     if not Stairs or not Stairs.config or not AutoEscadasMacroObjeto then
@@ -1104,9 +1100,7 @@ function markOnThing(thing, color)
     return false
 end
 
--- ============================================================================
 -- MACRO DE MOVIMENTAÇÃO (40ms - Exige manter a tecla Espaço pressionada)
--- ============================================================================
 Stairs.walk = macro(40, function()
     if not Stairs or not Stairs.config then return Stairs.walk.setOff() end
 
@@ -1135,9 +1129,7 @@ Stairs.walk = macro(40, function()
 end)
 Stairs.walk.setOff()
 
--- ============================================================================
 -- MACRO PRINCIPAL DO RADAR (Suave a 150ms)
--- ============================================================================
 AutoEscadasMacroObjeto = macro(150, "Auto Escadas", function()
     if not Stairs or not Stairs.config then return end
     if Stairs.walk.isOn() then 
@@ -1413,9 +1405,7 @@ setDefaultTab("Fight")
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 UI.Label("~ Spell Caster ~"):setColor('#DEB887')
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
--- ============================================================================
 --    SMART CAST INTEGRADO (VERSÃO ULTRA-OTIMIZADA COM OS.CLOCK PURO - ZERO LAG)
--- ============================================================================
 lowhp = {
     isOn = function() return false end,
     setOn = function() end,
@@ -1502,9 +1492,7 @@ combo = macro(200, "Smart Cast", function()
     local targetHp = target:getHealthPercent()
     local atacandoPlayer = target:isPlayer()
 
-    -- ========================================================================
     -- [MODO PVP REGRA ABSOLUTA]: INTERCEPTAÇÃO SE O ALVO FOR UM PLAYER
-    -- ========================================================================
     if atacandoPlayer then
         if targetHp <= storage[panelNameTarget].hp and cacheHpSpell ~= "" then
             ultimoTempoCombo = agora
@@ -1522,9 +1510,7 @@ combo = macro(200, "Smart Cast", function()
         return 
     end
 
-    -- ========================================================================
     -- [MODO PVE PADRÃO]: EXECUÇÃO SE O ALVO FOR UM MONSTRO
-    -- ========================================================================
     local specAmount = contarMonstrosAoRedor(targetPos)
     
     if specAmount >= amountOfMonsters then
@@ -1546,9 +1532,7 @@ combo = macro(200, "Smart Cast", function()
     end
 end)
 
--- ============================================================================
 --    DESIGN GRÁFICO DA INTERFACE UNIFICADA (UI)
--- ============================================================================
 UI.Separator()
 UI.Label("Area (2+ Mobs)"):setColor('#F5F5DC')
 UI.Separator()
@@ -1758,9 +1742,7 @@ macro(200, function()
 end)
 
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
--- ============================================================================
 --    SPELL CASTER PANEL - PARTE 1 (RESOLUÇÃO DO CONGELAMENTO VERTICAL)
--- ============================================================================
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
@@ -1965,9 +1947,7 @@ function reposicionarPainelSpellCaster()
     painelIconesUI:setPosition({ x = posX, y = posY })
 end
 
--- ============================================================================
 --    SPELL CASTER PANEL - PARTE 2 (VERSÃO CORRIGIDA CONTRA FANTASMAS GRÁFICOS)
--- ============================================================================
 
 local function isMacroActive(macroRef)
     if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
@@ -2938,10 +2918,7 @@ end)
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 UI.Label("~ HUD Hotkeys ~"):setColor('#DEB887')
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
--- ============================================================================
 --    CONTROLE CAVE/TARGET (VERSÃO SUPREMA PURISTA - ZERO DEPENDÊNCIAS DE TEMPO)
--- ============================================================================
-
 local ultimoApertoCave = 0
 local ultimoApertoTarget = 0
 
@@ -2959,9 +2936,8 @@ local function alternarMotoresHunt(forcarLigar)
     passoSincronismo = 1
 end
 
--- ============================================================================
+
 -- 1. START/STOP CAVEBOT (HOTKEY CTRL+1)
--- ============================================================================
 hotkey("CTRL+1", function()
     local agora = os.clock()
     if agora - ultimoApertoCave < 0.3 then return end 
@@ -2979,9 +2955,7 @@ hotkey("CTRL+1", function()
     end
 end)
 
--- ============================================================================
 -- 2. START/STOP TARGETBOT (HOTKEY CTRL+2)
--- ============================================================================
 hotkey("CTRL+2", function()
     local agora = os.clock()
     if agora - ultimoApertoTarget < 0.3 then return end 
@@ -2999,9 +2973,7 @@ hotkey("CTRL+2", function()
     end
 end)
 
--- ============================================================================
 -- 3. ESCALONADOR NATAL DE FRAMES (SUBSTITUTO INDESTRUTÍVEL DO SCHEDULE)
--- ============================================================================
 -- Usamos um micro-macro síncrono ultra-leve rodando a cada 30ms.
 -- Ele gerencia a ativação dos motores dando o fôlego exato que o C++ precisa,
 -- gastando zero de CPU e sendo imune a falhas de funções globais nulas do cliente.
@@ -3038,9 +3010,7 @@ macro(30, function()
     end
 end)
 
--- ============================================================================
 -- 4. GANCHO OPERACIONAL DO PAINEL (CONEXÃO ESTÁVEL DA INTERFACE)
--- ============================================================================
 if CaveBot and TargetBot then
     if type(CaveBot.isOn) == "function" then
         pcall(function()
@@ -3409,10 +3379,8 @@ onTalk(function(...)
     say('sense "' .. storage.Sense)
     return true
 end)
--- ============================================================================
---    REVIDE PK NATIVO V10 (CONECTADO AO PONTEIRO OFICIAL DO PAINEL)
--- ============================================================================
 
+--    REVIDE PK NATIVO V10 (CONECTADO AO PONTEIRO OFICIAL DO PAINEL)
 local botsDesligadosPVP = false
 local ultimoModoAtaque = nil
 local ultimoTempoTrocaEstado = 0 
@@ -3524,15 +3492,24 @@ revidePKMacro = macro(250, 'Revide PK', function()
     end
 end)
 
-
---SafeFightSync
+--SAFE FIGHT SYNC (VERSÃO ULTRA-OTIMIZADA - CACHE DE UI COM ZERO LAG)
 local ultimoEstadoSeguro = nil
-macro(100, function()
-    local rootWidget = g_ui.getRootWidget()
-    if not rootWidget then return end
-    local bBalanced = rootWidget:recursiveGetChildById("fightBalancedBox")
-    local estaNoBalanced = bBalanced and (bBalanced:isOn() or bBalanced:isChecked())
+local botaoBalancedCache = nil -- Guarda a referência do botão na memória profunda
 
+-- Calibrado para 300ms: Sincronia de combate em tempo real sem travar a CPU
+macro(300, function()
+    if not g_game.isOnline() then return end
+    -- O PULO DO GATO: Se o botão ainda não foi mapeado, procura ele uma única vez
+    if not botaoBalancedCache then
+        local rootWidget = g_ui.getRootWidget()
+        if rootWidget then
+            botaoBalancedCache = rootWidget:recursiveGetChildById("fightBalancedBox")
+        end
+    end
+    -- Se o botão não existir ou a barra de combate estiver fechada, aborta sem pesar a CPU
+    if not botaoBalancedCache then return end
+    -- Lê o estado do botão direto do cache da memória RAM de forma instantânea
+    local estaNoBalanced = (botaoBalancedCache:isOn() or botaoBalancedCache:isChecked())
     if estaNoBalanced then
         if ultimoEstadoSeguro ~= true then
             if g_game.setSafeFight then 
@@ -3550,9 +3527,7 @@ macro(100, function()
     end
 end)
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
--- ============================================================================
 -- HUD PVE/PVP PREMIUM - SMK CUSTOM v4.2 (Versão Unificada Final Original)
--- ============================================================================
 local pvehud = setupUI([[
 Panel
   id: pveMainPanel
@@ -3934,9 +3909,7 @@ macro(1000, function()
     end
 end)
 
--- ============================================================================
 --    MAGIC WALL TIMER (VERSÃO SUPREMA PURISTA - ZERO LAG / ZERO SLOW)
--- ============================================================================
 local magicWallId = 10980
 local ultimoProcessoAdd = 0
 local ultimoProcessoRemove = 0
@@ -4263,10 +4236,8 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
         if not cName then return { danger = 0, priority = 0 } end
         local nomeLimpoCreature = string.lower(cName)
 
-        -- ========================================================================
         -- [REGRA SUPREMA DE GUILD]: SE HOUVER "GUILD" NO NOME, ATACA NA HORA!
         -- Passa por cima de qualquer trava de party, anti-lure alheio e distância.
-        -- ========================================================================
         if string.find(nomeLimpoCreature, "guild", 1, true) then
             local res = oldCalculateParams(creature, path, ...)
             if res then
@@ -4278,9 +4249,7 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
             return { danger = 10, priority = 10000 }
         end
 
-        -- ========================================================================
         -- [MODO PADRÃO]: RESTO DA LOGICA PARA MONSTROS COMUNS E ELITES
-        -- ========================================================================
         local agora = os.clock() * 1000
         if agora - ultimoTickCiclo > 50 then
             monstrosProcessadosNoCiclo = 0
