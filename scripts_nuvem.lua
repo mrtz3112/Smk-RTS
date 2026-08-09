@@ -9,7 +9,6 @@ local function processarConteudo(content)
     for word in content:gmatch('%.([%a%d_]+)') do 
         if word and word:len() > 0 then chavesPermitidasLoader[word] = true end
     end
-    
     chavesPermitidasLoader["alarms"] = true
     chavesPermitidasLoader["_macros"] = true
     chavesPermitidasLoader["_configs"] = true
@@ -19,7 +18,6 @@ local function processarConteudo(content)
 end
 local function conectarRepositorio()
     if not g_game.isOnline() then return end
-    
     if type(HTTP) == "table" and type(HTTP.get) == "function" then
         HTTP.get(URL_REPOSITORIO_ONLINE, function(content, err)
             if not err and content and type(content) == "string" then
@@ -38,12 +36,10 @@ local function conectarRepositorio()
 end
 local function sanitizarTabelaParaJson(t)
     if type(t) ~= "table" then return t end
-    
     local keysToRemove = {}
     local keysToConvert = {}
     local temChaveTexto = false
     local temChaveNumerica = false
-    
     for k, v in pairs(t) do
         if k == "petItemCooldowns" or k == "" or k == nil or type(k) == "boolean" or type(k) == "table" or type(k) == "userdata" or type(v) == "userdata" then
             keysToRemove[k] = true
@@ -80,10 +76,8 @@ local initMacro = nil
 local tempoInicial = g_clock and g_clock.getMillis() or (os.clock() * 1000)
 initMacro = macro(1000, function()
     if not g_game.isOnline() then return end
-    
     local agora = g_clock and g_clock.getMillis() or (os.clock() * 1000)
     if agora - tempoInicial < 3000 then return end
-    
     if storage then
         pcall(function() sanitizarTabelaParaJson(storage) end)
     end
