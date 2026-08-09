@@ -1937,8 +1937,8 @@ function reposicionarPainelSpellCaster()
     local mapY = mapPanel:getY()
     
     -- Alinhamento perfeito travado na quina inferior esquerda da Game Window
-    local posX = mapX + 5
-    local posY = mapY + mapHeight - painelIconesUI:getHeight() - 7
+    local posX = mapX + 3
+    local posY = mapY + mapHeight - painelIconesUI:getHeight() - 5
     
     painelIconesUI:setPosition({ x = posX, y = posY })
 end
@@ -2101,8 +2101,6 @@ macro(400, function()
     end
     atualizarCoresPainelCompleto()
 end)
-
-
 
 setDefaultTab("HEAL")
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
@@ -2590,7 +2588,8 @@ local function hasStrengthened()
     end
     return false
 end
-macro(100, "Buff", "CTRL+4", function()
+UI.Separator()
+macro(100, "Buffs", "CTRL+4", function()
 if isInPz() or not g_game.isAttacking() then return end
     if not hasStrengthened() then
         say(storage.buffskill01)
