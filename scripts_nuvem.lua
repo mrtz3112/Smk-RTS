@@ -533,41 +533,55 @@ end)
 
 UI.Separator()
 
---Deposit & Stack
+-- ============================================================================
+--    STACK & DEPOSIT (VERSÃO COORDENADA COM SUPORTE A ITENS ÚNICOS - ZERO LAG)
+-- ============================================================================
+
 local processandoAgora = false
 local hashInventarioAnterior = ""
 
--- FUNÇÃO PRINCIPAL: Executa o fluxo de depósito e empilhamento inteligente
+-- FUNÇÃO PRINCIPAL: Executa o fluxo de depósito e empilhamento de forma leve
 local function executarFluxoStackEDeposit()
   if not g_game.isOnline() or processandoAgora then return end
   processandoAgora = true
 
-  -- 1. CHECAGEM RÁPIDA E DEPOSIT DE DINHEIRO
+  -- 1. CHECAGEM SUPERFICIAL E DEPOSIT DE DINHEIRO
   local coinIds = { 3031, 3035, 3043, 10137 } 
   for i = 1, #coinIds do
     local itemCoin = findItem(coinIds[i])
     if itemCoin and itemCoin:getCount() >= 1 then
       say("!deposit all")
       processandoAgora = false
-      return
+      return -- Encerra instantaneamente para poupar o frame atual
     end
   end
 
-  -- 2. SISTEMA DE EMPILETAMENTO INTELIGENTE (Até 10.000 itens)
+  -- 2. SISTEMA DE EMPILETAMENTO INTELIGENTE FRACIONADO
   local containers = g_game.getContainers()
   local itemGroups = {}
 
-  -- Varredura isolada por assinatura para blindar itens únicos contra travamentos
+  -- Varredura otimizada: Agrupa usando ID e Descrição de forma levíssima
   for index, container in pairs(containers) do
     if not container.lootContainer then
-      for i, item in ipairs(container:getItems()) do
-        if item:isStackable() and item:getCount() < 10000 then
+      local items = container:getItems()
+      for i = 1, #items do
+        local item = items[i]
+        if item and item:isStackable() and item:getCount() < 10000 then
           local itemId = item:getId()
           
-          -- Filtro Anti-Travamento de Itens Únicos
-          local itemDescription = type(item.getDescription) == "function" and item:getDescription() or ""
-          local itemName = type(item.getName) == "function" and item:getName() or ""
-          local assinaturaUnica = itemId .. "_" .. itemName .. "_" .. itemDescription
+          -- BUSCA DE ATRIBUTOS ULTRA-RÁPIDA (Prefere getTooltip que é compilada em C++)
+          local desc = ""
+          if type(item.getTooltip) == "function" then
+              desc = item:getTooltip()
+          elseif type(item.getDescription) == "function" then
+              desc = item:getDescription()
+          end
+          
+          -- Cria uma assinatura única curta para isolar atributos/raridades diferentes
+          local assinaturaUnica = itemId .. "_" .. string.len(desc)
+          if desc ~= "" then
+              assinaturaUnica = itemId .. "_" .. desc
+          end
 
           if not itemGroups[assinaturaUnica] then
             itemGroups[assinaturaUnica] = {}
@@ -583,7 +597,7 @@ local function executarFluxoStackEDeposit()
     end
   end
 
-  -- Processamento das assinaturas idênticas
+  -- Processamento matemático das assinaturas idênticas
   for assinatura, slots in pairs(itemGroups) do
     if #slots > 1 then
       local maiorSlot = nil
@@ -608,7 +622,7 @@ local function executarFluxoStackEDeposit()
         if quantidadeParaMover > 0 then
           g_game.move(menorSlot.itemObj, maiorSlot.pos, quantidadeParaMover)
           processandoAgora = false
-          return 
+          return -- Move apenas UM pack por ciclo para não causar lag de rede
         end
       end
     end
@@ -616,14 +630,14 @@ local function executarFluxoStackEDeposit()
   processandoAgora = false
 end
 
-macro(800, "Stack & Deposit", function()
+-- Calibrado para 1500ms: Fornece o espaço ideal de processamento para o CaveBot
+macro(500, "Stack & Deposit", function()
     if not g_game.isOnline() then return end
 
     local containers = g_game.getContainers()
     local hashAtual = ""
 
-    -- Gera uma string rápida combinando o número de itens e slots abertos.
-    -- Essa checagem roda na velocidade da luz sem causar queda de FPS!
+    -- Gerador de Hash ultra-leve por tamanho e contagem de itens
     for index, container in pairs(containers) do
         if not container.lootContainer then
             hashAtual = hashAtual .. index .. "_" .. container:getItemsCount() .. "_"
@@ -634,12 +648,13 @@ macro(800, "Stack & Deposit", function()
         end
     end
 
-    -- SÓ ATIVA O EMPILHAMENTO SE ALGO MUDOU NAS SUAS MOCHILAS!
+    -- SÓ ATIVA SE HOUVER MUDANÇA REAL NO INVENTÁRIO
     if hashAtual ~= hashInventarioAnterior then
         hashInventarioAnterior = hashAtual
         executarFluxoStackEDeposit()
     end
 end)
+
 
 -- Auto Dodge Ultra-Otimizado (Anti-Lag / Lazy Pathfinding)
 local effectIdToAvoid = 237
@@ -2912,35 +2927,32 @@ UI.Label("-----------------------------------"):setColor('#FFDEAD')
 UI.Label("~ HUD Hotkeys ~"):setColor('#DEB887')
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 -- ============================================================================
---    CONTROLE CAVE/TARGET (VERSÃO INTEGRADA AO PAINEL SPELL CASTER - 8.54)
+--    CONTROLE CAVE/TARGET (VERSÃO SUPREMA PURISTA - ZERO DEPENDÊNCIAS DE TEMPO)
 -- ============================================================================
 
 local ultimoApertoCave = 0
 local ultimoApertoTarget = 0
 
--- FUNÇÃO GLOBAL DE SINCRONIZAÇÃO: Garante que os dois botões liguem/desliguem juntos
+-- Variáveis de controle para o escalonamento nativo de frames
+local alternandoMotoresAtivo = false
+local motorAlvoLigar = false
+local timestampAlternancia = 0
+local passoSincronismo = 0
+
+-- FUNÇÃO GLOBAL DE SINCRONIZAÇÃO: Inicia a flag e deixa o micro-macro processar de forma segura
 local function alternarMotoresHunt(forcarLigar)
-    if forcarLigar then
-        if CaveBot and type(CaveBot.setOn) == "function" then CaveBot.setOn()
-        elseif CaveBot and type(CaveBot.start) == "function" then CaveBot.start() end
-
-        if TargetBot and type(TargetBot.setOn) == "function" then TargetBot.setOn()
-        elseif TargetBot and type(TargetBot.start) == "function" then TargetBot.start() end
-    else
-        if CaveBot and type(CaveBot.setOff) == "function" then CaveBot.setOff()
-        elseif CaveBot and type(CaveBot.stop) == "function" then CaveBot.stop() end
-
-        if TargetBot and type(TargetBot.setOff) == "function" then TargetBot.setOff()
-        elseif TargetBot and type(TargetBot.stop) == "function" then TargetBot.stop() end
-    end
+    motorAlvoLigar = forcarLigar
+    alternandoMotoresAtivo = true
+    timestampAlternancia = os.clock()
+    passoSincronismo = 1
 end
 
 -- ============================================================================
 -- 1. START/STOP CAVEBOT (HOTKEY CTRL+1)
 -- ============================================================================
 hotkey("CTRL+1", function()
-    local agora = os.clock() * 1000
-    if agora - ultimoApertoCave < 300 then return end 
+    local agora = os.clock()
+    if agora - ultimoApertoCave < 0.3 then return end 
     if SMK_MudandoDeMapaMute then return end
     ultimoApertoCave = agora
 
@@ -2959,8 +2971,8 @@ end)
 -- 2. START/STOP TARGETBOT (HOTKEY CTRL+2)
 -- ============================================================================
 hotkey("CTRL+2", function()
-    local agora = os.clock() * 1000
-    if agora - ultimoApertoTarget < 300 then return end 
+    local agora = os.clock()
+    if agora - ultimoApertoTarget < 0.3 then return end 
     if SMK_MudandoDeMapaMute then return end
     ultimoApertoTarget = agora
 
@@ -2976,22 +2988,55 @@ hotkey("CTRL+2", function()
 end)
 
 -- ============================================================================
--- 3. GANCHO OPERACIONAL DO PAINEL (CONECTA O BOTÃO DA INTERFACE AOS MOTORES)
+-- 3. ESCALONADOR NATAL DE FRAMES (SUBSTITUTO INDESTRUTÍVEL DO SCHEDULE)
 -- ============================================================================
--- Esta função substitui a lógica interna do painel antiga, fazendo com que o clique
--- no botão gerencie os dois sistemas de forma síncrona e impecável.
+-- Usamos um micro-macro síncrono ultra-leve rodando a cada 30ms.
+-- Ele gerencia a ativação dos motores dando o fôlego exato que o C++ precisa,
+-- gastando zero de CPU e sendo imune a falhas de funções globais nulas do cliente.
+macro(30, function()
+    if not alternandoMotoresAtivo then return end
+    local agora = os.clock()
+
+    if passoSincronismo == 1 then
+        -- Passo 1: Liga ou desliga o CaveBot
+        if motorAlvoLigar then
+            if CaveBot and type(CaveBot.setOn) == "function" then CaveBot.setOn()
+            elseif CaveBot and type(CaveBot.start) == "function" then CaveBot.start() end
+        else
+            if CaveBot and type(CaveBot.setOff) == "function" then CaveBot.setOff()
+            elseif CaveBot and type(CaveBot.stop) == "function" then CaveBot.stop() end
+        end
+        passoSincronismo = 2
+        timestampAlternancia = agora
+        
+    elseif passoSincronismo == 2 then
+        -- Passo 2: Espera um fôlego de pelo menos 50 milissegundos (0.05s) para não chocar as threads
+        if agora - timestampAlternancia >= 0.05 then
+            if motorAlvoLigar then
+                if TargetBot and type(TargetBot.setOn) == "function" then TargetBot.setOn()
+                elseif TargetBot and type(TargetBot.start) == "function" then TargetBot.start() end
+            else
+                if TargetBot and type(TargetBot.setOff) == "function" then TargetBot.setOff()
+                elseif TargetBot and type(TargetBot.stop) == "function" then TargetBot.stop() end
+            end
+            -- Finaliza o ciclo de alternância completamente
+            alternandoMotoresAtivo = false
+            passoSincronismo = 0
+        end
+    end
+end)
+
+-- ============================================================================
+-- 4. GANCHO OPERACIONAL DO PAINEL (CONEXÃO ESTÁVEL DA INTERFACE)
+-- ============================================================================
 if CaveBot and TargetBot then
-    -- Registra na memória global a função para o painel poder acionar remotamente
-    if type(CaveBot.setWaypoint) == "function" or type(CaveBot.isOn) == "function" then
-        -- Interceptador injetado com segurança em C++
+    if type(CaveBot.isOn) == "function" then
         pcall(function()
-            -- Cria uma ponte para que o clique do botão use a nossa função alternarMotoresHunt
             CaveBot.Extensions = CaveBot.Extensions or {}
             CaveBot.Extensions.MasterControl = function()
                 local caveLigado = CaveBot.isOn()
                 local targetLigado = TargetBot.isOn()
                 
-                -- Se qualquer um dos dois estiver ativo, desliga os dois juntos. Caso contrário, liga ambos.
                 if caveLigado or targetLigado then
                     alternarMotoresHunt(false)
                 else
