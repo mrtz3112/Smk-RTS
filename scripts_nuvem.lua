@@ -552,7 +552,7 @@ macro(500, "Stack & Deposit", function()
 end)
 -- Auto Dodge Ultra-Otimizado (Anti-Lag / Lazy Pathfinding)
 local effectIdToAvoid = 237
-local maxSearchRange = 10
+local maxSearchRange = 13
 local moveFlags = { ignoreNonPathable = true }
 local dangerDuration = 2500 
 local dangerTilesCache = {}
@@ -699,7 +699,7 @@ macro(2000, "Enter Dungeon", function()
     end
   end
 end)
---Enter Rift Otimizado (Correção para achar em blocos vazios com Performance)
+-- Enter Rift Otimizado V4 (Blindagem contra portais fantasmas sem isVirtual)
 macro(500, "Enter Rift", function()
     local player = g_game.getLocalPlayer()
     if not player then return end
@@ -707,37 +707,43 @@ macro(500, "Enter Rift", function()
     if not playerPos then return end
     
     local portalId = 11843
-    local raioBusca = 6
+    local raioBusca = 5
     local playerZ = playerPos.z
 
-    -- Varre os arredores de forma direta e limpa
     for x = -raioBusca, raioBusca do
         for y = -raioBusca, raioBusca do
             local tile = g_map.getTile({x = playerPos.x + x, y = playerPos.y + y, z = playerZ})
             
-            -- Checagem nativa rápida sem pcall lento interno
-            if tile and type(tile) == "userdata" then
-                local items = type(tile.getItems) == "function" and tile:getItems()
-                if items then
-                    for i = 1, #items do
-                        local item = items[i]
-                        if item and item:getId() == portalId then
-                            local targetPos = tile:getPosition()
-                            print("[Dungeon] Rift encontrada na coordenada X:" .. targetPos.x .. " Y:" .. targetPos.y)
+            -- Só processa se o tile for uma estrutura real do mapa ativa na RAM
+            if tile and type(tile) == "userdata" and type(tile.getGround) == "function" then
+                local ground = tile:getGround()
+                
+                -- Se o piso base sumiu da memória gráfica (limpeza de mapa do client), pula o bloco
+                if ground then
+                    local items = type(tile.getItems) == "function" and tile:getItems()
+                    if items then
+                        for i = 1, #items do
+                            local item = items[i]
                             
-                            -- Som protegido fora do loop pesado
-                            pcall(playSound, "/sounds/magnum.ogg")
-                            g_game.use(item)
-                            
-                            if CaveBot and type(CaveBot.gotoLabel) == "function" then
-                                CaveBot.gotoLabel("Rift")
-                                if type(CaveBot.preNext) == "function" then 
-                                    CaveBot.preNext()
-                                elseif type(CaveBot.reload) == "function" then 
-                                    CaveBot.reload() 
+                            -- VALIDAÇÃO CRÍTICA ALTERNATIVA: Verifica se o objeto responde a funções básicas de C++
+                            -- Isso descarta objetos falsos presos apenas no lixo do cachê visual
+                            if item and item:getId() == portalId and type(item.isGround) == "function" then
+                                local targetPos = tile:getPosition()
+                                print("[Dungeon] Rift REAL encontrada na coordenada X:" .. targetPos.x .. " Y:" .. targetPos.y)
+                                
+                                pcall(playSound, "/sounds/magnum.ogg")
+                                g_game.use(item)
+                                
+                                if CaveBot and type(CaveBot.gotoLabel) == "function" then
+                                    CaveBot.gotoLabel("Rift")
+                                    if type(CaveBot.preNext) == "function" then 
+                                        CaveBot.preNext()
+                                    elseif type(CaveBot.reload) == "function" then 
+                                        CaveBot.reload() 
+                                    end
                                 end
+                                return
                             end
-                            return
                         end
                     end
                 end
@@ -745,7 +751,100 @@ macro(500, "Enter Rift", function()
         end
     end
 end)
-
+-- Enter Garganta
+local gargantaId = 12613
+local windowTitle = "Hollow Garganta"
+local enterCooldown = 0
+-- State variables for entry tracking
+local isEntering = false
+local posBeforeEnter = nil
+local enterTimeout = 0
+ 
+local function findButtonByText(widget, buttonText)
+    for _, child in pairs(widget:getChildren()) do
+        if child.getText and child:getText():lower() == buttonText:lower() then 
+            return child 
+        end
+        local found = findButtonByText(child, buttonText)
+        if found then return found end
+    end
+    return nil
+end
+macro(100, "Enter Garganta", function()
+    local currentTime = now
+    local pPos = player:getPosition()
+    if not pPos then return end
+ 
+    -- Check if we are currently waiting to enter
+    if isEntering then
+        -- 1. Success check: Character changed floors or moved far away
+        if posBeforeEnter and (pPos.z ~= posBeforeEnter.z or getDistanceBetween(pPos, posBeforeEnter) > 10) then
+            warn("Garganta: Entry detected! Resuming CaveBot.")
+            if CaveBot then CaveBot.setOn() end
+            isEntering = false
+            return
+        end
+ 
+        -- 2. Timeout check: 5 seconds passed without entering
+        if currentTime > enterTimeout then
+            warn("Garganta: Entry timed out! Resuming CaveBot.")
+            if CaveBot then CaveBot.setOn() end
+            isEntering = false
+        end
+    end
+    -- 3. Check for the Garganta UI Window to click "Enter"
+    local root = g_ui.getRootWidget()
+    if root then
+        for _, window in pairs(root:getChildren()) do
+            if window.getText and string.find(window:getText():lower(), windowTitle:lower()) then
+                local enterBtn = findButtonByText(window, "Enter")
+                if enterBtn then
+                    if CaveBot and CaveBot.isOn() then 
+                        CaveBot.setOn(false) 
+                    end
+ 
+                    enterBtn:onClick()
+ 
+                    -- Start/Update the entry tracking
+                    posBeforeEnter = pPos
+                    isEntering = true
+                    enterTimeout = currentTime + 5000
+                    enterCooldown = currentTime + 10000
+ 
+                    warn("Garganta: Clicked Enter on window!")
+                    return
+                end
+            end
+        end
+    end
+    -- 4. Check for the Garganta portal/item nearby to use
+    if currentTime > enterCooldown and not isEntering then
+        for _, tile in ipairs(g_map.getTiles(posz())) do
+            for _, item in ipairs(tile:getItems() or {}) do
+                if item and item:getId() == gargantaId then
+                    if getDistanceBetween(pPos, tile:getPosition()) <= 7 then
+ 
+                        -- Pause CaveBot before using the item
+                        if CaveBot and CaveBot.isOn() then
+                            CaveBot.setOn(false)
+                        end
+ 
+                        g_game.use(item)
+ 
+                        -- Track position to verify we actually get teleported
+                        posBeforeEnter = pPos
+                        isEntering = true
+                        enterTimeout = currentTime + 5000
+                        enterCooldown = currentTime + 2500
+ 
+                        warn("Garganta: Used portal!")
+                        return
+                    end
+                end
+            end
+        end
+    end
+end)
 -- Auto Subir/Descer Escadas
 Stairs = {}
 Stairs.saveStatus = {}
@@ -990,6 +1089,61 @@ AutoEscadasMacroObjeto = macro(150, "Auto Escadas", function()
     else
         return markOnThing(Stairs.bestTile, "#FF0000")
     end
+end)
+--Renew MW
+local wallRuneId = 10571
+local wallId = 10980
+local wallDuration = 20000
+local toggleKey = "0"
+local activeTimers = {}
+local autoRenewEnabled = false
+hotkey(toggleKey, "Renew MagicWall", function()
+  autoRenewEnabled = not autoRenewEnabled
+ 
+  if autoRenewEnabled then
+    warn("Auto Renew Walls: ON")
+  else
+    warn("Auto Renew Walls: OFF")
+  end
+end)
+onAddThing(function(tile, thing)
+  if not thing:isItem() then
+    return
+  end
+ 
+  if thing:getId() == wallId then 
+    local pos = tile:getPosition()
+    local posStr = pos.x .. "," .. pos.y .. "," .. pos.z
+ 
+    activeTimers[posStr] = now + wallDuration
+    tile:setTimer(wallDuration)
+  end
+end)
+onRemoveThing(function(tile, thing)
+  if not thing:isItem() then
+    return
+  end
+ 
+  if thing:getId() == wallId and tile:getGround() then
+    local pos = tile:getPosition()
+    local posStr = pos.x .. "," .. pos.y .. "," .. pos.z
+ 
+    activeTimers[posStr] = nil
+    tile:setTimer(0)
+ 
+    if autoRenewEnabled and player then
+      local playerPos = player:getPosition()
+ 
+      if pos.z == playerPos.z and getDistanceBetween(playerPos, pos) <= 7 then
+        local targetItem = tile:getTopUseThing() or tile:getGround()
+ 
+        if targetItem then
+          useWith(wallRuneId, targetItem)
+          warn("Auto Renew: Re-walled position -> " .. posStr)
+        end
+      end
+    end
+  end
 end)
 UI.Separator()
 --Eat Food
@@ -2657,57 +2811,67 @@ end)
 if mwall and mwall.setOff then
     mwall.setOff()
 end
---HoldAttack
+--HoldAttack Otimizado (Blindado contra erro de Invalid Stackpos no Battle)
 chaseatk = macro(100, "Hold Target", "ALT+2", function()
   local player = g_game.getLocalPlayer()
   if not player then return end
   local currentTarget = g_game.getAttackingCreature()
+  
   -- 1. Se você está atacando alguém ativamente, atualiza a memória
   if currentTarget then
     storage.uiTargetId = currentTarget:getId()
     storage.manualStop = false
     return
   end
+  
   if g_keyboard.isKeyPressed("Escape") then
     storage.uiTargetId = nil
     storage.manualStop = true
     return
   end
+  
   if storage.manualStop then
     return
   end
+  
   if storage.uiTargetId then
     local reattackDone = false
+    
+    -- Busca direta na lista de Battle de forma segura por API de Criaturas
     if modules.game_battle and modules.game_battle.battleButtons then
       for _, button in pairs(modules.game_battle.battleButtons) do
         if button and button.creature and button.creature:getId() == storage.uiTargetId then
           if button.creature:getHealthPercent() > 0 then
-            if modules.game_battle.onBattleButtonMouseRelease then
-              modules.game_battle.onBattleButtonMouseRelease(button, { x = 0, y = 0 }, 1)
-              reattackDone = true
-            end
-            if not reattackDone and button.onClick then
-              button:onClick()
-              reattackDone = true
-            end
+            -- CORREÇÃO SUPREMA: Ataca a criatura diretamente por C++ nativo.
+            -- Remove a simulação de mouse que quebrava o stackpos do client.
+            g_game.attack(button.creature)
+            reattackDone = true
           end
           break
         end
       end
     end
+    
+    -- Se o monstro sumiu do Battle mas ainda está na tela (Spectators)
     if not reattackDone then
-      for _, spec in ipairs(g_map.getSpectators(player:getPosition(), false)) do
-        if spec:getId() == storage.uiTargetId and spec:getHealthPercent() > 0 then
-          g_game.attack(spec)
-          break
+      local pos = player:getPosition()
+      if pos then
+        local specs = g_map.getSpectators(pos, false) or {}
+        for _, spec in ipairs(specs) do
+          if spec and spec:getId() == storage.uiTargetId and spec:getHealthPercent() > 0 then
+            g_game.attack(spec)
+            break
+          end
         end
       end
     end
   end
 end)
+
 if chaseatk and chaseatk.setOff then
     chaseatk.setOff()
 end
+
 -- Enemy (Versão Corrigida - Apenas Radar, Ataque PVP e Anti-VIP Supremo)
 local function definirModoAtaque(modo)
     local fightMode = 2
@@ -3468,7 +3632,7 @@ dofile("/targetbot/creature_editor.lua")
 dofile("/targetbot/creature_priority.lua")
 dofile("/targetbot/walking.lua")
 dofile("/targetbot/target.lua")
--- Creature_Priority
+-- Creature_Priority (Corrigido para evitar troca frenética de alvos e esquivas)
 local specialMonsters = {"elite", "boss", "unleashed", "gotei 13 king", "oversaturated", "true bankai", "dungeon"}
 local function isMonsterSpecial(creatureName)
   if not creatureName then return false end
@@ -3484,24 +3648,25 @@ TargetBot.Creature.calculatePriority = function(creature, config, path)
   local priority = 0
   local path_length = #path
   if g_game.getAttackingCreature() == creature then
-    priority = priority + 1
+    priority = priority + 10 -- Aumentado para manter o foco no alvo atual por mais tempo
   end
   if path_length > config.maxDistance then
     return priority
-  end
+  end 
   priority = priority + config.priority
-  -- 1. ESCUDO DE SOBREVIVÊNCIA: Extra prioridade por distância curta
-  -- Se o monstro estiver colado (distância = 1 SQM), ganha +5000 pontos automáticos.
+  -- PROGRESSÃO SUAVE: Evita picos de 5000 pontos que fazem o bot surtar mudando de alvo.
+  -- Agora os monstros colados ou muito próximos mantêm uma pontuação firme e estável.
   if path_length == 1 then
-    priority = priority + 5000
-  elseif path_length <= 3 then
-    priority = priority + 1
+    priority = priority + 100 -- Monstro colado tem preferência
+  elseif path_length == 2 then
+    priority = priority + 50  -- Monstro a 2 passos ainda é muito relevante
+  elseif path_length <= 4 then
+    priority = priority + 20  -- Monstro a 3-4 passos é considerado
   end
-  -- 2. AJUSTE CRÍTICO: Atribui os 1000 pontos se o monstro for especial.
-  -- Como é aplicado após a distância, se o Elite colar, ele soma 5000 + 1000 = 6000 pontos.
-  -- Isso garante prioridade máxima absoluta dele contra qualquer monstro normal colado (5000 pontos).
+  -- 2. AJUSTE CRÍTICO DE ELITES: Elites/Bosses ganham um peso fixo maior 
+  -- para que o bot sempre foque neles antes dos monstros comuns do mesmo raio.
   if isMonsterSpecial(creature:getName()) then
-    priority = priority + 1000
+    priority = priority + 500
   end
   -- extra priority for low health
   if config.chase and creature:getHealthPercent() < 30 then
