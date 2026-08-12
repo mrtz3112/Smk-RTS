@@ -707,7 +707,7 @@ macro(500, "Enter Rift", function()
     if not playerPos then return end
     
     local portalId = 11843
-    local raioBusca = 5
+    local raioBusca = 10
     local playerZ = playerPos.z
 
     for x = -raioBusca, raioBusca do
@@ -1094,7 +1094,7 @@ end)
 local wallRuneId = 10571
 local wallId = 10980
 local wallDuration = 20000
-local toggleKey = "0"
+local toggleKey = "1"
 local activeTimers = {}
 local autoRenewEnabled = false
 hotkey(toggleKey, "Renew MagicWall", function()
@@ -3017,7 +3017,7 @@ onTalk(function(...)
     say('sense "' .. storage.Sense)
     return true
 end)
---    REVIDE PK
+--REVIDE PK
 local botsDesligadosPVP = false
 local ultimoModoAtaque = nil
 local ultimoTempoTrocaEstado = 0 
@@ -3025,6 +3025,7 @@ local ultimoTempoTentativaAtaque = 0
 local ultimaPosX = 0
 local ultimaPosY = 0
 local ultimoTickRadar = 0
+
 local function definirModoAtaque(modo)
     if ultimoModoAtaque == modo then return end
     local rootWidget = g_ui.getRootWidget()
@@ -3036,6 +3037,7 @@ local function definirModoAtaque(modo)
         ultimoModoAtaque = modo
     end
 end
+
 revidePKMacro = macro(250, 'Revide PK', function()
     if not g_game.isOnline() then return end
     
@@ -3103,7 +3105,7 @@ revidePKMacro = macro(250, 'Revide PK', function()
             local alvoAtualJogo = g_game.getAttackingCreature()
             if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
                 if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
-                    definirModoAtaque("offensive")
+                    -- PARTE REMOVIDA: Não altera mais para "offensive" aqui
                     if CaveBot and CaveBot.setOn then CaveBot.setOn() end
                     if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
                     botsDesligadosPVP = false
