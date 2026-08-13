@@ -716,51 +716,72 @@ macro(2000, "Enter Dungeon", function()
     end
   end
 end)
--- Enter Rift Otimizado V4
-macro(500, "Enter Rift", function()
+-- Enter Rift
+local portalId = 11843
+local ultimoCheckMapa = 0
+-- Variáveis de estado para controle do CaveBot e Teleporte
+local aguardandoEntrada = false
+local posAnteriorTeleporte = nil
+local tempoLimiteEntrada = 0
+macro(250, "Enter Rift", function()
+    local currentTime = now
     local player = g_game.getLocalPlayer()
     if not player then return end
     local playerPos = player:getPosition()
     if not playerPos then return end
-    
-    local portalId = 11843
-    local raioBusca = 10
-    local playerZ = playerPos.z
-
-    for x = -raioBusca, raioBusca do
-        for y = -raioBusca, raioBusca do
-            local tile = g_map.getTile({x = playerPos.x + x, y = playerPos.y + y, z = playerZ})
-            
-            -- Só processa se o tile for uma estrutura real do mapa ativa na RAM
-            if tile and type(tile) == "userdata" and type(tile.getGround) == "function" then
-                local ground = tile:getGround()
-                
-                -- Se o piso base sumiu da memória gráfica (limpeza de mapa do client), pula o bloco
-                if ground then
-                    local items = type(tile.getItems) == "function" and tile:getItems()
-                    if items then
-                        for i = 1, #items do
-                            local item = items[i]
-                            
-                            -- VALIDAÇÃO CRÍTICA ALTERNATIVA: Verifica se o objeto responde a funções básicas de C++
-                            -- Isso descarta objetos falsos presos apenas no lixo do cachê visual
-                            if item and item:getId() == portalId and type(item.isGround) == "function" then
-                                local targetPos = tile:getPosition()
-                                print("[Dungeon] Rift REAL encontrada na coordenada X:" .. targetPos.x .. " Y:" .. targetPos.y)
-                                
-                                pcall(playSound, "/sounds/magnum.ogg")
-                                g_game.use(item)
-                                
-                                if CaveBot and type(CaveBot.gotoLabel) == "function" then
-                                    CaveBot.gotoLabel("Rift")
-                                    if type(CaveBot.preNext) == "function" then 
-                                        CaveBot.preNext()
-                                    elseif type(CaveBot.reload) == "function" then 
-                                        CaveBot.reload() 
-                                    end
-                                end
-                                return
+    -- 1. VERIFICAÇÃO DE SUCESSO: Se fomos teleportados, religa o CaveBot
+    if aguardandoEntrada then
+        -- Se mudou de andar (Z) ou se moveu mais de 10 SQMs, o teleporte funcionou!
+        if posAnteriorTeleporte and (playerPos.z ~= posAnteriorTeleporte.z or getDistanceBetween(playerPos, posAnteriorTeleporte) > 10) then
+            print("[Dungeon] Entrada na Rift detectada! Ligando CaveBot e indo para a Label.")
+            -- Reativa o CaveBot
+            if CaveBot and CaveBot.setOn then CaveBot.setOn(true) end
+            -- Envia para a label da Rift
+            if CaveBot and type(CaveBot.gotoLabel) == "function" then
+                CaveBot.gotoLabel("Rift")
+                if type(CaveBot.preNext) == "function" then 
+                    CaveBot.preNext()
+                elseif type(CaveBot.reload) == "function" then 
+                    CaveBot.reload() 
+                end
+            end 
+            aguardandoEntrada = false
+            return
+        end
+        -- Se estourar o tempo de 5 segundos sem entrar, religa por segurança e tenta de novo
+        if currentTime > tempoLimiteEntrada then
+            print("[Dungeon] Tempo limite esgotado sem entrar. Reativando CaveBot.")
+            if CaveBot and CaveBot.setOn then CaveBot.setOn(true) end
+            aguardandoEntrada = false
+        end
+    end
+    -- 2. RADAR LEVE: Busca o portal usando o cache nativo (Roda apenas de 1 em 1 segundo)
+    if not aguardandoEntrada and (currentTime - ultimoCheckMapa >= 1000) then
+        ultimoCheckMapa = currentTime
+        local currentZ = playerPos.z
+        for _, tile in ipairs(g_map.getTiles(currentZ)) do
+            local tilePos = tile:getPosition()
+            -- Filtro matemático rápido por aproximação (Raio 10) antes de ler os itens
+            if math.abs(playerPos.x - tilePos.x) <= 10 and math.abs(playerPos.y - tilePos.y) <= 10 then
+                local items = tile:getItems()
+                if items then
+                    for i = 1, #items do
+                        local item = items[i]
+                        -- Se achou o portal real
+                        if item and item:getId() == portalId then
+                            print("[Dungeon] Rift REAL encontrada na coordenada X:" .. tilePos.x .. " Y:" .. tilePos.y)
+                            -- DESLIGA O CAVEBOT ANTES DE ENTRAR
+                            if CaveBot and CaveBot.isOn and CaveBot.isOn() then
+                                CaveBot.setOn(false)
                             end
+                            -- Toca o aviso sonoro e usa o portal
+                            pcall(playSound, "/sounds/magnum.ogg")
+                            g_game.use(item)
+                            -- Ativa as travas de monitoramento de teleporte
+                            posAnteriorTeleporte = playerPos
+                            aguardandoEntrada = true
+                            tempoLimiteEntrada = currentTime + 5000 -- Espera até 5 segundos pelo teleporte
+                            return
                         end
                     end
                 end
@@ -773,12 +794,10 @@ local gargantaId = 12613
 local windowTitle = "Hollow Garganta"
 local enterCooldown = 0
 local ultimoCheckMapa = 0 -- Controla o radar do mapa para poupar CPU
-
 -- State variables for entry tracking
 local isEntering = false
 local posBeforeEnter = nil
 local enterTimeout = 0
- 
 -- Otimizado: Busca apenas nos filhos diretos e painéis do primeiro nível da janela, poupando CPU
 local function findButtonByText(widget, buttonText)
     local txtLower = buttonText:lower()
@@ -795,13 +814,11 @@ local function findButtonByText(widget, buttonText)
     end
     return nil
 end
-
 -- Intervalo aumentado para 250ms (Reduz drasticamente o uso de CPU)
 macro(250, "Enter Garganta", function()
     local currentTime = now
     local pPos = player:getPosition()
     if not pPos then return end
-
     -- Check if we are currently waiting to enter
     if isEntering then
         -- 1. Success check: Character changed floors or moved far away
@@ -813,12 +830,10 @@ macro(250, "Enter Garganta", function()
         end
         -- 2. Timeout check: 5 seconds passed without entering
         if currentTime > enterTimeout then
-            warn("Garganta: Entry timed out! Resuming CaveBot.")
             if CaveBot then CaveBot.setOn() end
             isEntering = false
         end
     end
-
     -- 3. Check for the Garganta UI Window to click "Enter"
     local root = g_ui.getRootWidget()
     if root then
@@ -830,24 +845,19 @@ macro(250, "Enter Garganta", function()
                     if CaveBot and CaveBot.isOn() then 
                         CaveBot.setOn(false) 
                     end 
-                    enterBtn:onClick()
-                    
+                    enterBtn:onClick()  
                     posBeforeEnter = pPos
                     isEntering = true
                     enterTimeout = currentTime + 5000
                     enterCooldown = currentTime + 10000
- 
-                    warn("Garganta: Clicked Enter on window!")
                     return
                 end
             end
         end
     end
-
     -- 4. Check for the Garganta portal/item nearby to use (SÓ RODA DE 1 EM 1 SEGUNDO)
     if currentTime > enterCooldown and not isEntering and (currentTime - ultimoCheckMapa >= 1000) then
         ultimoCheckMapa = currentTime -- Atualiza o tempo do radar
-        
         local currentZ = posz()
         for _, tile in ipairs(g_map.getTiles(currentZ)) do
             local tilePos = tile:getPosition()
@@ -862,16 +872,12 @@ macro(250, "Enter Garganta", function()
                             if CaveBot and CaveBot.isOn() then
                                 CaveBot.setOn(false)
                             end
-     
                             g_game.use(item)
-     
                             -- Track position to verify we actually get teleported
                             posBeforeEnter = pPos
                             isEntering = true
                             enterTimeout = currentTime + 5000
                             enterCooldown = currentTime + 2500
-     
-                            warn("Garganta: Used portal!")
                             return
                         end
                     end
