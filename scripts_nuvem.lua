@@ -409,7 +409,6 @@ end
 macro(200, "Smart Follow", function() 
     if not g_game.isOnline() then return end
     if cachedTargetName == "" or cachedTargetName == "nome do player" then return end
-    
     local myPlayer = g_game.getLocalPlayer()
     if not myPlayer then return end
     local myPos = myPlayer:getPosition()
@@ -425,9 +424,7 @@ macro(200, "Smart Follow", function()
     if target then
         local tpos = target:getPosition()
         toFollowPos[tpos.z] = tpos
-        
         local dist = getDistanceBetween(myPos, tpos)
-        
         -- Se colou no líder, zera o alvo para dar liberdade ao TargetBot de virar de frente ou bater
         if dist <= 1 then
             lastWalkTarget = nil
@@ -457,12 +454,23 @@ onCreaturePositionChange(function(creature, newPos, oldPos)
     end
 end)
 UI.Separator()
---    STACK & DEPOSIT (VERSÃO COORDENADA COM SUPORTE A ITENS ÚNICOS - ZERO LAG)
+--STACK & DEPOSIT (VERSÃO EXCLUSIVA PARA SERVIDORES COM ITENS ÚNICOS - LIMITE 10000)
 local processandoAgora = false
 local hashInventarioAnterior = ""
+local function pegarDescricaoItem(item)
+    if not item then return "" end
+    local desc = ""
+    if type(item.getTooltip) == "function" then
+        desc = item:getTooltip()
+    elseif type(item.getDescription) == "function" then
+        desc = item:getDescription()
+    end
+    return desc:lower()
+end
 local function executarFluxoStackEDeposit()
   if not g_game.isOnline() or processandoAgora then return end
   processandoAgora = true
+  -- 1. CHECAGEM E DEPÓSITO DE COINS
   local coinIds = { 3031, 3035, 3043, 10137 } 
   for i = 1, #coinIds do
     local itemCoin = findItem(coinIds[i])
@@ -472,42 +480,42 @@ local function executarFluxoStackEDeposit()
       return
     end
   end
+  -- 2. AGRUPAMENTO (STACK) DE ITENS
   local containers = g_game.getContainers()
   local itemGroups = {}
+  
   for index, container in pairs(containers) do
-    if not container.lootContainer then
+    if container and not container.lootContainer then
       local items = container:getItems()
       for i = 1, #items do
-        local item = items[i]
+        local item = items[i]  
+        -- Verifica se o item é empilhável e não atingiu o limite máximo do servidor
         if item and item:isStackable() and item:getCount() < 10000 then
           local itemId = item:getId()
-          local desc = ""
-          if type(item.getTooltip) == "function" then
-              desc = item:getTooltip()
-          elseif type(item.getDescription) == "function" then
-              desc = item:getDescription()
+          local desc = pegarDescricaoItem(item)
+          -- SEGUNDA TRAVA AUTOMÁTICA: Ignora completamente qualquer item que tenha dono
+          if not string.find(desc, "belongs to") and not string.find(desc, "pessoal") then
+            local assinaturaUnica = tostring(itemId)
+            
+            if not itemGroups[assinaturaUnica] then
+              itemGroups[assinaturaUnica] = {}
+            end
+            table.insert(itemGroups[assinaturaUnica], {
+              count = item:getCount(),
+              itemObj = item,
+              descText = desc -- Guarda o texto exato para comparação no próximo passo
+            })
           end
-          local assinaturaUnica = itemId .. "_" .. string.len(desc)
-          if desc ~= "" then
-              assinaturaUnica = itemId .. "_" .. desc
-          end
-          if not itemGroups[assinaturaUnica] then
-            itemGroups[assinaturaUnica] = {}
-          end
-          
-          table.insert(itemGroups[assinaturaUnica], {
-            pos = container:getSlotPosition(i - 1),
-            count = item:getCount(),
-            itemObj = item
-          })
         end
       end
     end
   end
+  -- Processa e agrupa apenas os itens comuns legítimos
   for assinatura, slots in pairs(itemGroups) do
     if #slots > 1 then
       local maiorSlot = nil
       local menorSlot = nil
+      
       for s = 1, #slots do
         local slotAtual = slots[s]
         if slotAtual.count < 10000 then
@@ -519,26 +527,35 @@ local function executarFluxoStackEDeposit()
           menorSlot = slotAtual
         end
       end
-      if maiorSlot and menorSlot and maiorSlot.pos ~= menorSlot.pos then
-        local espacoDisponivel = 10000 - maiorSlot.count
-        local quantidadeParaMover = math.min(espacoDisponivel, menorSlot.count)
-        if quantidadeParaMover > 0 then
-          g_game.move(menorSlot.itemObj, maiorSlot.pos, quantidadeParaMover)
-          processandoAgora = false
-          return -- Move apenas UM pack por ciclo para não causar lag de rede
+      -- TRAVA ABSOLUTA: Só move se os dois objetos forem válidos, diferentes, E se as descrições forem 100% IDÊNTICAS!
+      if maiorSlot and menorSlot and maiorSlot.itemObj ~= menorSlot.itemObj then
+        if maiorSlot.descText == menorSlot.descText then
+          local espacoDisponivel = 10000 - maiorSlot.count
+          local quantidadeParaMover = math.min(espacoDisponivel, menorSlot.count)
+          
+          if quantidadeParaMover > 0 then
+            g_game.move(menorSlot.itemObj, maiorSlot.itemObj:getPosition(), quantidadeParaMover)
+            processandoAgora = false
+            return -- Move apenas um por ciclo para manter zero lag de rede
+          end
         end
       end
     end
   end
+  
   processandoAgora = false
 end
+-- Macro principal com leitura de Hash estável
 macro(500, "Stack & Deposit", function()
     if not g_game.isOnline() then return end
+    
     local containers = g_game.getContainers()
     local hashAtual = ""
     for index, container in pairs(containers) do
-        if not container.lootContainer then
-            hashAtual = hashAtual .. index .. "_" .. container:getItemsCount() .. "_"
+        if container and not container.lootContainer then
+            local totalItens = #container:getItems()
+            hashAtual = hashAtual .. index .. "_" .. totalItens .. "_"
+            
             local primeiroItem = container:getItem(0)
             if primeiroItem then
                 hashAtual = hashAtual .. primeiroItem:getId() .. "_" .. primeiroItem:getCount() .. "|"
@@ -699,7 +716,7 @@ macro(2000, "Enter Dungeon", function()
     end
   end
 end)
--- Enter Rift Otimizado V4 (Blindagem contra portais fantasmas sem isVirtual)
+-- Enter Rift Otimizado V4
 macro(500, "Enter Rift", function()
     local player = g_game.getLocalPlayer()
     if not player then return end
@@ -755,26 +772,36 @@ end)
 local gargantaId = 12613
 local windowTitle = "Hollow Garganta"
 local enterCooldown = 0
+local ultimoCheckMapa = 0 -- Controla o radar do mapa para poupar CPU
+
 -- State variables for entry tracking
 local isEntering = false
 local posBeforeEnter = nil
 local enterTimeout = 0
  
+-- Otimizado: Busca apenas nos filhos diretos e painéis do primeiro nível da janela, poupando CPU
 local function findButtonByText(widget, buttonText)
+    local txtLower = buttonText:lower()
     for _, child in pairs(widget:getChildren()) do
-        if child.getText and child:getText():lower() == buttonText:lower() then 
+        if child.getText and child:getText():lower() == txtLower then 
             return child 
         end
-        local found = findButtonByText(child, buttonText)
-        if found then return found end
+        -- Em vez de recursão infinita, busca apenas um nível abaixo (comum para botões de janela)
+        for _, subChild in pairs(child:getChildren()) do
+            if subChild.getText and subChild:getText():lower() == txtLower then
+                return subChild
+            end
+        end
     end
     return nil
 end
-macro(100, "Enter Garganta", function()
+
+-- Intervalo aumentado para 250ms (Reduz drasticamente o uso de CPU)
+macro(250, "Enter Garganta", function()
     local currentTime = now
     local pPos = player:getPosition()
     if not pPos then return end
- 
+
     -- Check if we are currently waiting to enter
     if isEntering then
         -- 1. Success check: Character changed floors or moved far away
@@ -784,7 +811,6 @@ macro(100, "Enter Garganta", function()
             isEntering = false
             return
         end
- 
         -- 2. Timeout check: 5 seconds passed without entering
         if currentTime > enterTimeout then
             warn("Garganta: Entry timed out! Resuming CaveBot.")
@@ -792,20 +818,20 @@ macro(100, "Enter Garganta", function()
             isEntering = false
         end
     end
+
     -- 3. Check for the Garganta UI Window to click "Enter"
     local root = g_ui.getRootWidget()
     if root then
+        local wTitleLower = windowTitle:lower()
         for _, window in pairs(root:getChildren()) do
-            if window.getText and string.find(window:getText():lower(), windowTitle:lower()) then
+            if window.getText and string.find(window:getText():lower(), wTitleLower, 1, true) then
                 local enterBtn = findButtonByText(window, "Enter")
                 if enterBtn then
                     if CaveBot and CaveBot.isOn() then 
                         CaveBot.setOn(false) 
-                    end
- 
+                    end 
                     enterBtn:onClick()
- 
-                    -- Start/Update the entry tracking
+                    
                     posBeforeEnter = pPos
                     isEntering = true
                     enterTimeout = currentTime + 5000
@@ -817,28 +843,37 @@ macro(100, "Enter Garganta", function()
             end
         end
     end
-    -- 4. Check for the Garganta portal/item nearby to use
-    if currentTime > enterCooldown and not isEntering then
-        for _, tile in ipairs(g_map.getTiles(posz())) do
-            for _, item in ipairs(tile:getItems() or {}) do
-                if item and item:getId() == gargantaId then
-                    if getDistanceBetween(pPos, tile:getPosition()) <= 7 then
- 
-                        -- Pause CaveBot before using the item
-                        if CaveBot and CaveBot.isOn() then
-                            CaveBot.setOn(false)
+
+    -- 4. Check for the Garganta portal/item nearby to use (SÓ RODA DE 1 EM 1 SEGUNDO)
+    if currentTime > enterCooldown and not isEntering and (currentTime - ultimoCheckMapa >= 1000) then
+        ultimoCheckMapa = currentTime -- Atualiza o tempo do radar
+        
+        local currentZ = posz()
+        for _, tile in ipairs(g_map.getTiles(currentZ)) do
+            local tilePos = tile:getPosition()
+            -- Filtro rápido de distância matemática antes de ler todos os itens do tile (Poupa muita CPU)
+            if math.abs(pPos.x - tilePos.x) <= 7 and math.abs(pPos.y - tilePos.y) <= 7 then
+                local items = tile:getItems()
+                if items then
+                    for i = 1, #items do
+                        local item = items[i]
+                        if item and item:getId() == gargantaId then
+                            -- Pause CaveBot before using the item
+                            if CaveBot and CaveBot.isOn() then
+                                CaveBot.setOn(false)
+                            end
+     
+                            g_game.use(item)
+     
+                            -- Track position to verify we actually get teleported
+                            posBeforeEnter = pPos
+                            isEntering = true
+                            enterTimeout = currentTime + 5000
+                            enterCooldown = currentTime + 2500
+     
+                            warn("Garganta: Used portal!")
+                            return
                         end
- 
-                        g_game.use(item)
- 
-                        -- Track position to verify we actually get teleported
-                        posBeforeEnter = pPos
-                        isEntering = true
-                        enterTimeout = currentTime + 5000
-                        enterCooldown = currentTime + 2500
- 
-                        warn("Garganta: Used portal!")
-                        return
                     end
                 end
             end
