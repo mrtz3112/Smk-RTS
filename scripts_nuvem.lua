@@ -886,22 +886,6 @@ macro(250, "Enter Garganta", function()
         end
     end
 end)
---Soul Map
-local window_name = "Soul Map"
-macro(1000,"Enter Soul Map", function()
-  for i, rootW in pairs(g_ui.getRootWidget():getChildren()) do
-    if string.find(rootW:getText():lower(), window_name:lower()) then
-      for i, child in pairs(rootW:getChildren()) do
-          if child:getText() == "Start" then
-             child:onClick()
-             delay(5000)
-             break
-           end
-      end
-      break
-    end
-  end
-end)
 -- Auto Subir/Descer Escadas
 Stairs = {}
 Stairs.saveStatus = {}
