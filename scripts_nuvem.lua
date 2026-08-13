@@ -849,7 +849,7 @@ macro(250, "Enter Garganta", function()
                     posBeforeEnter = pPos
                     isEntering = true
                     enterTimeout = currentTime + 5000
-                    enterCooldown = currentTime + 10000
+                    enterCooldown = currentTime + 5000
                     return
                 end
             end
