@@ -1106,61 +1106,6 @@ AutoEscadasMacroObjeto = macro(150, "Auto Escadas", function()
         return markOnThing(Stairs.bestTile, "#FF0000")
     end
 end)
---Renew MW
-local wallRuneId = 10571
-local wallId = 10980
-local wallDuration = 20000
-local toggleKey = "1"
-local activeTimers = {}
-local autoRenewEnabled = false
-hotkey(toggleKey, "Renew MagicWall", function()
-  autoRenewEnabled = not autoRenewEnabled
- 
-  if autoRenewEnabled then
-    warn("Auto Renew Walls: ON")
-  else
-    warn("Auto Renew Walls: OFF")
-  end
-end)
-onAddThing(function(tile, thing)
-  if not thing:isItem() then
-    return
-  end
- 
-  if thing:getId() == wallId then 
-    local pos = tile:getPosition()
-    local posStr = pos.x .. "," .. pos.y .. "," .. pos.z
- 
-    activeTimers[posStr] = now + wallDuration
-    tile:setTimer(wallDuration)
-  end
-end)
-onRemoveThing(function(tile, thing)
-  if not thing:isItem() then
-    return
-  end
- 
-  if thing:getId() == wallId and tile:getGround() then
-    local pos = tile:getPosition()
-    local posStr = pos.x .. "," .. pos.y .. "," .. pos.z
- 
-    activeTimers[posStr] = nil
-    tile:setTimer(0)
- 
-    if autoRenewEnabled and player then
-      local playerPos = player:getPosition()
- 
-      if pos.z == playerPos.z and getDistanceBetween(playerPos, pos) <= 7 then
-        local targetItem = tile:getTopUseThing() or tile:getGround()
- 
-        if targetItem then
-          useWith(wallRuneId, targetItem)
-          warn("Auto Renew: Re-walled position -> " .. posStr)
-        end
-      end
-    end
-  end
-end)
 UI.Separator()
 --Eat Food
 local panelName = "AutoFood"
@@ -2638,7 +2583,7 @@ onTextMessage(function(mode, text)
     end
 end)
 UI.Separator()
---Swamp Ring/Necklace
+--Swap Shield/Ring/Necklace
 storage.swapShieldPve = storage.swapShieldPve or 0
 storage.swapShieldPvp = storage.swapShieldPvp or 0
 storage.swapRingPve = storage.swapRingPve or 0
