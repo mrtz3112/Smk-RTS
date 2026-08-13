@@ -1551,7 +1551,7 @@ macro(200, function()
     storage.painelSalvo.wave = turnCombo.isOn()
 end)
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
---    SPELL CASTER PANEL - PARTE 1 (RESOLUÇÃO DO CONGELAMENTO VERTICAL)
+--    HOTKEY PANEL - PARTE 1 (RESOLUÇÃO DO CONGELAMENTO VERTICAL)
 if storage.painelSalvo == nil then storage.painelSalvo = {} end
 if storage.painelSalvo.spells == nil then storage.painelSalvo.spells = false end
 if storage.painelSalvo.wave == nil then storage.painelSalvo.wave = false end
@@ -1594,7 +1594,7 @@ UIWidget
     margin-top: 5
     color: #FFDEAD
     font: verdana-11px-rounded
-    text: Spell Caster
+    text: Hotkeys
     text-auto-resize: true
   Panel
     id: containerIcones
@@ -1602,7 +1602,7 @@ UIWidget
     phantom: false
     Button
       id: botaoSpells
-      !text: tr('Smart Cast')
+      !text: tr('Spells')
       size: 102 22
       anchors.top: parent.top
       anchors.horizontalCenter: parent.horizontalCenter
@@ -1616,7 +1616,7 @@ UIWidget
       margin-top: 4
     Button
       id: botaoRevidePK
-      !text: tr('Revide PK')
+      !text: tr('Revide')
       size: 102 22
       anchors.top: botaoWave.bottom
       anchors.horizontalCenter: parent.horizontalCenter
@@ -1661,7 +1661,7 @@ UIWidget
     margin-top: 5
     color: #FFDEAD
     font: verdana-11px-rounded
-    text: Spell Caster
+    text: Hotkeys
     text-auto-resize: true
   Panel
     id: containerIcones
@@ -1669,7 +1669,7 @@ UIWidget
     phantom: false
     Button
       id: botaoSpells
-      !text: tr('Smart Cast')
+      !text: tr('Spells')
       size: 88 22
       anchors.bottom: parent.bottom
       anchors.left: parent.left
@@ -1685,7 +1685,7 @@ UIWidget
       margin-left: 5
     Button
       id: botaoRevidePK
-      !text: tr('Revide PK')
+      !text: tr('Revide')
       size: 88 22
       anchors.bottom: parent.bottom
       anchors.left: botaoWave.right
@@ -1733,7 +1733,7 @@ function reposicionarPainelSpellCaster()
     
     painelIconesUI:setPosition({ x = posX, y = posY })
 end
---    SPELL CASTER PANEL - PARTE 2 (VERSÃO CORRIGIDA CONTRA FANTASMAS GRÁFICOS)
+--    HOTKEY PANEL - PARTE 2 (VERSÃO CORRIGIDA CONTRA FANTASMAS GRÁFICOS)
 local function isMacroActive(macroRef)
     if macroRef and type(macroRef) == "table" and type(macroRef.isOn) == "function" then
         local status, resultado = pcall(macroRef.isOn)
