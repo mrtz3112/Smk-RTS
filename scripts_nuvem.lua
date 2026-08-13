@@ -2621,6 +2621,169 @@ onTextMessage(function(mode, text)
         end
     end
 end)
+UI.Separator()
+--Swamp Ring/Necklace
+storage.swapShieldPve = storage.swapShieldPve or 0
+storage.swapShieldPvp = storage.swapShieldPvp or 0
+storage.swapRingPve = storage.swapRingPve or 0
+storage.swapRingPvp = storage.swapRingPvp or 0
+storage.swapNeckPve = storage.swapNeckPve or 0
+storage.swapNeckPvp = storage.swapNeckPvp or 0
+storage.swapMacroEnabled = storage.swapMacroEnabled or false
+local ui = setupUI([[
+Panel
+  height: 185
+  
+  BotSwitch
+    id: macroToggle
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: Swamp Rings/Shield
+
+  Label
+    id: shieldLabel
+    anchors.top: macroToggle.bottom
+    anchors.horizontalCenter: parent.horizontalCenter
+    margin-top: 5
+    text: Shield (PvE/PvP):
+
+  BotItem
+    id: shieldPve
+    anchors.top: shieldLabel.bottom
+    anchors.right: parent.horizontalCenter
+    margin-top: 3
+    margin-right: 5
+    width: 34
+    height: 34
+
+  BotItem
+    id: shieldPvp
+    anchors.top: shieldLabel.bottom
+    anchors.left: parent.horizontalCenter
+    margin-top: 3
+    margin-left: 5
+    width: 34
+    height: 34
+
+  Label
+    id: ringLabel
+    anchors.top: shieldPve.bottom
+    anchors.horizontalCenter: parent.horizontalCenter
+    margin-top: 5
+    text: Ring (PvE/PvP):
+
+  BotItem
+    id: ringPve
+    anchors.top: ringLabel.bottom
+    anchors.right: parent.horizontalCenter
+    margin-top: 3
+    margin-right: 5
+    width: 34
+    height: 34
+
+  BotItem
+    id: ringPvp
+    anchors.top: ringLabel.bottom
+    anchors.left: parent.horizontalCenter
+    margin-top: 3
+    margin-left: 5
+    width: 34
+    height: 34
+
+  Label
+    id: neckLabel
+    anchors.top: ringPve.bottom
+    anchors.horizontalCenter: parent.horizontalCenter
+    margin-top: 5
+    text: Neck (PvE/PvP):
+
+  BotItem
+    id: neckPve
+    anchors.top: neckLabel.bottom
+    anchors.right: parent.horizontalCenter
+    margin-top: 3
+    margin-right: 5
+    width: 34
+    height: 34
+
+  BotItem
+    id: neckPvp
+    anchors.top: neckLabel.bottom
+    anchors.left: parent.horizontalCenter
+    margin-top: 3
+    margin-left: 5
+    width: 34
+    height: 34
+]])
+-- Sincroniza o estado visual do botão no topo
+ui.macroToggle:setOn(storage.swapMacroEnabled)
+ui.macroToggle.onClick = function(widget)
+    storage.swapMacroEnabled = not storage.swapMacroEnabled
+    widget:setOn(storage.swapMacroEnabled)
+end
+-- Vincula os slots às variáveis salvas do bot
+ui.shieldPve:setItemId(storage.swapShieldPve)
+ui.shieldPve.onItemChange = function(w) storage.swapShieldPve = w:getItemId() end
+ui.shieldPvp:setItemId(storage.swapShieldPvp)
+ui.shieldPvp.onItemChange = function(w) storage.swapShieldPvp = w:getItemId() end
+ui.ringPve:setItemId(storage.swapRingPve)
+ui.ringPve.onItemChange = function(w) storage.swapRingPve = w:getItemId() end
+ui.ringPvp:setItemId(storage.swapRingPvp)
+ui.ringPvp.onItemChange = function(w) storage.swapRingPvp = w:getItemId() end
+ui.neckPve:setItemId(storage.swapNeckPve)
+ui.neckPve.onItemChange = function(w) storage.swapNeckPve = w:getItemId() end
+ui.neckPvp:setItemId(storage.swapNeckPvp)
+ui.neckPvp.onItemChange = function(w) storage.swapNeckPvp = w:getItemId() end
+-- Função de busca em mochilas abertas
+local function buscarItemNaBolsa(id)
+    if not id or id <= 0 then return nil end
+    local item = findItem(id)
+    if item then return item end
+    for _, container in pairs(g_game.getContainers()) do
+        for _, slotItem in pairs(container:getItems()) do
+            if slotItem:getId() == id then
+                return slotItem
+            end
+        end
+    end
+    return nil
+end
+-- Mapeamento dos slots nativos de inventário do Tibia 8.54
+local pieces = {
+  { slotId = 5, getPveId = function() return storage.swapShieldPve end, getPvpId = function() return storage.swapShieldPvp end }, 
+  { slotId = 9, getPveId = function() return storage.swapRingPve end,   getPvpId = function() return storage.swapRingPvp end },   
+  { slotId = 2, getPveId = function() return storage.swapNeckPve end,   getPvpId = function() return storage.swapNeckPvp end }    
+}
+-- Macro integrado ao botão superior e aos botões de combate visuais
+macro(200, function()
+  if not storage.swapMacroEnabled then return end
+  if not g_game.isOnline() then return end
+  local localPlayer = g_game.getLocalPlayer()
+  if not localPlayer then return end
+  local rootWidget = g_ui.getRootWidget()
+  if not rootWidget then return end
+  local btnBalanced = rootWidget:recursiveGetChildById("fightBalancedBox")
+  local btnOffensive = rootWidget:recursiveGetChildById("fightOffensiveBox")
+  local isPvE = true
+  if btnBalanced and (btnBalanced:isOn() or btnBalanced:isChecked()) then
+      isPvE = false 
+  elseif btnOffensive and (btnOffensive:isOn() or btnOffensive:isChecked()) then
+      isPvE = true  
+  end
+  for _, p in ipairs(pieces) do
+    local targetItemId = isPvE and p.getPveId() or p.getPvpId()  
+    if targetItemId and targetItemId > 0 then
+      local currentItem = localPlayer:getInventoryItem(p.slotId)   
+      if not currentItem or currentItem:getId() ~= targetItemId then
+        local itemToEquip = buscarItemNaBolsa(targetItemId)     
+        if itemToEquip then
+          g_game.move(itemToEquip, {x = 65535, y = p.slotId, z = 0}, 1)
+        end
+      end
+    end
+  end
+end)
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
 UI.Label("~ HUD Hotkeys ~"):setColor('#DEB887')
 UI.Label("-----------------------------------"):setColor('#FFDEAD')
