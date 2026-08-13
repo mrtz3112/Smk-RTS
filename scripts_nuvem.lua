@@ -848,8 +848,8 @@ macro(250, "Enter Garganta", function()
                     enterBtn:onClick()  
                     posBeforeEnter = pPos
                     isEntering = true
-                    enterTimeout = currentTime + 5000
-                    enterCooldown = currentTime + 5000
+                    enterTimeout = currentTime + 3000
+                    enterCooldown = currentTime + 3000
                     return
                 end
             end
@@ -862,7 +862,7 @@ macro(250, "Enter Garganta", function()
         for _, tile in ipairs(g_map.getTiles(currentZ)) do
             local tilePos = tile:getPosition()
             -- Filtro rápido de distância matemática antes de ler todos os itens do tile (Poupa muita CPU)
-            if math.abs(pPos.x - tilePos.x) <= 7 and math.abs(pPos.y - tilePos.y) <= 7 then
+            if math.abs(pPos.x - tilePos.x) <= 10 and math.abs(pPos.y - tilePos.y) <= 10 then
                 local items = tile:getItems()
                 if items then
                     for i = 1, #items do
@@ -876,8 +876,8 @@ macro(250, "Enter Garganta", function()
                             -- Track position to verify we actually get teleported
                             posBeforeEnter = pPos
                             isEntering = true
-                            enterTimeout = currentTime + 5000
-                            enterCooldown = currentTime + 2500
+                            enterTimeout = currentTime + 3000
+                            enterCooldown = currentTime + 3000
                             return
                         end
                     end
