@@ -93,10 +93,10 @@ function terminate()
     print("[Storage Cleaner] Faxina preventiva concluida com sucesso.")
 end
 setDefaultTab("Main")
-UI.Label("-----------------------------------"):setColor('#FFDEAD')
-UI.Label("      Smk Custom: v4.2      "):setColor('#FFDEAD')
-UI.Label("        Since 2025       "):setColor('#FFDEAD')
-UI.Label("-----------------------------------"):setColor('#FFDEAD')
+UI.Label("-----------------------------------"):setColor('#DEB887')
+UI.Label("      Smk Custom: v4.2      "):setColor('#DEB887')
+UI.Label("        Since 2025       "):setColor('#DEB887')
+UI.Label("-----------------------------------"):setColor('#DEB887')
 --Macro Editor
 UI.Button("Macro Editor", function(newText)
     UI.MultilineEditorWindow(storage.combos or "", {title="Macro Editor", description="Aqui voce pode editar os seus combos."}, function(text)
@@ -2625,7 +2625,7 @@ Panel
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.right: parent.right
-    text: Swamp Rings/Shield
+    text: Swap Trinckets
 
   Label
     id: shieldLabel
