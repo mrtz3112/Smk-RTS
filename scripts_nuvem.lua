@@ -2608,17 +2608,113 @@ onTextMessage(function(mode, text)
     end
 end)
 UI.Separator()
---Swap Shield/Ring/Necklace
-storage.swapShieldPve = storage.swapShieldPve or 0
-storage.swapShieldPvp = storage.swapShieldPvp or 0
+--Swap Set
+do
+  local defenseToggle = {
+    panelName = "autoOffensiveMode" -- Mantido o nome do storage para não resetar sua configuração salva
+  }
+  -- Inicializa o armazenamento estruturado
+  if not storage[defenseToggle.panelName] then
+    storage[defenseToggle.panelName] = {
+        enabled = false,
+        hp = 50
+    }
+  end
+  -- Configuração da interface visual compacta e sem espaços vazios
+  defenseToggle.ui = setupUI([[
+Panel
+  height: 35
+    
+  BotSwitch
+    id: title
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: parent.top
+    text-align: center
+    text: Swap Tank Set
+
+  HorizontalScrollBar
+    id: hpScroll
+    anchors.top: title.bottom
+    anchors.right: parent.right
+    anchors.left: parent.left
+    margin-top: 0
+    minimum: 1
+    maximum: 100
+    step: 1
+]])
+
+  -- Sincroniza o botão principal de ligar/desligar
+  defenseToggle.ui.title:setOn(storage[defenseToggle.panelName].enabled)
+  defenseToggle.ui.title.onClick = function(widget)
+    storage[defenseToggle.panelName].enabled = not storage[defenseToggle.panelName].enabled
+    widget:setOn(storage[defenseToggle.panelName].enabled)
+  end
+  -- Atualiza o texto dinâmico na ScrollBar
+  defenseToggle.updateText = function()
+    defenseToggle.ui.hpScroll:setText("HP < " .. storage[defenseToggle.panelName].hp .. "%")
+  end
+  -- Sincroniza a ScrollBar com o storage
+  defenseToggle.ui.hpScroll.onValueChange = function(scroll, value)
+    storage[defenseToggle.panelName].hp = value
+    defenseToggle.updateText()
+  end
+  defenseToggle.ui.hpScroll:setValue(storage[defenseToggle.panelName].hp)
+  defenseToggle.updateText()
+  -- Função segura para clicar nos botões nativos do OTClient
+  defenseToggle.mudarModoAtaque = function(targetButton)
+    if targetButton then
+        pcall(function() targetButton:onClick() end)
+    end
+  end
+  -- Macro principal rodando a cada 100ms
+  macro(100, function()
+    if not g_game.isOnline() or not storage[defenseToggle.panelName].enabled then return end
+    
+    local root = g_ui.getRootWidget()
+    if not root then return end
+
+    local player = g_game.getLocalPlayer()
+    if not player then return end
+
+    -- Captura os botões da interface nativa do OTClient
+    local btnBalanced = root:recursiveGetChildById("fightBalancedBox")
+    local btnDefensive = root:recursiveGetChildById("fightDefensiveBox")
+    
+    if not btnBalanced or not btnDefensive then return end
+
+    local hpAtual = player:getHealthPercent()
+
+    -- Verifica se o jogador está atualmente no modo DEFENSIVO
+    local estaEmDefensive = (btnDefensive:isOn() or btnDefensive:isChecked())
+    
+    -- Verifica se o jogador está atualmente no modo BALANCEADO
+    local estaEmBalanced = (btnBalanced:isOn() or btnBalanced:isChecked())
+
+    -- LÓGICA DE ENTRADA: Se a vida cair e você estiver no Balanced -> vai para o Defensivo
+    if hpAtual < storage[defenseToggle.panelName].hp then
+        if estaEmBalanced then
+            defenseToggle.mudarModoAtaque(btnDefensive)
+        end
+    else
+        -- LÓGICA DE RETORNO: Se a vida subiu e você ainda está preso no Defensivo -> volta para o Balanced
+        if estaEmDefensive then
+            defenseToggle.mudarModoAtaque(btnBalanced)
+        end
+    end
+  end)
+end
+UI.Separator()
+--Swap Ring/Necklace
 storage.swapRingPve = storage.swapRingPve or 0
 storage.swapRingPvp = storage.swapRingPvp or 0
 storage.swapNeckPve = storage.swapNeckPve or 0
 storage.swapNeckPvp = storage.swapNeckPvp or 0
 storage.swapMacroEnabled = storage.swapMacroEnabled or false
+
 local ui = setupUI([[
 Panel
-  height: 185
+  height: 130
   
   BotSwitch
     id: macroToggle
@@ -2628,33 +2724,8 @@ Panel
     text: Swap Trinckets
 
   Label
-    id: shieldLabel
-    anchors.top: macroToggle.bottom
-    anchors.horizontalCenter: parent.horizontalCenter
-    margin-top: 5
-    text: Shield (PvE/PvP):
-
-  BotItem
-    id: shieldPve
-    anchors.top: shieldLabel.bottom
-    anchors.right: parent.horizontalCenter
-    margin-top: 3
-    margin-right: 5
-    width: 34
-    height: 34
-
-  BotItem
-    id: shieldPvp
-    anchors.top: shieldLabel.bottom
-    anchors.left: parent.horizontalCenter
-    margin-top: 3
-    margin-left: 5
-    width: 34
-    height: 34
-
-  Label
     id: ringLabel
-    anchors.top: shieldPve.bottom
+    anchors.top: macroToggle.bottom
     anchors.horizontalCenter: parent.horizontalCenter
     margin-top: 5
     text: Ring (PvE/PvP):
@@ -2702,6 +2773,7 @@ Panel
     width: 34
     height: 34
 ]])
+
 -- Sincroniza o estado visual do botão no topo
 ui.macroToggle:setOn(storage.swapMacroEnabled)
 ui.macroToggle.onClick = function(widget)
@@ -2709,10 +2781,6 @@ ui.macroToggle.onClick = function(widget)
     widget:setOn(storage.swapMacroEnabled)
 end
 -- Vincula os slots às variáveis salvas do bot
-ui.shieldPve:setItemId(storage.swapShieldPve)
-ui.shieldPve.onItemChange = function(w) storage.swapShieldPve = w:getItemId() end
-ui.shieldPvp:setItemId(storage.swapShieldPvp)
-ui.shieldPvp.onItemChange = function(w) storage.swapShieldPvp = w:getItemId() end
 ui.ringPve:setItemId(storage.swapRingPve)
 ui.ringPve.onItemChange = function(w) storage.swapRingPve = w:getItemId() end
 ui.ringPvp:setItemId(storage.swapRingPvp)
@@ -2735,9 +2803,8 @@ local function buscarItemNaBolsa(id)
     end
     return nil
 end
--- Mapeamento dos slots nativos de inventário do Tibia 8.54
+-- Mapeamento dos slots nativos de inventário do Tibia 8.54 (Apenas Ring e Neck)
 local pieces = {
-  { slotId = 5, getPveId = function() return storage.swapShieldPve end, getPvpId = function() return storage.swapShieldPvp end }, 
   { slotId = 9, getPveId = function() return storage.swapRingPve end,   getPvpId = function() return storage.swapRingPvp end },   
   { slotId = 2, getPveId = function() return storage.swapNeckPve end,   getPvpId = function() return storage.swapNeckPvp end }    
 }
@@ -2751,7 +2818,7 @@ macro(200, function()
   if not rootWidget then return end
   local btnBalanced = rootWidget:recursiveGetChildById("fightBalancedBox")
   local btnOffensive = rootWidget:recursiveGetChildById("fightOffensiveBox")
-  local isPvE = true
+  local isPvE = true 
   if btnBalanced and (btnBalanced:isOn() or btnBalanced:isChecked()) then
       isPvE = false 
   elseif btnOffensive and (btnOffensive:isOn() or btnOffensive:isChecked()) then
@@ -3166,15 +3233,13 @@ onTalk(function(...)
     say('sense "' .. storage.Sense)
     return true
 end)
---REVIDE PK
+-- REVIDE PK
 local botsDesligadosPVP = false
 local ultimoModoAtaque = nil
-local ultimoTempoTrocaEstado = 0 
 local ultimoTempoTentativaAtaque = 0
 local ultimaPosX = 0
 local ultimaPosY = 0
 local ultimoTickRadar = 0
-
 local function definirModoAtaque(modo)
     if ultimoModoAtaque == modo then return end
     local rootWidget = g_ui.getRootWidget()
@@ -3186,7 +3251,6 @@ local function definirModoAtaque(modo)
         ultimoModoAtaque = modo
     end
 end
-
 revidePKMacro = macro(250, 'Revide PK', function()
     if not g_game.isOnline() then return end
     
@@ -3195,12 +3259,13 @@ revidePKMacro = macro(250, 'Revide PK', function()
     local myPos = localPlayer:getPosition()
     if not myPos then return end
     local tempoAtual = os.clock() * 1000
+    
     local andou = (myPos.x ~= ultimaPosX or myPos.y ~= ultimaPosY)
     if not andou and (tempoAtual - ultimoTickRadar < 400) then
         return
     end
     ultimoTickRadar = tempoAtual
-    ultimaPosX, ultimaPosY = myPos.x, myPos.y
+    ultimaPosX, ultimaPosY = myPos.x, myPos.y  
     local agressorTarget = nil
     local agressorHp = 101
     local agressorDist = 100
@@ -3219,6 +3284,7 @@ revidePKMacro = macro(250, 'Revide PK', function()
                 else
                     estaMeAtacando = (g_game.getAttackingCreature() == creature or creature:isTimedSquareVisible())
                 end
+                
                 if estaMeAtacando then
                     local specHp = creature:getHealthPercent()
                     local specDist = dx + dy
@@ -3236,13 +3302,10 @@ revidePKMacro = macro(250, 'Revide PK', function()
     end
     if agressorTarget then
         if not botsDesligadosPVP then
-            if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
-                if CaveBot and CaveBot.setOff then CaveBot.setOff() end
-                if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
-                definirModoAtaque("balanced")
-                botsDesligadosPVP = true
-                ultimoTempoTrocaEstado = tempoAtual 
-            end
+            if CaveBot and CaveBot.setOff then CaveBot.setOff() end
+            if TargetBot and TargetBot.setOff then TargetBot.setOff() end  
+            definirModoAtaque("balanced")
+            botsDesligadosPVP = true
         end
         
         if g_game.getAttackingCreature() ~= agressorTarget and (tempoAtual - ultimoTempoTentativaAtaque >= 1000) then
@@ -3253,13 +3316,9 @@ revidePKMacro = macro(250, 'Revide PK', function()
         if botsDesligadosPVP then
             local alvoAtualJogo = g_game.getAttackingCreature()
             if not alvoAtualJogo or not alvoAtualJogo:isPlayer() then
-                if (tempoAtual - ultimoTempoTrocaEstado) >= 6000 then
-                    -- PARTE REMOVIDA: Não altera mais para "offensive" aqui
-                    if CaveBot and CaveBot.setOn then CaveBot.setOn() end
-                    if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
-                    botsDesligadosPVP = false
-                    ultimoTempoTrocaEstado = tempoAtual 
-                end
+                if CaveBot and CaveBot.setOn then CaveBot.setOn() end
+                if TargetBot and TargetBot.setOn then TargetBot.setOn() end   
+                botsDesligadosPVP = false
             end
         end
     end
