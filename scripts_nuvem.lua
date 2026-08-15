@@ -2631,7 +2631,7 @@ Panel
     anchors.right: parent.right
     anchors.top: parent.top
     text-align: center
-    text: Swap Tank Set
+    text: Swap Tank Set - (3rd Slot)
 
   HorizontalScrollBar
     id: hpScroll
