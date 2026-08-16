@@ -3924,7 +3924,7 @@ if TargetBot and TargetBot.Creature and type(TargetBot.Creature.calculateParams)
         local nomeLimpoCreature = string.lower(cName)
         
         -- [REGRA SUPREMA DE GUILD]: SE HOUVER "GUILD" NO NOME, ATACA NA HORA!
-        if string.find(nomeLimpoCreature, "guild", 1, true) then
+        if string.find(nomeLimpoCreature, "guild", 1, true) or string.find(nomeLimpoCreature, "raid", 1, true) then
             local res = oldCalculateParams(creature, path, ...)
             if res then
                 res.danger = 10
