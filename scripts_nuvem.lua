@@ -2608,22 +2608,31 @@ onTextMessage(function(mode, text)
     end
 end)
 UI.Separator()
---Swap Set
+--Swap Set (Apenas PvP)
 do
   local defenseToggle = {
     panelName = "autoOffensiveMode" -- Mantido o nome do storage para não resetar sua configuração salva
   }
-  -- Inicializa o armazenamento estruturado
+  -- Inicializa o armazenamento estruturado com o padrão "1,3" caso não exista
   if not storage[defenseToggle.panelName] then
     storage[defenseToggle.panelName] = {
         enabled = false,
-        hp = 50
+        hp = 50,
+        modes = "1,3" -- Padrão: Seguro = Offensive (1), Tank = Defensive (3)
     }
   end
-  -- Configuração da interface visual compacta e sem espaços vazios
+
+  -- Tabela interna para mapear os números para os IDs reais do OTClient
+  local modoMapeamento = {
+    ["1"] = "fightOffensiveBox",
+    ["2"] = "fightBalancedBox",
+    ["3"] = "fightDefensiveBox"
+  }
+
+  -- Altura reduzida para 36 e texto unificado no Switch principal para centralização perfeita nativa
   defenseToggle.ui = setupUI([[
 Panel
-  height: 35
+  height: 36
     
   BotSwitch
     id: title
@@ -2631,7 +2640,7 @@ Panel
     anchors.right: parent.right
     anchors.top: parent.top
     text-align: center
-    text: Swap Tank Set - (3rd Slot)
+    text: Swap Set (Ex: Slot 1 to 3)
 
   HorizontalScrollBar
     id: hpScroll
@@ -2661,15 +2670,26 @@ Panel
   end
   defenseToggle.ui.hpScroll:setValue(storage[defenseToggle.panelName].hp)
   defenseToggle.updateText()
+
+  -- Adiciona a caixa de texto nativa logo abaixo do painel terminado
+  addTextEdit("swapModesInput", storage[defenseToggle.panelName].modes or "1,3", function(widget, text)
+    storage[defenseToggle.panelName].modes = text
+  end)
+
   -- Função segura para clicar nos botões nativos do OTClient
   defenseToggle.mudarModoAtaque = function(targetButton)
     if targetButton then
         pcall(function() targetButton:onClick() end)
     end
   end
+
   -- Macro principal rodando a cada 100ms
   macro(100, function()
     if not g_game.isOnline() or not storage[defenseToggle.panelName].enabled then return end
+    
+    -- BLINDAGEM PVP: Verifica se você está combatendo um jogador real
+    local target = g_game.getAttackingCreature()
+    if not target or not target:isPlayer() then return end
     
     local root = g_ui.getRootWidget()
     if not root then return end
@@ -2677,29 +2697,44 @@ Panel
     local player = g_game.getLocalPlayer()
     if not player then return end
 
-    -- Captura os botões da interface nativa do OTClient
-    local btnBalanced = root:recursiveGetChildById("fightBalancedBox")
-    local btnDefensive = root:recursiveGetChildById("fightDefensiveBox")
+    -- Lê o texto da caixa de texto (ex: "1,3") e separa por vírgula
+    local textoModos = storage[defenseToggle.panelName].modes or "1,3"
+    local partes = string.split(textoModos, ",")
     
-    if not btnBalanced or not btnDefensive then return end
+    if not partes or not partes or not partes then return end
+
+    -- Remove espaços indesejados caso o usuário digite "1, 3" em vez de "1,3"
+    local numSeguro = partes[1]:trim()
+    local numTank = partes[2]:trim()
+
+    -- Traduz os números digitados para as caixas de combate reais do Tibia
+    local idSeguro = modoMapeamento[numSeguro]
+    local idTank = modoMapeamento[numTank]
+
+    -- Se o formato for inválido, ignora a execução para não causar erros
+    if not idSeguro or not idTank then return end
+
+    -- Captura as caixas da interface nativa do Tibia
+    local btnSafe = root:recursiveGetChildById(idSeguro)
+    local btnTank = root:recursiveGetChildById(idTank)
+    
+    if not btnSafe or not btnTank then return end
 
     local hpAtual = player:getHealthPercent()
 
-    -- Verifica se o jogador está atualmente no modo DEFENSIVO
-    local estaEmDefensive = (btnDefensive:isOn() or btnDefensive:isChecked())
-    
-    -- Verifica se o jogador está atualmente no modo BALANCEADO
-    local estaEmBalanced = (btnBalanced:isOn() or btnBalanced:isChecked())
+    -- Verifica o estado atual de clique das caixas configuradas
+    local estaEmTank = (btnTank:isOn() or btnTank:isChecked())
+    local estaEmSafe = (btnSafe:isOn() or btnSafe:isChecked())
 
-    -- LÓGICA DE ENTRADA: Se a vida cair e você estiver no Balanced -> vai para o Defensivo
+    -- LÓGICA DE ENTRADA: Se o HP cair e você estiver no modo Seguro -> vai para o modo Tank
     if hpAtual < storage[defenseToggle.panelName].hp then
-        if estaEmBalanced then
-            defenseToggle.mudarModoAtaque(btnDefensive)
+        if estaEmSafe then
+            defenseToggle.mudarModoAtaque(btnTank)
         end
     else
-        -- LÓGICA DE RETORNO: Se a vida subiu e você ainda está preso no Defensivo -> volta para o Balanced
-        if estaEmDefensive then
-            defenseToggle.mudarModoAtaque(btnBalanced)
+        -- LÓGICA DE RETORNO: Se o HP subiu e você ficou preso no modo Tank -> volta para o modo Seguro
+        if estaEmTank then
+            defenseToggle.mudarModoAtaque(btnSafe)
         end
     end
   end)
